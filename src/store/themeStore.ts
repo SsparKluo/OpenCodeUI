@@ -17,6 +17,17 @@ import type { ThemePreset, ThemeColors } from '../themes'
 
 export type ColorMode = 'system' | 'light' | 'dark'
 
+/** 字体大小，单位 px，范围 12-24 */
+export type FontSize = number
+
+const DEFAULT_FONT_SIZE = 16
+const MIN_FONT_SIZE = 12
+const MAX_FONT_SIZE = 24
+
+function clampFontSize(v: number): number {
+  return Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, Math.round(v)))
+}
+
 export interface ThemeState {
   /** 当前选中的主题风格 ID */
   presetId: string
@@ -24,6 +35,8 @@ export interface ThemeState {
   colorMode: ColorMode
   /** 用户自定义 CSS（覆盖 CSS 变量） */
   customCSS: string
+  /** 全局字体大小 (px) */
+  fontSize: FontSize
 }
 
 // ============================================
@@ -33,6 +46,7 @@ export interface ThemeState {
 const STORAGE_KEY_PRESET = 'theme-preset'
 const STORAGE_KEY_COLOR_MODE = 'theme-mode'
 const STORAGE_KEY_CUSTOM_CSS = 'theme-custom-css'
+const STORAGE_KEY_FONT_SIZE = 'theme-font-size'
 
 // ============================================
 // DOM Style Element IDs
@@ -53,11 +67,13 @@ class ThemeStore {
     const savedPreset = localStorage.getItem(STORAGE_KEY_PRESET) || DEFAULT_THEME_ID
     const savedMode = localStorage.getItem(STORAGE_KEY_COLOR_MODE) as ColorMode || 'system'
     const savedCSS = localStorage.getItem(STORAGE_KEY_CUSTOM_CSS) || ''
+    const savedFontSize = clampFontSize(Number(localStorage.getItem(STORAGE_KEY_FONT_SIZE)) || DEFAULT_FONT_SIZE)
     
     this.state = {
       presetId: savedPreset,
       colorMode: savedMode,
       customCSS: savedCSS,
+      fontSize: savedFontSize,
     }
   }
   
@@ -70,6 +86,7 @@ class ThemeStore {
   get presetId() { return this.state.presetId }
   get colorMode() { return this.state.colorMode }
   get customCSS() { return this.state.customCSS }
+  get fontSize() { return this.state.fontSize }
   
   /** 获取当前主题预设（内置主题返回对象，自定义返回 undefined） */
   getPreset(): ThemePreset | undefined {
@@ -128,6 +145,15 @@ class ThemeStore {
     this.emit()
   }
   
+  setFontSize(size: FontSize) {
+    const clamped = clampFontSize(size)
+    if (this.state.fontSize === clamped) return
+    this.state = { ...this.state, fontSize: clamped }
+    localStorage.setItem(STORAGE_KEY_FONT_SIZE, String(clamped))
+    this.applyFontSize()
+    this.emit()
+  }
+  
   // ---- Theme Application ----
   
   /** 初始化：应用当前主题到 DOM */
@@ -173,7 +199,10 @@ class ThemeStore {
     // 3. 应用自定义 CSS
     this.applyCustomCSS()
     
-    // 4. 更新 meta theme-color
+    // 4. 应用字体大小
+    this.applyFontSize()
+    
+    // 5. 更新 meta theme-color
     requestAnimationFrame(() => {
       const bg = getComputedStyle(root).getPropertyValue('--color-bg-100').trim()
       if (bg) {
@@ -211,6 +240,10 @@ class ThemeStore {
       document.head.appendChild(el)
     }
     el.textContent = css
+  }
+  
+  private applyFontSize() {
+    document.documentElement.style.fontSize = `${this.state.fontSize}px`
   }
   
   // ---- Subscription (useSyncExternalStore compatible) ----

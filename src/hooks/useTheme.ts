@@ -151,6 +151,12 @@ export function useTheme() {
     themeStore.setCustomCSS(css)
   }, [])
 
+  // ---- Font Size ----
+  
+  const setFontSize = useCallback((size: number) => {
+    themeStore.setFontSize(size)
+  }, [])
+
   return {
     // 日夜模式（向后兼容）
     mode: state.colorMode,
@@ -170,5 +176,9 @@ export function useTheme() {
     // 自定义 CSS
     customCSS: state.customCSS,
     setCustomCSS,
+    
+    // 字体大小
+    fontSize: state.fontSize,
+    setFontSize,
   }
 }

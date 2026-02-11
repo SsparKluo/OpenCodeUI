@@ -42,6 +42,8 @@ export type ChatAreaHandle = {
   scrollToLastMessage: () => void
   /** 临时禁用自动滚动（用于 undo/redo） */
   suppressAutoScroll: (duration?: number) => void
+  /** 滚动到指定索引的消息（用于目录导航） */
+  scrollToMessageIndex: (index: number) => void
 }
 
 // 检查消息是否有可见内容
@@ -193,7 +195,20 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
       setTimeout(() => {
         suppressScrollRef.current = false
       }, duration)
-    }
+    },
+    scrollToMessageIndex: (index: number) => {
+      if (index >= 0 && index < visibleMessagesCountRef.current) {
+        // 临时禁用自动滚动，避免被拉回底部
+        suppressScrollRef.current = true
+        setTimeout(() => { suppressScrollRef.current = false }, 1000)
+        
+        virtuosoRef.current?.scrollToIndex({
+          index,
+          align: 'start',
+          behavior: 'smooth',
+        })
+      }
+    },
   }))
   
   // followOutput: 完全禁用，改用手动控制

@@ -7,6 +7,7 @@ import { InputFooter } from './input/InputFooter'
 import { UndoStatus } from './input/UndoStatus'
 import { useImageCompressor } from '../../hooks/useImageCompressor'
 import { keybindingStore, matchesKeybinding } from '../../store/keybindingStore'
+import { useIsMobile } from '../../hooks'
 import type { ApiAgent } from '../../api/client'
 import type { Command } from '../../api/command'
 
@@ -85,6 +86,9 @@ function InputBoxComponent({
   const [slashOpen, setSlashOpen] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
   const [slashStartIndex, setSlashStartIndex] = useState(-1)
+  
+  // 响应式 placeholder
+  const isMobile = useIsMobile()
   
   // Refs
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -599,7 +603,7 @@ function InputBoxComponent({
                     onKeyDown={handleKeyDown}
                     onPaste={handlePaste}
                     onScroll={handleScroll}
-                    placeholder="Reply to Agent (type @ to mention, / for commands)"
+                    placeholder={isMobile ? "Reply to Agent..." : "Reply to Agent (type @ to mention, / for commands)"}
                     className="w-full resize-none focus:outline-none focus:ring-0 bg-transparent text-text-100 placeholder:text-text-400 custom-scrollbar"
                     style={{ 
                       ...TEXT_STYLE,

@@ -4,6 +4,7 @@ import { type ModelSelectorHandle } from './features/chat/ModelSelector'
 import { SettingsDialog } from './features/settings/SettingsDialog'
 import { CommandPalette, type CommandItem } from './components/CommandPalette'
 import { RightPanel } from './components/RightPanel'
+import { OutlineIndex } from './components/OutlineIndex'
 import { BottomPanel } from './components/BottomPanel'
 import { useTheme, useModels, useModelSelection, useChatSession, useGlobalKeybindings } from './hooks'
 import type { KeybindingHandlers } from './hooks/useKeybindings'
@@ -52,6 +53,11 @@ function App() {
   } = useModelSelection({ models })
 
   // ============================================
+  // Visible Message IDs (for outline index)
+  // ============================================
+  const [visibleMessageIds, setVisibleMessageIds] = useState<string[]>([])
+
+  // ============================================
   // Wide Mode
   // ============================================
   const [isWideMode, setIsWideMode] = useState(() => {
@@ -70,8 +76,8 @@ function App() {
   // Settings Dialog
   // ============================================
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
-  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'keybindings'>('general')
-  const openSettings = useCallback(() => { setSettingsInitialTab('general'); setSettingsDialogOpen(true) }, [])
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'appearance' | 'general' | 'servers' | 'keybindings'>('appearance')
+  const openSettings = useCallback(() => { setSettingsInitialTab('appearance'); setSettingsDialogOpen(true) }, [])
   const closeSettings = useCallback(() => setSettingsDialogOpen(false), [])
 
   // ============================================
@@ -370,9 +376,19 @@ function App() {
                 canUndo={canUndo}
                 registerMessage={registerMessage}
                 isWideMode={isWideMode}
-                onVisibleMessageIdsChange={handleVisibleMessageIdsChange}
+                onVisibleMessageIdsChange={(ids) => {
+                  handleVisibleMessageIdsChange(ids)
+                  setVisibleMessageIds(ids)
+                }}
               />
             </div>
+
+            {/* Outline Index - 消息目录索引 */}
+            <OutlineIndex
+              messages={messages}
+              onScrollToIndex={(index) => chatAreaRef.current?.scrollToMessageIndex(index)}
+              visibleMessageIds={visibleMessageIds}
+            />
 
             {/* Floating Input Box */}
             <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
