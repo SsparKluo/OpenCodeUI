@@ -210,9 +210,16 @@ export const ResizablePanel = memo(function ResizablePanel({
       ? 'fixed left-0 right-0 z-[100] w-full shadow-2xl'
       : 'fixed bottom-0 left-0 right-0 z-[100] h-[40vh] shadow-2xl rounded-t-xl border-t border-border-200'
 
+    const keyboardInset = 'var(--keyboard-inset-bottom, 0px)'
+    const safeBottomInset = 'var(--safe-area-inset-bottom, 0px)'
     const mobileInsetStyle = position === 'right'
-      ? { top: 0, height: '100%', paddingTop: 'var(--safe-area-inset-top)' } as React.CSSProperties
-      : undefined
+      ? {
+          top: 0,
+          height: '100%',
+          paddingTop: 'var(--safe-area-inset-top)',
+          paddingBottom: `calc(${safeBottomInset} + ${keyboardInset})`,
+        } as React.CSSProperties
+      : { bottom: keyboardInset } as React.CSSProperties
 
     return (
       <>
