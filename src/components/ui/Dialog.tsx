@@ -153,6 +153,7 @@ export function Dialog({
           relative bg-bg-000 border border-border-200 rounded-xl shadow-2xl 
           flex flex-col overflow-hidden
           ${isDragging.current ? '' : 'transition-all duration-200 ease-out'}
+          keyboard-inset-shift
           ${className}
         `}
         style={{ 

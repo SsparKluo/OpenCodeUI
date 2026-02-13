@@ -58,6 +58,18 @@ html, body, #root {
   padding-bottom: var(--keyboard-inset-bottom);
 }
 
+:root.keyboard-open .keyboard-inset-padding {
+  padding-bottom: var(--keyboard-inset-bottom);
+}
+
+:root.keyboard-open .keyboard-inset-shift {
+  transform: translateY(calc(-1 * var(--keyboard-inset-bottom, 0px)));
+}
+
+:root.keyboard-open .keyboard-inset-cancel {
+  transform: translateY(var(--keyboard-inset-bottom));
+}
+
 @font-face {
   font-family: 'JetBrains Mono';
   src: url('/fonts/JetBrainsMono-Regular.woff2') format('woff2');

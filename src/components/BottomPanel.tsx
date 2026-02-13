@@ -165,7 +165,7 @@ export const BottomPanel = memo(function BottomPanel({ directory }: BottomPanelP
       size={bottomPanelHeight}
       onSizeChange={layoutStore.setBottomPanelHeight}
       onClose={layoutStore.closeBottomPanel}
-      className="pb-[var(--safe-area-inset-bottom)] keyboard-inset-adjust"
+      className="pb-[var(--safe-area-inset-bottom)] keyboard-inset-padding keyboard-inset-adjust"
     >
       <PanelContainer
         position="bottom"

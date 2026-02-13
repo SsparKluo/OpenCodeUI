@@ -171,12 +171,12 @@ export function CommandPalette({ isOpen, onClose, commands }: CommandPaletteProp
   if (!shouldRender) return null
 
   return createPortal(
-    <div 
-      className="fixed inset-0 z-[200] flex items-start justify-center pt-[15vh]"
-      style={{
-        backgroundColor: isVisible ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0)',
-        transition: 'background-color 150ms ease-out',
-      }}
+      <div 
+        className="fixed inset-0 z-[200] flex items-start justify-center pt-[15vh] keyboard-inset-shift"
+        style={{
+          backgroundColor: isVisible ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0)',
+          transition: 'background-color 150ms ease-out',
+        }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}

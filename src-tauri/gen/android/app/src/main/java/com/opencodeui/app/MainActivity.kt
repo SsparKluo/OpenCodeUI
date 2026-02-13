@@ -1,12 +1,17 @@
 package com.opencodeui.app
 
+import android.content.Context
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.Build
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -28,6 +33,12 @@ class MainActivity : TauriActivity() {
     val controller = WindowInsetsControllerCompat(window, window.decorView)
     controller.isAppearanceLightStatusBars = true
     controller.isAppearanceLightNavigationBars = true
+
+    // 禁用系统对比度强制（避免状态栏自动加黑/渐变）
+    if (Build.VERSION.SDK_INT >= 29) {
+      window.isStatusBarContrastEnforced = false
+      window.isNavigationBarContrastEnforced = false
+    }
 
     // 监听 WindowInsets 变化，获取真实的安全区域并注入 CSS 变量
     val rootView = window.decorView
@@ -136,6 +147,25 @@ class MainActivity : TauriActivity() {
       controller.isAppearanceLightNavigationBars = isLightBg && mode != "dark"
       window.statusBarColor = color
       window.navigationBarColor = color
+    }
+
+    @android.webkit.JavascriptInterface
+    fun vibrate(ms: Int) {
+      val duration = ms.coerceIn(1, 50).toLong()
+      val vibrator = if (android.os.Build.VERSION.SDK_INT >= 31) {
+        val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+        vm.defaultVibrator
+      } else {
+        @Suppress("DEPRECATION")
+        getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+      }
+      if (!vibrator.hasVibrator()) return
+      if (android.os.Build.VERSION.SDK_INT >= 26) {
+        vibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE))
+      } else {
+        @Suppress("DEPRECATION")
+        vibrator.vibrate(duration)
+      }
     }
   }
 

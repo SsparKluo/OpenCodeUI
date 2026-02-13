@@ -353,7 +353,14 @@ const MobileAperture = memo(function MobileAperture({
 
   // 震动
   const vibrate = useCallback(() => {
-    try { navigator.vibrate?.(5) } catch { /* ignore */ }
+    try {
+      const bridge = (window as unknown as { __opencode_android?: { vibrate?: (ms: number) => void } }).__opencode_android
+      if (bridge?.vibrate) {
+        bridge.vibrate(8)
+        return
+      }
+      navigator.vibrate?.(5)
+    } catch { /* ignore */ }
   }, [])
 
   // ---- 动画循环 ----
