@@ -413,6 +413,13 @@ export const ArrowUpIcon = (props: IconProps) => (
   </DefaultIcon>
 )
 
+export const ArrowDownIcon = (props: IconProps) => (
+  <DefaultIcon {...props}>
+    <path d="M12 5v14" />
+    <path d="m19 12-7 7-7-7" />
+  </DefaultIcon>
+)
+
 export const PathAutoIcon = (props: IconProps) => (
   <DefaultIcon {...props}>
     <circle cx="12" cy="12" r="3" />

@@ -432,28 +432,18 @@ export const Terminal = memo(function Terminal({
           scrollbar-width: none;
         }
         .scrollbar-active .xterm-viewport {
-          scrollbar-width: thin;
+          scrollbar-width: none;
         }
-        .scrollbar-idle .xterm-viewport::-webkit-scrollbar {
+        .scrollbar-idle .xterm-viewport::-webkit-scrollbar,
+        .scrollbar-active .xterm-viewport::-webkit-scrollbar {
           width: 0;
           height: 0;
           display: none;
         }
-        .scrollbar-active .xterm-viewport::-webkit-scrollbar {
-          width: 6px;
-          height: 6px;
-        }
-        .xterm-viewport::-webkit-scrollbar-thumb {
-          background-color: hsl(var(--border-300) / 0.35);
-          border-radius: 999px;
-        }
-        .xterm-viewport::-webkit-scrollbar-track {
-          background: transparent;
-        }
       `}</style>
       <div
         ref={containerRef}
-        className={`h-full w-full bg-bg-100 ${isTouchScrolling ? 'scrollbar-active' : 'scrollbar-idle'}`}
+        className={`h-full w-full bg-bg-100 no-scrollbar ${isTouchScrolling ? 'scrollbar-active' : 'scrollbar-idle'}`}
         style={{
           padding: isMobile ? '0' : '4px 0 0 4px', // 极简 padding
           touchAction: isMobile ? 'pan-y' : 'auto',

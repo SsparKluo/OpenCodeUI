@@ -33,6 +33,7 @@ interface ChatAreaProps {
   /** 底部留白高度（输入框实际高度），0 则用默认值 */
   bottomPadding?: number
   onVisibleMessageIdsChange?: (ids: string[]) => void
+  onAtBottomChange?: (atBottom: boolean) => void
 }
 
 export type ChatAreaHandle = {
@@ -87,11 +88,11 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   isWideMode = false,
   bottomPadding = 0,
   onVisibleMessageIdsChange,
+  onAtBottomChange,
 }, ref) => {
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   // 外部滚动容器
   const [scrollParent, setScrollParent] = useState<HTMLElement | null>(null)
-  const [scrollbarVisible, setScrollbarVisible] = useState(false)
   // 追踪用户是否在底部附近 - 用于决定是否自动滚动
   const isUserAtBottomRef = useRef(true)
   // 临时禁用自动滚动的标志
@@ -99,7 +100,6 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   // 用户正在滚动的标志 - 滚动期间不触发自动滚动
   const isUserScrollingRef = useRef(false)
   const scrollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const scrollbarHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // 用户在流式期间主动向上滚动 - 完全停止自动滚动，直到用户滚回底部
   const userScrolledAwayRef = useRef(false)
   
@@ -155,10 +155,6 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
       if (scrollingTimeoutRef.current) {
         clearTimeout(scrollingTimeoutRef.current)
         scrollingTimeoutRef.current = null
-      }
-      if (scrollbarHideTimeoutRef.current) {
-        clearTimeout(scrollbarHideTimeoutRef.current)
-        scrollbarHideTimeoutRef.current = null
       }
     }
   }, [])
@@ -236,18 +232,14 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
     if (atBottom) {
       userScrolledAwayRef.current = false
     }
-  }, [])
+    onAtBottomChange?.(atBottom)
+  }, [onAtBottomChange])
   
   // 追踪用户是否正在滚动
   const handleIsScrolling = useCallback((scrolling: boolean) => {
-    if (scrollbarHideTimeoutRef.current) {
-      clearTimeout(scrollbarHideTimeoutRef.current)
-      scrollbarHideTimeoutRef.current = null
-    }
     if (scrolling) {
       // 用户开始滚动，立即禁用自动滚动
       isUserScrollingRef.current = true
-      setScrollbarVisible(true)
       // 如果正在流式且用户不在底部，标记为"主动滚离"
       if (isStreaming && !isUserAtBottomRef.current) {
         userScrolledAwayRef.current = true
@@ -267,9 +259,6 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
           userScrolledAwayRef.current = true
         }
       }, SCROLL_RESUME_DELAY_MS)
-      scrollbarHideTimeoutRef.current = setTimeout(() => {
-        setScrollbarVisible(false)
-      }, 300)
     }
   }, [isStreaming])
 
@@ -311,7 +300,7 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
       <div 
         key={transitionKey}
         ref={setScrollParent} 
-        className={`h-full overflow-y-auto custom-scrollbar animate-fade-in contain-content ${scrollbarVisible ? 'scrollbar-active' : 'scrollbar-idle'}`}
+        className="h-full overflow-y-auto custom-scrollbar animate-fade-in contain-content"
       >
         {scrollParent && (
           <Virtuoso

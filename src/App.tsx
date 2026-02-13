@@ -6,6 +6,7 @@ import { CommandPalette, type CommandItem } from './components/CommandPalette'
 import { RightPanel } from './components/RightPanel'
 import { OutlineIndex } from './components/OutlineIndex'
 import { BottomPanel } from './components/BottomPanel'
+import { ArrowDownIcon } from './components/Icons'
 import { useTheme, useModels, useModelSelection, useChatSession, useGlobalKeybindings } from './hooks'
 import type { KeybindingHandlers } from './hooks/useKeybindings'
 import { keybindingStore } from './store/keybindingStore'
@@ -56,6 +57,7 @@ function App() {
   // Visible Message IDs (for outline index)
   // ============================================
   const [visibleMessageIds, setVisibleMessageIds] = useState<string[]>([])
+  const [isAtBottom, setIsAtBottom] = useState(true)
 
   // ============================================
   // Input Box Height (动态测量，用于 ChatArea 底部留白)
@@ -433,6 +435,7 @@ function App() {
                   handleVisibleMessageIdsChange(ids)
                   setVisibleMessageIds(ids)
                 }}
+                onAtBottomChange={setIsAtBottom}
               />
             </div>
 
@@ -442,6 +445,17 @@ function App() {
               onScrollToIndex={(index) => chatAreaRef.current?.scrollToMessageIndex(index)}
               visibleMessageIds={visibleMessageIds}
             />
+
+            {!isAtBottom && (
+              <button
+                type="button"
+                onClick={() => chatAreaRef.current?.scrollToBottom()}
+                className="absolute right-4 bottom-24 z-20 h-10 w-10 rounded-full bg-bg-100/90 border border-border-200 shadow-md flex items-center justify-center text-text-300 hover:text-text-100 hover:bg-bg-000 transition-colors"
+                aria-label="Scroll to bottom"
+              >
+                <ArrowDownIcon size={16} />
+              </button>
+            )}
 
             {/* Floating Input Box */}
             <div
