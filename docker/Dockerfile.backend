@@ -1,0 +1,34 @@
+# ============================================
+# OpenCode WebUI - Backend
+# ============================================
+# Ubuntu + opencode serve
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 基础依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    git \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装 opencode
+RUN curl -fsSL https://opencode.ai/install | bash \
+    && OPENCODE_BIN=$(find /root -name opencode -type f 2>/dev/null | head -1) \
+    && if [ -n "$OPENCODE_BIN" ]; then ln -sf "$OPENCODE_BIN" /usr/local/bin/opencode; fi \
+    && opencode --version
+
+# 工作目录
+RUN mkdir -p /workspace
+WORKDIR /workspace
+
+ENV OPENCODE_DISABLE_AUTOUPDATE=true \
+    OPENCODE_DISABLE_TERMINAL_TITLE=true \
+    WORKSPACE=/workspace
+
+EXPOSE 4096
+
+CMD ["opencode", "serve", "--port", "4096", "--hostname", "0.0.0.0"]

@@ -4,7 +4,7 @@
 #
 # 架构:
 #   frontend (Caddy)  :3000 -> 静态文件 (GitHub Actions 预构建镜像)
-#   backend  (opencode):4096 -> opencode serve (官方镜像)
+#   backend  (opencode):4096 -> opencode serve (GitHub Actions 预构建镜像)
 #
 # 使用方法:
 #   cp .env.example .env    # 填写 API Key
@@ -22,11 +22,10 @@ services:
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
 
-  # ---- 后端：opencode 官方镜像 ----
+  # ---- 后端：预构建镜像 ----
   backend:
-    image: ghcr.io/anomalyco/opencode:latest
+    image: ghcr.io/lehhair/opencodeui-backend:latest
     container_name: opencode-backend
-    entrypoint: ["opencode", "serve", "--hostname", "0.0.0.0", "--port", "4096"]
     restart: unless-stopped
     ports:
       - "127.0.0.1:${API_PORT:-4096}:4096"

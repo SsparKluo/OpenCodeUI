@@ -9,3 +9,9 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.frontend
+
+  backend:
+    image: opencodeui-backend:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
