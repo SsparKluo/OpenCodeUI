@@ -9,7 +9,6 @@ import {
 } from '../../components/Icons'
 import { usePathMode, useServerStore, useIsMobile, useNotification, useRouter } from '../../hooks'
 import { autoApproveStore, messageStore } from '../../store'
-import { reconnectSSE } from '../../api/events'
 import { themeStore } from '../../store/themeStore'
 import { KeybindingsSection } from './KeybindingsSection'
 import type { ThemeMode } from '../../hooks'
@@ -665,7 +664,7 @@ function ServersSettings() {
       <div className="space-y-1.5">
         {servers.map(s => (
           <ServerItem key={s.id} server={s} health={getHealth(s.id)} isActive={activeServer?.id === s.id}
-            onSelect={() => handleSelectServer(s.id)} onDelete={() => removeServer(s.id)} onCheckHealth={() => { checkHealth(s.id); reconnectSSE() }} />
+            onSelect={() => handleSelectServer(s.id)} onDelete={() => removeServer(s.id)} onCheckHealth={() => checkHealth(s.id)} />
         ))}
         {addingServer && (
           <AddServerForm
@@ -674,7 +673,6 @@ function ServersSettings() {
               const s = addServer({ name: n, url: u, auth })
               setAddingServer(false)
               checkHealth(s.id)
-              reconnectSSE()
             }}
             onCancel={() => setAddingServer(false)}
           />

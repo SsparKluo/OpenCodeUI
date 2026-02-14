@@ -75,6 +75,8 @@ let isConnecting = false
 let lifecycleListenersRegistered = false
 /** 标记连接曾经成功过（用于判断是否为"重连"） */
 let hasConnectedBefore = false
+/** 连接代次，每次 reconnectSSE() 递增，旧代次的事件会被丢弃 */
+let connectionGeneration = 0
 
 function resetHeartbeat() {
   if (heartbeatTimer) clearTimeout(heartbeatTimer)
@@ -148,9 +150,15 @@ async function connectViaTauri() {
     const authHeaders = getAuthHeader()
     const authHeader = authHeaders['Authorization'] || null
 
+    // 捕获当前连接代次，旧代次的事件一律丢弃
+    const myGeneration = connectionGeneration
+
     const onEvent = new Channel<TauriSseEvent>()
     
     onEvent.onmessage = (msg: TauriSseEvent) => {
+      // 代次不匹配，说明已经 reconnect 过了，忽略旧连接的事件
+      if (myGeneration !== connectionGeneration) return
+
       switch (msg.event) {
         case 'connected': {
           isConnecting = false
@@ -246,6 +254,9 @@ async function connectViaTauri() {
 function connectViaBrowser() {
   singletonController = new AbortController()
 
+  // 捕获当前连接代次
+  const myGeneration = connectionGeneration
+
   // 如果配置了密码，添加 Authorization header
   fetch(`${getApiBaseUrl()}/global/event`, {
     signal: singletonController.signal,
@@ -288,6 +299,12 @@ function connectViaBrowser() {
       let buffer = ''
 
       while (true) {
+        // 代次不匹配，说明已经 reconnect 过了，停止读取旧流
+        if (myGeneration !== connectionGeneration) {
+          reader.cancel().catch(() => {})
+          break
+        }
+
         const { done, value } = await reader.read()
         if (done) {
           if (import.meta.env.DEV) {
@@ -567,6 +584,9 @@ export function reconnectSSE() {
   if (heartbeatTimer) clearTimeout(heartbeatTimer)
   if (reconnectTimer) clearTimeout(reconnectTimer)
   reconnectTimer = null
+  
+  // 递增连接代次，使旧连接的事件回调自动失效
+  connectionGeneration++
   
   if (isTauri()) {
     import('@tauri-apps/api/core').then(({ invoke }) => {

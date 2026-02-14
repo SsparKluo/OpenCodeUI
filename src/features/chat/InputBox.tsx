@@ -44,6 +44,8 @@ export interface InputBoxProps {
   registerInputBox?: (element: HTMLElement | null) => void
   showScrollToBottom?: boolean
   onScrollToBottom?: () => void
+  /** 键盘是否弹起（移动端），弹起时隐藏 InputFooter */
+  keyboardVisible?: boolean
 }
 
 // ============================================
@@ -76,6 +78,7 @@ function InputBoxComponent({
   registerInputBox,
   showScrollToBottom = false,
   onScrollToBottom,
+  keyboardVisible = false,
 }: InputBoxProps) {
   // 文本状态
   const [text, setText] = useState('')
@@ -140,9 +143,14 @@ function InputBoxComponent({
     
     textarea.style.height = 'auto'
     const scrollHeight = textarea.scrollHeight
-    // 确保最小高度为 24px，最大为视口高度的 50%
-    textarea.style.height = Math.max(24, Math.min(scrollHeight, window.innerHeight * 0.5)) + 'px'
-  }, [text])
+    // 移动端键盘弹起时 visualViewport.height 更准确
+    const viewportH = (isMobile && window.visualViewport)
+      ? window.visualViewport.height
+      : window.innerHeight
+    // 减去 header(48px) 和一些余量，限制在可用高度的 60%
+    const maxH = isMobile ? (viewportH - 48) * 0.6 : viewportH * 0.5
+    textarea.style.height = Math.max(24, Math.min(scrollHeight, maxH)) + 'px'
+  }, [text, isMobile])
 
   // 计算
   const canSend = (text.trim().length > 0 || attachments.length > 0) && !disabled
@@ -628,7 +636,7 @@ function InputBoxComponent({
                     style={{ 
                       ...TEXT_STYLE,
                       minHeight: '24px', 
-                      maxHeight: '50vh',
+                      maxHeight: isMobile ? 'calc((var(--app-height, 100vh) - 48px) * 0.6)' : '50vh',
                     }}
                     rows={1}
                   />
@@ -653,8 +661,8 @@ function InputBoxComponent({
             </div>
           </div>
 
-          {/* Footer: disclaimer + todo progress */}
-          <InputFooter sessionId={sessionId} onNewChat={onNewChat} />
+          {/* Footer: disclaimer + todo progress — 移动端键盘弹起时隐藏 */}
+          {!(isMobile && keyboardVisible) && <InputFooter sessionId={sessionId} onNewChat={onNewChat} />}
         </div>
       </div>
     </div>

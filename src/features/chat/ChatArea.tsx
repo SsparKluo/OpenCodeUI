@@ -28,6 +28,8 @@ interface ChatAreaProps {
   prependedCount?: number
   /** Session 加载状态 */
   loadState?: 'idle' | 'loading' | 'loaded' | 'error'
+  /** 是否还有更多历史消息可加载 */
+  hasMoreHistory?: boolean
   onLoadMore?: () => void | Promise<void>
   onUndo?: (userMessageId: string) => void
   canUndo?: boolean
@@ -86,6 +88,7 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   isStreaming = false,
   prependedCount = 0,
   loadState = 'idle',
+  hasMoreHistory = false,
   onLoadMore,
   onUndo,
   canUndo,
@@ -133,7 +136,7 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   
   // 包装 onLoadMore，追踪加载状态（带最小展示时间防止闪烁）
   const handleLoadMore = useCallback(async () => {
-    if (!onLoadMore || isLoadingMoreRef.current) return
+    if (!onLoadMore || !hasMoreHistory || isLoadingMoreRef.current) return
     isLoadingMoreRef.current = true
     setIsLoadingMore(true)
     const minDelay = new Promise(r => setTimeout(r, 400))
@@ -143,7 +146,7 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
       isLoadingMoreRef.current = false
       setIsLoadingMore(false)
     }
-  }, [onLoadMore])
+  }, [onLoadMore, hasMoreHistory])
   
   // 过滤空消息（有 memo 避免每次 render 都创建新数组）
   const visibleMessages = useMemo(() => messages.filter(messageHasContent), [messages])
@@ -333,8 +336,8 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
     )
   }, [registerMessage, onUndo, canUndo, isWideMode, sessionId])
 
-  // Session 正在加载且没有消息 → 显示全屏 spinner
-  const showSessionLoading = loadState === 'loading' && visibleMessages.length === 0
+  // Session 正在加载且没有消息 → 显示全屏 spinner（仅在有 sessionId 时，新建对话不显示）
+  const showSessionLoading = !!sessionId && loadState === 'loading' && visibleMessages.length === 0
 
   return (
     <div className="h-full overflow-hidden contain-strict relative">
@@ -347,8 +350,8 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
           </div>
         </div>
       )}
-      {/* 向上加载历史消息的顶部 spinner：仅在用户停留在顶部时显示 */}
-      {isLoadingMore && isNearTop && (
+      {/* 向上加载历史消息的顶部 spinner：仅在有更多历史且用户停留在顶部时显示 */}
+      {isLoadingMore && hasMoreHistory && isNearTop && (
         <div className="absolute top-24 left-0 right-0 z-10 flex justify-center pointer-events-none">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-bg-100/90 border border-border-200 shadow-sm text-text-400 animate-in fade-in slide-in-from-top-2 duration-200">
             <SpinnerIcon size={14} className="animate-spin" />

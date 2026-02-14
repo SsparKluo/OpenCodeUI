@@ -189,6 +189,7 @@ function App() {
     setSelectedAgent,
     routeSessionId,
     loadState,
+    hasMoreHistory,
     sidebarExpanded,
     setSidebarExpanded,
     effectiveDirectory,
@@ -473,6 +474,7 @@ function App() {
                 isStreaming={isStreaming}
                 prependedCount={prependedCount}
                 loadState={loadState}
+                hasMoreHistory={hasMoreHistory}
                 onLoadMore={loadMoreHistory}
                 onUndo={handleUndoWithAnimation}
                 canUndo={canUndo}
@@ -535,6 +537,7 @@ function App() {
                 registerInputBox={registerInputBox}
                 showScrollToBottom={!isAtBottom}
                 onScrollToBottom={() => chatAreaRef.current?.scrollToBottom()}
+                keyboardVisible={isChatInputFocused}
               />
             </div>
 
