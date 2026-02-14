@@ -503,8 +503,6 @@ function App() {
               className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none"
               style={isChatInputFocused ? {
                 bottom: 'var(--keyboard-inset-bottom, 0px)',
-                maxHeight: 'calc(var(--app-height, 100vh) - var(--keyboard-inset-bottom, 0px) - 72px)',
-                overflow: 'hidden',
               } : undefined}
             >
               {/* Double-Esc cancel hint */}
