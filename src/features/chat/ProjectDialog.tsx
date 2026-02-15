@@ -53,10 +53,6 @@ function getFilterText(path: string): string {
   return normalized.substring(lastSep + 1)
 }
 
-function joinPath(base: string, name: string): string {
-  const cleanBase = base.endsWith(PATH_SEP) ? base : base + PATH_SEP
-  return cleanBase + name
-}
 
 // ============================================
 // Component
@@ -135,7 +131,7 @@ export function ProjectDialog({ isOpen, onClose, onSelect, initialPath = '' }: P
           .sort((a, b) => a.name.localeCompare(b.name))
           .map(n => ({
             name: n.name,
-            path: joinPath(currentDir, n.name),
+            path: normalizePath(n.absolute),
             type: n.type
           }))
         
@@ -209,10 +205,10 @@ export function ProjectDialog({ isOpen, onClose, onSelect, initialPath = '' }: P
     inputRef.current?.focus()
   }, [])
 
-  const handleSelectFolder = useCallback((folderName: string) => {
-    onSelect(joinPath(currentDir, folderName))
+  const handleSelectFolder = useCallback((folderPath: string) => {
+    onSelect(folderPath)
     onClose()
-  }, [currentDir, onSelect, onClose])
+  }, [onSelect, onClose])
 
   const handleConfirmCurrent = useCallback(() => {
     // 去掉尾斜杠，但保留根路径（/ 或 C:/）
@@ -367,7 +363,7 @@ export function ProjectDialog({ isOpen, onClose, onSelect, initialPath = '' }: P
                   action={
                     index === selectedIndex && (
                       <button 
-                        onClick={(e) => { e.stopPropagation(); handleSelectFolder(item.name) }}
+                        onClick={(e) => { e.stopPropagation(); handleSelectFolder(item.path) }}
                         className="flex items-center gap-1 text-[10px] bg-accent-main-100 hover:bg-accent-main-200 px-2 py-0.5 rounded text-white font-medium transition-colors"
                       >
                         <PlusIcon className="w-2.5 h-2.5" />
