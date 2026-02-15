@@ -3,6 +3,7 @@
 # ============================================
 #
 # 架构:
+#   gateway  (Caddy)  :6658 -> 统一入口（反代 + 端口路由）
 #   frontend (Caddy)  :3000 -> 静态文件 (GitHub Actions 预构建镜像)
 #   backend  (opencode):4096 -> opencode serve (GitHub Actions 预构建镜像)
 #
@@ -24,8 +25,6 @@ services:
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-6658}:6658"
     volumes:
-      - ./docker/nginx.gateway.conf:/etc/nginx/http.d/default.conf:ro
-      - ./docker/token_map.conf:/token_map/token_map.conf
       - opencode-router-data:/data
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
@@ -33,8 +32,6 @@ services:
       - backend
     environment:
       - TARGET_CONTAINER=opencode-backend
-      - GATEWAY_CONTAINER=opencode-gateway
-      - ROUTER_MAP_FILE=/token_map/token_map.conf
       - ROUTER_STATE_FILE=/data/routes.json
       - ROUTER_SCAN_INTERVAL=${ROUTER_SCAN_INTERVAL:-5}
       - ROUTER_TOKEN_LENGTH=${ROUTER_TOKEN_LENGTH:-12}

@@ -1,16 +1,20 @@
-FROM nginx:1.27-alpine
+FROM caddy:2-alpine
 
 RUN apk add --no-cache python3 py3-pip docker-cli
 
 WORKDIR /app
 
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 COPY docker/router/requirements.txt /app/requirements.txt
-RUN pip3 install --no-cache-dir -r /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY docker/router /app/router
+COPY docker/Caddyfile.gateway /etc/caddy/Caddyfile
 
-COPY docker/nginx.gateway.conf /etc/nginx/http.d/default.conf
+RUN touch /etc/caddy/routes.conf
 
 EXPOSE 6658
 
-CMD ["/bin/sh", "-c", "python3 /app/router/router.py & nginx -g 'daemon off;' "]
+CMD ["/bin/sh", "-c", "/opt/venv/bin/python /app/router/router.py & caddy run --config /etc/caddy/Caddyfile"]

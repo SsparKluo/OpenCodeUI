@@ -1,0 +1,27 @@
+{
+	auto_https off
+}
+
+:6658 {
+	# API（SSE + WebSocket 自动处理）
+	handle_path /api/* {
+		reverse_proxy opencode-backend:4096
+	}
+
+	# Routes UI
+	handle /routes {
+		reverse_proxy 127.0.0.1:7070
+	}
+
+	handle /routes.json {
+		reverse_proxy 127.0.0.1:7070
+	}
+
+	# 动态端口路由（由 router 自动生成）
+	import /etc/caddy/routes.conf
+
+	# 前端（兜底）
+	handle {
+		reverse_proxy opencode-frontend:3000
+	}
+}
