@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import os
 import secrets
 import re
@@ -8,6 +9,13 @@ import subprocess
 import time
 from flask import Flask, jsonify, request, Response
 
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+log = logging.getLogger("router")
 
 app = Flask(__name__)
 
@@ -82,7 +90,13 @@ def run_cmd(args):
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
     if result.returncode != 0:
-        return ""
+        log.warning(
+            "Command failed (rc=%d): %s | stderr: %s",
+            result.returncode,
+            " ".join(args),
+            result.stderr.strip(),
+        )
+        return None
     return result.stdout
 
 
@@ -121,6 +135,9 @@ def list_listening_ports():
             "cat /proc/net/tcp /proc/net/tcp6",
         ]
     )
+    if output is None:
+        log.warning("Failed to query ports from %s", TARGET_CONTAINER)
+        return None
     ports = parse_proc_net_tcp(output)
     filtered = []
     start, end = PORT_RANGE
@@ -130,6 +147,7 @@ def list_listening_ports():
         if port < start or port > end:
             continue
         filtered.append(port)
+    log.debug("Discovered ports: %s", filtered)
     return sorted(filtered)
 
 
@@ -157,6 +175,11 @@ def reload_gateway():
 def sync_routes():
     state = load_state()
     ports = list_listening_ports()
+
+    if ports is None:
+        # docker exec failed — skip this cycle, do NOT clear existing routes
+        return
+
     existing_ports = {info.get("port") for info in state.values()}
 
     changed = False
@@ -170,6 +193,7 @@ def sync_routes():
             "port": port,
             "created_at": int(time.time()),
         }
+        log.info("New route: port %d -> /p/%s", port, token)
         changed = True
 
     active_ports = set(ports)
@@ -177,13 +201,16 @@ def sync_routes():
         token for token, info in state.items() if info.get("port") not in active_ports
     ]
     for token in stale_tokens:
+        port = state[token].get("port")
         del state[token]
+        log.info("Removed stale route: port %s (token %s)", port, token)
         changed = True
 
     if changed:
         write_map(state)
         save_state(state)
         reload_gateway()
+        log.info("Routes updated: %d active", len(state))
 
 
 def check_basic_auth(auth_header):
@@ -230,10 +257,23 @@ def get_routes():
             "Unauthorized", status=401, headers={"WWW-Authenticate": "Basic"}
         )
 
-    if request.args.get("format") == "json":
-        return jsonify(build_routes_payload())
-
     payload = build_routes_payload()
+    log.info(
+        "Serving /routes (%d routes, format=%s)",
+        len(payload.get("routes", [])),
+        request.args.get("format", "html"),
+    )
+
+    no_cache = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+    }
+
+    if request.args.get("format") == "json":
+        resp = jsonify(payload)
+        resp.headers.update(no_cache)
+        return resp
+
     routes_json = json.dumps(payload)
     html = """
 <!doctype html>
@@ -599,12 +639,12 @@ def get_routes():
     async function load() {
       countEl.textContent = 'loading...'
       try {
-        const res = await fetch('/routes?format=json', { cache: 'no-store' })
+        const res = await fetch('/routes?format=json', { cache: 'no-store', credentials: 'same-origin' })
         if (!res.ok) { countEl.textContent = 'error ' + res.status; return }
         currentData = await res.json()
         applyFilter()
       } catch (e) {
-        countEl.textContent = 'failed to load'
+        countEl.textContent = 'failed: ' + e.message
       }
     }
 
@@ -626,21 +666,29 @@ def get_routes():
 </html>
     """
     html = html.replace("__INITIAL_DATA__", routes_json)
-    return Response(html, mimetype="text/html")
+    return Response(html, mimetype="text/html", headers=no_cache)
 
 
 def loop():
+    log.info(
+        "Route scanner started (interval=%ds, target=%s, range=%s-%s)",
+        SCAN_INTERVAL,
+        TARGET_CONTAINER,
+        PORT_RANGE[0],
+        PORT_RANGE[1],
+    )
     while True:
         try:
             sync_routes()
         except Exception:
-            pass
+            log.exception("Error in sync_routes")
         time.sleep(SCAN_INTERVAL)
 
 
 if __name__ == "__main__":
     from threading import Thread
 
+    log.info("Router starting on :7070")
     t = Thread(target=loop, daemon=True)
     t.start()
     app.run(host="0.0.0.0", port=7070)
