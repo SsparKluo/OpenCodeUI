@@ -44,6 +44,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const currentDirectoryRef = useRef(currentDirectory)
   const isLoadingMoreRef = useRef(false)  // 防止并发 loadMore
   const fetchSessionsRef = useRef<() => Promise<void>>(() => Promise.resolve())
+  const currentLimitRef = useRef(30)  // 当前 limit，loadMore 时递增
   
   // 保持 ref 同步
   useEffect(() => {
@@ -69,7 +70,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
       const data = await getSessions({
         roots: true,
-        limit: 30,
+        limit: currentLimitRef.current,
         directory: targetDir,
         search: search || undefined,
         ...queryParams,
@@ -92,7 +93,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       } else {
         setSessions(data)
       }
-      setHasMore(data.length >= 30)
+      setHasMore(data.length >= currentLimitRef.current)
     } catch (e) {
       sessionErrorHandler('fetch sessions', e)
     } finally {
@@ -109,6 +110,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // 监听 directory 和 search 变化
   useEffect(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    
+    // 切换目录或搜索时重置 limit
+    currentLimitRef.current = 30
     
     searchTimerRef.current = window.setTimeout(() => {
       fetchSessions()
@@ -177,10 +181,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     isLoadingMoreRef.current = true
     
     try {
-      const lastSession = sessions[sessions.length - 1]
-      await fetchSessions({ start: lastSession.time.updated, append: true })
+      // 跟官方 webui 一样，递增 limit 重新请求整个列表
+      currentLimitRef.current += 15
+      setIsLoadingMore(true)
+      await fetchSessions()
     } finally {
       isLoadingMoreRef.current = false
+      setIsLoadingMore(false)
     }
   }, [hasMore, sessions, fetchSessions])
 
