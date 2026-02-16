@@ -145,7 +145,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
     currentHeightRef.current = null
   }, [])
 
-  // 拖拽调整高度
+  // 鼠标拖拽调整高度
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     const container = containerRef.current
@@ -185,6 +185,44 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
     document.body.style.userSelect = 'none'
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
+  }, [])
+
+  // 触摸拖拽调整高度
+  const handleTouchResizeStart = useCallback((e: React.TouchEvent) => {
+    const container = containerRef.current
+    const listEl = listRef.current
+    if (!container || !listEl) return
+
+    setIsResizing(true)
+    const containerRect = container.getBoundingClientRect()
+    const startY = e.touches[0].clientY
+    const startHeight = currentHeightRef.current ?? containerRect.height * 0.4
+
+    const handleTouchMove = (moveEvent: TouchEvent) => {
+      moveEvent.preventDefault()
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      rafRef.current = requestAnimationFrame(() => {
+        const deltaY = moveEvent.touches[0].clientY - startY
+        const newHeight = startHeight + deltaY
+        const maxHeight = containerRect.height - MIN_PREVIEW_HEIGHT
+        const clampedHeight = Math.min(Math.max(newHeight, MIN_LIST_HEIGHT), maxHeight)
+        listEl.style.setProperty('--list-height', `${clampedHeight}px`)
+        currentHeightRef.current = clampedHeight
+      })
+    }
+
+    const handleTouchEnd = () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      setIsResizing(false)
+      document.removeEventListener('touchmove', handleTouchMove)
+      document.removeEventListener('touchend', handleTouchEnd)
+      if (currentHeightRef.current !== null) {
+        setListHeight(currentHeightRef.current)
+      }
+    }
+
+    document.addEventListener('touchmove', handleTouchMove, { passive: false })
+    document.addEventListener('touchend', handleTouchEnd)
   }, [])
 
   // 获取选中的 diff 数据
@@ -345,16 +383,17 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
         </div>
       </div>
 
-      {/* Resize Handle */}
+      {/* Resize Handle - 扩大拖拽区域，支持触摸 */}
       {showPreview && (
         <div
           className={`
-            h-1.5 cursor-row-resize shrink-0 relative
-            hover:bg-accent-main-100/50 transition-colors
+            h-2.5 cursor-row-resize shrink-0 relative
+            hover:bg-accent-main-100/50 active:bg-accent-main-100 transition-colors
             border-t border-border-200
             ${isResizing ? 'bg-accent-main-100' : 'bg-transparent'}
           `}
           onMouseDown={handleResizeStart}
+          onTouchStart={handleTouchResizeStart}
         />
       )}
 
