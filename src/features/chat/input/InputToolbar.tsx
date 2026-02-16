@@ -168,7 +168,7 @@ export function InputToolbar({
               <span className="text-text-400"><ChevronDownIcon /></span>
             </button>
 
-            <DropdownMenu triggerRef={variantTriggerRef} isOpen={variantMenuOpen} position="top" align="left">
+            <DropdownMenu triggerRef={variantTriggerRef} isOpen={variantMenuOpen} position="top" align="left" minWidth="auto">
               <div ref={variantMenuRef}>
                 <MenuItem
                   label="Default"

@@ -10,6 +10,7 @@ interface DropdownMenuProps {
   position?: DropdownPosition
   align?: DropdownAlign
   width?: number | string
+  minWidth?: number | string
   className?: string
   children: React.ReactNode
 }
@@ -24,6 +25,7 @@ export function DropdownMenu({
   position = 'bottom',
   align = 'left',
   width,
+  minWidth = '200px',
   className = '',
   children,
 }: DropdownMenuProps) {
@@ -100,7 +102,7 @@ export function DropdownMenu({
         `}
         style={{ 
           width: width || 'auto',
-          minWidth: '200px',
+          minWidth,
           maxWidth: 'min(320px, 90vw)',
           transformOrigin: position === 'top' ? 'bottom' : 'top'
         }}
