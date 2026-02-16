@@ -226,6 +226,25 @@ const AssistantMessageView = memo(function AssistantMessageView({ message, onEns
   // 收集连续的 tool parts 合并渲染
   const renderItems = useMemo(() => groupPartsForRender(parts), [parts])
   
+  // 判断哪些 reasoning part 已经结束（后面出现了任何非基础设施 part）
+  // 直接检查源 parts 数组，而非 renderItems，因为 renderItems 会过滤掉空 text，
+  // 但空 text part 的存在本身就说明模型已经进入了下一输出阶段
+  const endedReasoningIds = useMemo(() => {
+    const ended = new Set<string>()
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i].type !== 'reasoning') continue
+      for (let j = i + 1; j < parts.length; j++) {
+        const t = parts[j].type
+        // snapshot/patch 是纯内部状态，不代表内容流转
+        if (t === 'snapshot' || t === 'patch') continue
+        // 任何其他 part 类型（包括空 text、step-start、tool 等）都说明思考已结束
+        ended.add(parts[i].id)
+        break
+      }
+    }
+    return ended
+  }, [parts])
+  
   // 计算完整文本用于复制
   const fullText = parts
     .filter((p): p is TextPart => p.type === 'text' && !p.synthetic)
@@ -256,7 +275,7 @@ const AssistantMessageView = memo(function AssistantMessageView({ message, onEns
     <div className="flex flex-col gap-2 w-full group">
 
 
-      {renderItems.map((item: RenderItem, index: number) => {
+      {renderItems.map((item: RenderItem) => {
         if (item.type === 'tool-group') {
           return (
             <ToolGroup 
@@ -278,14 +297,14 @@ const AssistantMessageView = memo(function AssistantMessageView({ message, onEns
               />
             )
           case 'reasoning': {
-            // 只有当该 reasoning 是最后一个渲染项时，才可能仍在流式输出
-            // 如果后面已经有新的 part（text/tool 等），说明思考已经结束
-            const isLastItem = index === renderItems.length - 1
+            // 通过源 parts 数组判断思考是否已结束，而非依赖 renderItems 位置
+            // 这样即使空 text part 被 renderItems 过滤，也能正确检测到思考结束
+            const reasoningDone = endedReasoningIds.has(part.id)
             return (
               <ReasoningPartView 
                 key={part.id} 
                 part={part as ReasoningPart}
-                isStreaming={isStreaming && isLastItem}
+                isStreaming={isStreaming && !reasoningDone}
               />
             )
           }
