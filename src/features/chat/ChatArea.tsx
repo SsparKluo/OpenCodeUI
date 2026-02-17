@@ -39,10 +39,6 @@ interface ChatAreaProps {
   bottomPadding?: number
   onVisibleMessageIdsChange?: (ids: string[]) => void
   onAtBottomChange?: (atBottom: boolean) => void
-  /** Override initial scroll position (message index). If undefined, defaults to last message (bottom). */
-  initialScrollIndex?: number
-  /** Called when the top visible item index changes (for scroll position tracking) */
-  onTopItemIndexChange?: (index: number) => void
 }
 
 export type ChatAreaHandle = {
@@ -100,8 +96,6 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   bottomPadding = 0,
   onVisibleMessageIdsChange,
   onAtBottomChange,
-  initialScrollIndex,
-  onTopItemIndexChange,
 }, ref) => {
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   // 外部滚动容器
@@ -119,9 +113,8 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   const programmaticScrollRef = useRef(false)
   const programmaticScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   
-  // Session 切换过渡：简单的淡入效果
-  // 使用 sessionId 作为 key，切换时会触发组件重新挂载从而产生 CSS 动画
-  const transitionKey = sessionId || 'empty'
+  // Session 切换：追踪上一个 sessionId，用于检测切换并触发滚动+动画
+  const prevSessionIdRef = useRef(sessionId)
   
   // 向上滚动加载更多历史消息的 loading 状态
   const [isLoadingMore, setIsLoadingMore] = useState(false)
@@ -184,10 +177,8 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   const visibleMessagesCountRef = useRef(visibleMessages.length)
   visibleMessagesCountRef.current = visibleMessages.length
 
-  // Compute effective initial scroll index: use saved position if provided, otherwise default to bottom
-  const effectiveInitialIndex = initialScrollIndex !== undefined
-    ? Math.min(initialScrollIndex, Math.max(0, visibleMessages.length - 1))
-    : Math.max(0, visibleMessages.length - 1)
+  // Always start at the bottom (latest message)
+  const effectiveInitialIndex = Math.max(0, visibleMessages.length - 1)
 
   // 定时自动滚动：在 streaming 时定期检查是否需要滚动
   // 这样打字机效果导致的内容增长也会触发滚动
@@ -245,6 +236,31 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
       userScrolledAwayRef.current = false
     }
   }, [isStreaming])
+  
+  // Session 切换时：滚动到底部 + 触发淡入动画
+  // 因为不再用 key 重新挂载 Virtuoso，需要在 sessionId 变化时主动处理
+  useEffect(() => {
+    if (sessionId === prevSessionIdRef.current) return
+    prevSessionIdRef.current = sessionId
+    
+    // 触发淡入动画：移除再添加 animate-fade-in class
+    if (scrollParent) {
+      scrollParent.classList.remove('animate-fade-in')
+      // 强制 reflow 让浏览器重新识别动画
+      void scrollParent.offsetWidth
+      scrollParent.classList.add('animate-fade-in')
+    }
+    
+    // 滚动到底部 —— 使用 requestAnimationFrame 确保 Virtuoso 已处理新数据
+    // 不需要 setTimeout，因为 Virtuoso 没有被重新挂载，只是数据更新了
+    requestAnimationFrame(() => {
+      virtuosoRef.current?.scrollToIndex({
+        index: visibleMessagesCountRef.current - 1,
+        align: 'end',
+        behavior: 'auto',
+      })
+    })
+  }, [sessionId, scrollParent])
   
   // firstItemIndex：基于 prependedCount 计算，确保和 messages 同步
   const firstItemIndex = START_INDEX - prependedCount
@@ -402,7 +418,6 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
         </div>
       )}
       <div 
-        key={transitionKey}
         ref={setScrollParent} 
         className="h-full overflow-y-auto custom-scrollbar animate-fade-in contain-content"
       >
@@ -434,9 +449,6 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
               )
             }}
             rangeChanged={(range) => {
-              // Report top visible item index for scroll position tracking
-              onTopItemIndexChange?.(range.startIndex)
-
               if (!onVisibleMessageIdsChange) return
               const start = Math.max(0, range.startIndex - MESSAGE_PREFETCH_BUFFER)
               const end = Math.min(visibleMessages.length - 1, range.endIndex + MESSAGE_PREFETCH_BUFFER)
