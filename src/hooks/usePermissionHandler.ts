@@ -155,44 +155,36 @@ export function usePermissionHandler(): UsePermissionHandlerResult {
   }, [])
 
   // 主动轮询获取 pending 请求（用于 SSE 可能丢失事件的情况）
-  // 支持传入多个 sessionIds（包括子 session）
+  // 一次拉取全量数据，用 sessionFamily 过滤后直接替换本地状态
   const refreshPendingRequests = useCallback(async (
     sessionIds?: string | string[], 
     directory?: string
   ) => {
     try {
-      // 规范化为数组
-      const ids = sessionIds 
-        ? (Array.isArray(sessionIds) ? sessionIds : [sessionIds])
-        : []
-      
-      // 并行获取所有 session 的权限请求
-      const results = await Promise.all(
-        ids.map(async (sessionId) => {
-          const [permissions, questions] = await Promise.all([
-            getPendingPermissions(sessionId, directory).catch(() => []),
-            getPendingQuestions(sessionId, directory).catch(() => []),
-          ])
-          return { permissions, questions }
-        })
+      // 规范化为 Set 用于过滤
+      const familySet = new Set(
+        sessionIds
+          ? (Array.isArray(sessionIds) ? sessionIds : [sessionIds])
+          : []
       )
-      
-      // 合并所有结果
-      const allPermissions = results.flatMap(r => r.permissions)
-      const allQuestions = results.flatMap(r => r.questions)
-      
-      // 合并而不是替换，避免丢失刚收到的 SSE 事件
-      setPendingPermissionRequests(prev => {
-        const existingIds = new Set(prev.map(r => r.id))
-        const newRequests = allPermissions.filter(r => !existingIds.has(r.id))
-        return newRequests.length > 0 ? [...prev, ...newRequests] : prev
-      })
-      
-      setPendingQuestionRequests(prev => {
-        const existingIds = new Set(prev.map(r => r.id))
-        const newRequests = allQuestions.filter(r => !existingIds.has(r.id))
-        return newRequests.length > 0 ? [...prev, ...newRequests] : prev
-      })
+
+      // 只请求一次全量数据（不按 sessionId 分别请求）
+      const [allPermissions, allQuestions] = await Promise.all([
+        getPendingPermissions(undefined, directory).catch(() => []),
+        getPendingQuestions(undefined, directory).catch(() => []),
+      ])
+
+      // 用 sessionFamily 过滤，然后直接替换本地状态（与 session 加载时一致）
+      setPendingPermissionRequests(
+        familySet.size > 0
+          ? allPermissions.filter(p => familySet.has(p.sessionID))
+          : allPermissions
+      )
+      setPendingQuestionRequests(
+        familySet.size > 0
+          ? allQuestions.filter(q => familySet.has(q.sessionID))
+          : allQuestions
+      )
     } catch (error) {
       permissionErrorHandler('refresh pending requests', error)
     }
