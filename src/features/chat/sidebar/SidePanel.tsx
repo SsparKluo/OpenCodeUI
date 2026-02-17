@@ -22,7 +22,8 @@ import { useDirectory, useSessionStats, formatTokens, formatCost } from '../../.
 import type { ThemeMode } from '../../../hooks'
 import { useSessionContext } from '../../../contexts/SessionContext'
 import { useMessageStore } from '../../../store'
-import { updateSession, subscribeToConnectionState, type ApiSession, type ConnectionInfo } from '../../../api'
+import { useBusySessions, useBusyCount } from '../../../store/activeSessionStore'
+import { updateSession, getSession, subscribeToConnectionState, type ApiSession, type ConnectionInfo } from '../../../api'
 import { uiErrorHandler } from '../../../utils'
 import type { SessionStats } from '../../../hooks'
 
@@ -90,8 +91,8 @@ export function SidePanel({
     isOpen: false,
     projectId: null
   })
-  const [recentsExpanded, setRecentsExpanded] = useState(true)
   const [projectsExpanded, setProjectsExpanded] = useState(false)
+  const [sidebarTab, setSidebarTab] = useState<'recents' | 'active'>('recents')
   
   const showLabels = isExpanded || isMobile
   
@@ -99,6 +100,10 @@ export function SidePanel({
   const { messages } = useMessageStore()
   const stats = useSessionStats(contextLimit)
   const hasMessages = messages.length > 0
+  
+  // Active sessions
+  const busySessions = useBusySessions()
+  const busyCount = useBusyCount()
   
   
   useEffect(() => {
@@ -116,6 +121,54 @@ export function SidePanel({
     deleteSession,
     refresh,
   } = useSessionContext()
+
+  // 缓存通过 API 拉取的 session 数据（sessions 列表中不存在的）
+  const [fetchedSessions, setFetchedSessions] = useState<Record<string, ApiSession>>({})
+
+  // 为 active sessions 构建 sessionId -> ApiSession 的查找表
+  const sessionLookup = useMemo(() => {
+    const map = new Map<string, ApiSession>()
+    for (const s of sessions) {
+      map.set(s.id, s)
+    }
+    // fetchedSessions 作为补充（其他项目的 session）
+    for (const [id, s] of Object.entries(fetchedSessions)) {
+      if (!map.has(id)) {
+        map.set(id, s)
+      }
+    }
+    return map
+  }, [sessions, fetchedSessions])
+
+  // 异步拉取 sessions 列表中不存在的 active session
+  useEffect(() => {
+    const missing = busySessions.filter(
+      (entry) => !sessionLookup.has(entry.sessionId)
+    )
+    if (missing.length === 0) return
+
+    let cancelled = false
+    const fetchMissing = async () => {
+      const results: Record<string, ApiSession> = {}
+      await Promise.allSettled(
+        missing.map(async (entry) => {
+          try {
+            const session = await getSession(entry.sessionId, entry.directory)
+            if (!cancelled) {
+              results[session.id] = session
+            }
+          } catch {
+            // 拉取失败就算了，标题会显示 fallback
+          }
+        })
+      )
+      if (!cancelled && Object.keys(results).length > 0) {
+        setFetchedSessions((prev) => ({ ...prev, ...results }))
+      }
+    }
+    fetchMissing()
+    return () => { cancelled = true }
+  }, [busySessions, sessionLookup])
 
   const projects = useMemo<ProjectItem[]>(() => {
     const list: ProjectItem[] = [{
@@ -182,6 +235,17 @@ export function SidePanel({
       onCloseMobile()
     }
   }, [currentDirectory, addDirectory, onSelectSession, onCloseMobile])
+
+  // Active tab 专用：跨目录的 session 需要确保目录在项目列表中
+  const handleSelectActive = useCallback((session: ApiSession) => {
+    if (session.directory) {
+      addDirectory(session.directory)
+    }
+    onSelectSession(session)
+    if (window.innerWidth < 768 && onCloseMobile) {
+      onCloseMobile()
+    }
+  }, [addDirectory, onSelectSession, onCloseMobile])
 
   const handleRename = useCallback(async (sessionId: string, newTitle: string) => {
     try {
@@ -393,21 +457,38 @@ export function SidePanel({
           </div>
         </div>
 
-        {/* Recents */}
+        {/* Tab Bar: Recents / Active */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          <button
-            onClick={() => setRecentsExpanded(!recentsExpanded)}
-            className="flex items-center justify-between px-4 py-1.5 group cursor-pointer"
-          >
-            <span className="text-[10px] font-semibold text-text-500 uppercase tracking-wider">
+          <div className="flex items-center px-3 gap-1 shrink-0">
+            <button
+              onClick={() => setSidebarTab('recents')}
+              className={`px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider transition-colors duration-150 ${
+                sidebarTab === 'recents'
+                  ? 'text-text-100'
+                  : 'text-text-500 hover:text-text-300'
+              }`}
+            >
               Recents
-            </span>
-            <span className="text-text-400 opacity-0 group-hover:opacity-75 transition-opacity text-[10px]">
-              {recentsExpanded ? 'Hide' : 'Show'}
-            </span>
-          </button>
-          
-          {recentsExpanded && (
+            </button>
+            <button
+              onClick={() => setSidebarTab('active')}
+              className={`px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider transition-colors duration-150 flex items-center gap-1.5 ${
+                sidebarTab === 'active'
+                  ? 'text-text-100'
+                  : 'text-text-500 hover:text-text-300'
+              }`}
+            >
+              Active
+              {busyCount > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[10px] font-bold rounded-full bg-success-100/15 text-success-100">
+                  {busyCount}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Recents Tab */}
+          {sidebarTab === 'recents' && (
             <div className="flex-1 overflow-hidden">
               <SessionList
                 sessions={sessions}
@@ -428,6 +509,32 @@ export function SidePanel({
                 showStats
                 showDirectory={!currentDirectory}
               />
+            </div>
+          )}
+
+          {/* Active Sessions Tab */}
+          {sidebarTab === 'active' && (
+            <div className="flex-1 overflow-y-auto custom-scrollbar px-2 py-2">
+              {busySessions.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-text-400 opacity-60">
+                  <p className="text-xs">No active sessions</p>
+                </div>
+              ) : (
+                <div className="space-y-0.5">
+                  {busySessions.map((entry) => {
+                    const resolvedSession = sessionLookup.get(entry.sessionId)
+                    return (
+                      <ActiveSessionItem
+                        key={entry.sessionId}
+                        entry={entry}
+                        resolvedSession={resolvedSession}
+                        isSelected={entry.sessionId === selectedSessionId}
+                        onSelect={handleSelectActive}
+                      />
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -464,6 +571,85 @@ export function SidePanel({
         confirmText="Remove"
         variant="danger"
       />
+    </div>
+  )
+}
+
+// ============================================
+// Active Session Item
+// ============================================
+
+import type { ActiveSessionEntry } from '../../../store/activeSessionStore'
+
+interface ActiveSessionItemProps {
+  entry: ActiveSessionEntry
+  /** 从 sessions 列表或 API 拉取到的完整 session 对象 */
+  resolvedSession?: ApiSession
+  isSelected: boolean
+  onSelect: (session: ApiSession) => void
+}
+
+function ActiveSessionItem({ entry, resolvedSession, isSelected, onSelect }: ActiveSessionItemProps) {
+  const isRetry = entry.status.type === 'retry'
+  // 标题优先从 resolvedSession 取，然后 fallback 到 entry.title（sessionMeta），最后截取 ID
+  const displayTitle = resolvedSession?.title || entry.title || entry.sessionId.slice(0, 12) + '...'
+  // 目录优先从 resolvedSession 取
+  const directory = resolvedSession?.directory || entry.directory
+
+  const handleClick = () => {
+    if (resolvedSession) {
+      onSelect(resolvedSession)
+    }
+    // 如果没有 resolvedSession（极端情况：API 拉取失败），不做任何事
+    // 用户可以等 session 数据加载完，或从 Recents tab 找到
+  }
+
+  return (
+    <div
+      onClick={handleClick}
+      className={`group relative flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-all duration-200 border border-transparent ${
+        isSelected
+          ? 'bg-bg-000 shadow-sm ring-1 ring-border-200/50'
+          : 'hover:bg-bg-200/50'
+      } ${!resolvedSession ? 'opacity-50 cursor-default' : ''}`}
+    >
+      {/* Status dot */}
+      <span className="relative shrink-0 flex items-center justify-center w-4 h-4">
+        <span className={`absolute w-2 h-2 rounded-full ${
+          isRetry ? 'bg-warning-100' : 'bg-success-100'
+        }`} />
+        {!isRetry && (
+          <span className="absolute w-2 h-2 rounded-full bg-success-100 animate-ping opacity-50" />
+        )}
+      </span>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <p className={`text-[13px] truncate font-medium ${
+          isSelected ? 'text-text-100' : 'text-text-200 group-hover:text-text-100'
+        }`} title={displayTitle}>
+          {displayTitle}
+        </p>
+        <div className="flex items-center mt-0.5 h-4 text-[10px] text-text-400 gap-1">
+          <span className={`shrink-0 ${isRetry ? 'text-warning-100' : 'text-success-100'}`}>
+            {isRetry ? 'Retrying' : 'Working'}
+          </span>
+          {isRetry && entry.status.type === 'retry' && (
+            <>
+              <span className="opacity-30">·</span>
+              <span className="text-text-400 opacity-60">attempt {entry.status.attempt}</span>
+            </>
+          )}
+          {directory && (
+            <>
+              <span className="opacity-30 shrink-0">·</span>
+              <span className="truncate opacity-50" title={directory}>
+                {directory.replace(/\\/g, '/').split('/').filter(Boolean).pop()}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

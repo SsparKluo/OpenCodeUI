@@ -3,7 +3,7 @@
 // 基于 OpenAPI 规范
 // ============================================
 
-import type { Session } from './session'
+import type { Session, SessionStatus } from './session'
 import type { Message, Part } from './message'
 import type { PermissionRequest, PermissionReply, QuestionRequest, QuestionAnswer } from './permission'
 import type { Project } from './project'
@@ -20,6 +20,11 @@ export interface SessionErrorPayload {
   sessionID: string
   name: string
   data: unknown
+}
+
+export interface SessionStatusPayload {
+  sessionID: string
+  status: SessionStatus
 }
 
 export interface SessionDiffPayload {
@@ -185,6 +190,7 @@ export interface EventCallbacks {
   onSessionDeleted?: (sessionId: string) => void
   onSessionIdle?: (data: SessionIdlePayload) => void
   onSessionError?: (data: SessionErrorPayload) => void
+  onSessionStatus?: (data: SessionStatusPayload) => void
   onPermissionAsked?: (request: PermissionRequest) => void
   onPermissionReplied?: (data: PermissionRepliedPayload) => void
   onQuestionAsked?: (request: QuestionRequest) => void

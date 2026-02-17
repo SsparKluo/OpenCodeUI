@@ -95,6 +95,7 @@ export type {
   GlobalEvent,
   EventCallbacks,
   PartDeltaPayload,
+  SessionStatusPayload,
   WorktreeReadyPayload,
   WorktreeFailedPayload,
   VcsBranchUpdatedPayload,

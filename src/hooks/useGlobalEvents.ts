@@ -10,7 +10,8 @@
 
 import { useEffect, useRef } from 'react'
 import { messageStore, childSessionStore } from '../store'
-import { subscribeToEvents } from '../api'
+import { activeSessionStore } from '../store/activeSessionStore'
+import { subscribeToEvents, getSessionStatus } from '../api'
 import type { 
   ApiMessage, 
   ApiPart,
@@ -134,6 +135,9 @@ export function useGlobalEvents(callbacks?: GlobalEventsCallbacks) {
           }
         }
         
+        // 更新 session meta 供 active tab 使用
+        activeSessionStore.setSessionMeta(session.id, session.title, session.directory)
+        
         // 清理过期缓存
         cleanupExpired(pendingPermissions)
         cleanupExpired(pendingQuestions)
@@ -141,9 +145,7 @@ export function useGlobalEvents(callbacks?: GlobalEventsCallbacks) {
 
       onSessionIdle: (data) => {
         messageStore.handleSessionIdle(data.sessionID)
-        // 更新子 session 状态
         childSessionStore.markIdle(data.sessionID)
-        // 通知调用方
         callbacksRef.current?.onSessionIdle?.(data.sessionID)
       },
 
@@ -153,14 +155,16 @@ export function useGlobalEvents(callbacks?: GlobalEventsCallbacks) {
           console.warn('[GlobalEvents] Session error:', error)
         }
         messageStore.handleSessionError(error.sessionID)
-        // 更新子 session 状态
         childSessionStore.markError(error.sessionID)
-        // 通知调用方
         callbacksRef.current?.onSessionError?.(error.sessionID)
       },
 
-      onSessionUpdated: (_session) => {
-        // 可以在这里更新 session 标题等信息
+      onSessionUpdated: (session) => {
+        // 更新 session meta 供 active tab 使用
+        activeSessionStore.setSessionMeta(session.id, session.title, session.directory)
+        if (session.parentID) {
+          childSessionStore.registerChildSession(session)
+        }
       },
 
       // ============================================
@@ -226,15 +230,36 @@ export function useGlobalEvents(callbacks?: GlobalEventsCallbacks) {
       },
 
       // ============================================
-      // Reconnected → 通知调用方刷新数据
+      // Session Status → activeSessionStore
+      // ============================================
+
+      onSessionStatus: (data) => {
+        activeSessionStore.updateStatus(data.sessionID, data.status)
+      },
+
+      // ============================================
+      // Reconnected → 通知调用方刷新数据 + 重新拉取 session status
       // ============================================
 
       onReconnected: (reason) => {
         if (import.meta.env.DEV) {
           console.log(`[GlobalEvents] SSE reconnected (reason: ${reason}), notifying for data refresh`)
         }
+        // 重连后重新拉取全量 session 状态
+        getSessionStatus().then(statusMap => {
+          activeSessionStore.initialize(statusMap)
+        }).catch(() => {})
         callbacksRef.current?.onReconnected?.(reason)
       },
+    })
+
+    // 初始化拉取 session 状态
+    getSessionStatus().then(statusMap => {
+      activeSessionStore.initialize(statusMap)
+    }).catch((err) => {
+      if (import.meta.env.DEV) {
+        console.warn('[GlobalEvents] Failed to fetch session status:', err)
+      }
     })
 
     return unsubscribe

@@ -3,6 +3,7 @@ import { Header, InputBox, PermissionDialog, QuestionDialog, Sidebar, ChatArea, 
 import { type ModelSelectorHandle } from './features/chat/ModelSelector'
 import { SettingsDialog } from './features/settings/SettingsDialog'
 import { CommandPalette, type CommandItem } from './components/CommandPalette'
+import { ToastContainer } from './components/ToastContainer'
 import { RightPanel } from './components/RightPanel'
 import { OutlineIndex } from './components/OutlineIndex'
 import { BottomPanel } from './components/BottomPanel'
@@ -595,6 +596,9 @@ function App() {
         onClose={() => setCommandPaletteOpen(false)}
         commands={commands}
       />
+
+      {/* Toast Notifications */}
+      <ToastContainer />
     </div>
   )
 }

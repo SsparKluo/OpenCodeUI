@@ -4,6 +4,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useMessageStore, messageStore, useSessionFamily, autoApproveStore, childSessionStore } from '../store'
+import { notificationStore } from '../store/notificationStore'
 import { useSessionManager, useGlobalEvents } from '../hooks'
 import { usePermissions, useRouter, usePermissionHandler, useMessageAnimation, useDirectory, useSessionContext } from '../hooks'
 import { useNotification } from './useNotification'
@@ -152,6 +153,10 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
         sessionId: request.sessionID,
         directory: effectiveDirectory,
       })
+      // 应用内通知 — 跳过当前正在查看的 session（已经在聊天界面实时显示了）
+      if (request.sessionID !== routeSessionId) {
+        notificationStore.push('permission', title, permDesc, request.sessionID, effectiveDirectory)
+      }
     },
     onPermissionReplied: (data) => {
       setPendingPermissionRequests(prev => 
@@ -171,6 +176,10 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
         sessionId: request.sessionID,
         directory: effectiveDirectory,
       })
+      // 应用内通知 — 跳过当前正在查看的 session
+      if (request.sessionID !== routeSessionId) {
+        notificationStore.push('question', title, questionDesc, request.sessionID, effectiveDirectory)
+      }
     },
     onQuestionReplied: (data) => {
       setPendingQuestionRequests(prev => 
@@ -192,6 +201,11 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
         sessionId: sessionID,
         directory: effectiveDirectory,
       })
+      // 应用内通知 — 跳过当前 session family（idle/error 事件来自所有 session）
+      const isCurrentIdle = routeSessionId && (sessionID === routeSessionId || childSessionStore.belongsToSession(sessionID, routeSessionId))
+      if (!isCurrentIdle) {
+        notificationStore.push('completed', title, 'Session completed', sessionID, effectiveDirectory)
+      }
     },
     onSessionError: (sessionID) => {
       // 页面不在前台时通知用户 session 出错
@@ -200,6 +214,11 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
         sessionId: sessionID,
         directory: effectiveDirectory,
       })
+      // 应用内通知 — 跳过当前 session family
+      const isCurrentError = routeSessionId && (sessionID === routeSessionId || childSessionStore.belongsToSession(sessionID, routeSessionId))
+      if (!isCurrentError) {
+        notificationStore.push('error', title, 'Session error', sessionID, effectiveDirectory)
+      }
     },
     onReconnected: (_reason) => {
       // SSE 重连后重新加载当前会话，补齐断连期间可能丢失的消息
@@ -345,7 +364,7 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
         },
         agent: options?.agent,
         variant: options?.variant,
-        directory: currentDirectory,
+        directory: effectiveDirectory,
       })
     } catch (error) {
       handleError('send message', error)
@@ -353,7 +372,7 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
         messageStore.setStreaming(sessionId, false)
       }
     }
-  }, [currentModel, routeSessionId, currentDirectory, navigateToSession, createSession])
+  }, [currentModel, routeSessionId, effectiveDirectory, navigateToSession, createSession])
 
   // New chat handler
   const handleNewChat = useCallback(() => {
@@ -430,7 +449,7 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
 
   // Session selection
   const handleSelectSession = useCallback((session: ApiSession) => {
-    navigateToSession(session.id)
+    navigateToSession(session.id, session.directory)
   }, [navigateToSession])
 
   // New session

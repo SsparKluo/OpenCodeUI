@@ -68,9 +68,10 @@ export function useRouter() {
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
-  // 导航到 session（保留当前 directory）
-  const navigateToSession = useCallback((sessionId: string) => {
-    window.location.hash = buildHash(sessionId, route.directory)
+  // 导航到 session（默认保留当前 directory，可选传入目标 directory）
+  const navigateToSession = useCallback((sessionId: string, directory?: string) => {
+    const dir = directory !== undefined ? (normalizeToForwardSlash(directory) || undefined) : route.directory
+    window.location.hash = buildHash(sessionId, dir)
   }, [route.directory])
 
   // 导航到首页（保留当前 directory）
@@ -85,11 +86,13 @@ export function useRouter() {
     setRoute({ sessionId, directory: route.directory })
   }, [route.directory])
 
-  // 设置 directory（保留当前 session）
+  // 设置 directory（切换目录时清除当前 session，避免 session 与目录不匹配）
   const setDirectory = useCallback((directory: string | undefined) => {
     // 入口标准化：统一转为正斜杠
     const normalized = directory ? normalizeToForwardSlash(directory) : undefined
-    const newHash = buildHash(route.sessionId, normalized || undefined)
+    // 切换目录时清除 sessionId，回到首页
+    // 否则 URL 会变成 #/session/OLD_SESSION?dir=NEW_DIR，导致请求路径错乱
+    const newHash = buildHash(null, normalized || undefined)
     // 持久化到 per-server storage
     if (normalized) {
       serverStorage.set(STORAGE_KEY_LAST_DIRECTORY, normalized)
@@ -97,7 +100,7 @@ export function useRouter() {
       serverStorage.remove(STORAGE_KEY_LAST_DIRECTORY)
     }
     window.location.hash = newHash
-  }, [route.sessionId])
+  }, [])
 
   // 替换 directory（不产生历史记录）
   const replaceDirectory = useCallback((directory: string | undefined) => {

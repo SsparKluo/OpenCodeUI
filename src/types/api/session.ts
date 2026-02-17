@@ -6,12 +6,19 @@
 import type { TimeInfo } from './common'
 
 /**
- * Session 状态
+ * Session 状态 - 基于 OpenAPI anyOf 定义
+ * idle: 空闲, busy: 正在工作, retry: 重试中
  */
-export interface SessionStatus {
-  id: string
-  busy: boolean
-}
+export type SessionStatus =
+  | { type: 'idle' }
+  | { type: 'busy' }
+  | { type: 'retry'; attempt: number; message: string; next: number }
+
+/**
+ * GET /session/status 返回值
+ * Record<sessionID, SessionStatus>
+ */
+export type SessionStatusMap = Record<string, SessionStatus>
 
 /**
  * Session 摘要信息

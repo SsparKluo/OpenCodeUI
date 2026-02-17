@@ -6,8 +6,16 @@
 import { get, post, patch, del } from './http'
 import { formatPathForApi } from '../utils/directoryUtils'
 import type { ApiSession, SessionListParams, FileDiff } from './types'
+import type { SessionStatusMap } from '../types/api/session'
 
 // ... existing code ...
+
+/**
+ * GET /session/status - 获取所有 session 的当前状态
+ */
+export async function getSessionStatus(directory?: string): Promise<SessionStatusMap> {
+  return get<SessionStatusMap>('/session/status', { directory: formatPathForApi(directory) })
+}
 
 /**
  * GET /session/{sessionID}/diff - 获取 session 的 diff

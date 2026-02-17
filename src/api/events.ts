@@ -14,6 +14,7 @@ import type {
   GlobalEvent,
   EventCallbacks,
   PartDeltaPayload,
+  SessionStatusPayload,
   WorktreeReadyPayload,
   WorktreeFailedPayload,
   VcsBranchUpdatedPayload,
@@ -665,6 +666,9 @@ function handleEventForSubscriber(
       break
     case 'session.idle':
       callbacks.onSessionIdle?.(properties as { sessionID: string })
+      break
+    case 'session.status':
+      callbacks.onSessionStatus?.(properties as SessionStatusPayload)
       break
     case 'permission.asked':
       callbacks.onPermissionAsked?.(properties as ApiPermissionRequest)

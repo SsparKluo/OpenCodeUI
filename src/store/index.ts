@@ -30,3 +30,9 @@ export type { ColorMode, FontSize, ThemeState } from './themeStore'
 
 export { todoStore, useTodos, useTodoStats, useCurrentTask } from './todoStore'
 export type { SessionTodos } from './todoStore'
+
+export { notificationStore, useNotificationStore, useUnreadCount } from './notificationStore'
+export type { AppNotification, NotificationType, ToastItem } from './notificationStore'
+
+export { activeSessionStore, useActiveSessionStore, useBusySessions, useBusyCount } from './activeSessionStore'
+export type { ActiveSessionEntry } from './activeSessionStore'
