@@ -5,7 +5,8 @@
 // 位置：PC 右上角固定，移动端顶部居中全宽
 // 动画：从上方滑入（translateY 负值），shouldRender + isVisible 两阶段
 // 交互：悬停暂停自动消失倒计时，鼠标离开后恢复
-// 点击跳转到对应 session
+// 上限：由 store 的 MAX_TOASTS 控制，新 toast 覆盖最旧的
+// 点击：跳转到对应 session + 标记通知已读
 
 import { useState, useEffect, useCallback } from 'react'
 import { useNotificationStore, notificationStore, type ToastItem, type NotificationType } from '../store/notificationStore'
@@ -68,7 +69,7 @@ function Toast({ item, onDismiss, onClick }: {
         transform: show ? 'translateY(0) translateX(0)' : 'translateY(-8px) translateX(8px)',
         pointerEvents: show ? 'auto' : 'none',
       }}
-      className="group relative flex items-start gap-2.5 p-3 pr-8 bg-bg-000 border border-border-200/50 backdrop-blur-xl rounded-xl shadow-lg cursor-pointer hover:bg-bg-100 hover:border-border-300 transition-colors duration-150"
+      className="group relative flex items-center gap-2.5 p-3 bg-bg-000 border border-border-200/50 backdrop-blur-xl rounded-xl shadow-lg cursor-pointer hover:bg-bg-100 hover:border-border-300 transition-colors duration-150"
       onClick={onClick}
       role="alert"
     >
@@ -78,7 +79,7 @@ function Toast({ item, onDismiss, onClick }: {
       </div>
 
       {/* Content */}
-      <div className="min-w-0 flex-1 pt-0.5">
+      <div className="min-w-0 flex-1">
         <div className="text-xs font-medium text-text-100 truncate leading-tight">
           {notification.title}
         </div>
@@ -89,9 +90,9 @@ function Toast({ item, onDismiss, onClick }: {
         )}
       </div>
 
-      {/* Close — mobile: always visible; PC: visible on hover */}
+      {/* Close — vertically centered, mobile: always visible; PC: visible on hover */}
       <button
-        className="absolute top-2 right-2 p-1 rounded-md text-text-400 md:opacity-0 md:group-hover:opacity-100 hover:text-text-200 hover:bg-bg-200 transition-all duration-150 active:scale-90"
+        className="shrink-0 flex items-center justify-center w-6 h-6 rounded-md text-text-400 md:opacity-0 md:group-hover:opacity-100 hover:text-text-200 hover:bg-bg-200 transition-all duration-150 active:scale-90"
         onClick={(e) => { e.stopPropagation(); onDismiss() }}
         aria-label="Dismiss"
       >
@@ -102,13 +103,27 @@ function Toast({ item, onDismiss, onClick }: {
 }
 
 // ============================================
-// Container
+// Container — 平铺布局
 // ============================================
+//
+// toast 上限由 store 的 MAX_TOASTS 控制，新的覆盖旧的。
+// 点击 toast 跳转 session 并标记对应通知已读。
+// 2+ 条时右对齐显示 clear all 文字按钮。
 
 export function ToastContainer() {
   const { toasts } = useNotificationStore()
 
   if (toasts.length === 0) return null
+
+  const handleClick = (item: ToastItem) => {
+    const { id, sessionId, directory } = item.notification
+    notificationStore.dismissToast(id)
+    notificationStore.markRead(id)
+    if (sessionId) {
+      const dir = directory ? `?dir=${directory}` : ''
+      window.location.hash = `#/session/${sessionId}${dir}`
+    }
+  }
 
   return (
     <div className="fixed top-3 right-3 left-3 md:left-auto md:w-80 z-50 flex flex-col gap-2">
@@ -117,24 +132,20 @@ export function ToastContainer() {
           key={item.notification.id}
           item={item}
           onDismiss={() => notificationStore.dismissToast(item.notification.id)}
-          onClick={() => {
-            const { sessionId, directory } = item.notification
-            notificationStore.dismissToast(item.notification.id)
-            if (sessionId) {
-              const dir = directory ? `?dir=${directory}` : ''
-              window.location.hash = `#/session/${sessionId}${dir}`
-            }
-          }}
+          onClick={() => handleClick(item)}
         />
       ))}
-      {/* Clear all — shown when 2+ toasts are visible */}
+
+      {/* Clear all — 轻量文字按钮，右对齐 */}
       {toasts.length >= 2 && (
-        <button
-          className="self-end text-[11px] text-text-400 hover:text-text-200 px-2 py-1 rounded-md hover:bg-bg-200/80 transition-colors duration-150 active:scale-95"
-          onClick={() => notificationStore.dismissAllToasts()}
-        >
-          Clear all
-        </button>
+        <div className="flex justify-end">
+          <button
+            className="text-[11px] text-text-300 hover:text-text-100 px-2 py-1 rounded-md hover:bg-bg-200/60 transition-all duration-150 active:scale-95"
+            onClick={() => notificationStore.dismissAllToasts()}
+          >
+            Clear all
+          </button>
+        </div>
       )}
     </div>
   )
