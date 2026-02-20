@@ -18,7 +18,7 @@ import {
   MinimizeIcon,
   ShareIcon,
 } from '../../../components/Icons'
-import { useDirectory, useSessionStats, formatTokens, formatCost } from '../../../hooks'
+import { useDirectory, useSessionStats, formatTokens, formatCost, useKeybindingLabel } from '../../../hooks'
 import type { ThemeMode } from '../../../hooks'
 import { useSessionContext } from '../../../contexts/SessionContext'
 import { useMessageStore } from '../../../store'
@@ -97,6 +97,7 @@ export function SidePanel({
   const [sidebarTab, setSidebarTab] = useState<'recents' | 'active'>('recents')
   
   const showLabels = isExpanded || isMobile
+  const newChatShortcut = useKeybindingLabel('newSession')
   
   // Session stats
   const { messages } = useMessageStore()
@@ -332,7 +333,7 @@ export function SidePanel({
             className="ml-auto text-[10px] text-text-500 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap"
             style={{ opacity: showLabels ? undefined : 0 }}
           >
-            Ctrl+Shift+O
+            {newChatShortcut}
           </span>
         </button>
 
