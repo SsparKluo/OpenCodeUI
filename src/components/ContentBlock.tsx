@@ -153,7 +153,7 @@ export const ContentBlock = memo(function ContentBlock({
         onClick={canCollapse ? () => setCollapsed(!collapsed) : undefined}
       >
         {/* Left: chevron + label + filename */}
-        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
           {canCollapse && (
             <span className={`shrink-0 ${
               isError ? 'text-danger-100/60' : 'text-text-500'
@@ -161,13 +161,13 @@ export const ContentBlock = memo(function ContentBlock({
               {collapsed ? <ChevronRightIcon size={12} /> : <ChevronDownIcon size={12} />}
             </span>
           )}
-          <span className={`font-medium font-mono leading-none ${
+          <span className={`font-medium font-mono leading-none whitespace-nowrap ${
             isError ? 'text-danger-100' : 'text-text-300'
           }`}>
             {label}
           </span>
           {fileName && (
-            <span className="text-text-500 truncate font-mono ml-0.5">{fileName}</span>
+            <span className="text-text-500 truncate font-mono min-w-0 flex-1 ml-0.5">{fileName}</span>
           )}
           
           {/* Loading spinner */}
