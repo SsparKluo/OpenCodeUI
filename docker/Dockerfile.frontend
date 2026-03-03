@@ -27,6 +27,7 @@ RUN set -eux; \
     npm config set registry "${NPM_REGISTRY_FALLBACK}"; \
     npm ci --ignore-scripts
 COPY . .
+RUN node scripts/copy-material-icons.mjs
 ENV VITE_API_BASE_URL=/api
 RUN npm run build
 
