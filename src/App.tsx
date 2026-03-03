@@ -170,6 +170,7 @@ function App() {
     routeSessionId,
     loadState,
     hasMoreHistory,
+    retryStatus,
     sidebarExpanded,
     setSidebarExpanded,
     effectiveDirectory,
@@ -534,6 +535,7 @@ function App() {
                 canUndo={canUndo}
                 registerMessage={registerMessage}
                 isWideMode={isWideMode}
+                retryStatus={retryStatus}
                 bottomPadding={inputBoxHeight}
                 onVisibleMessageIdsChange={(ids) => {
                   handleVisibleMessageIdsChange(ids)

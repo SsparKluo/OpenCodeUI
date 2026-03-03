@@ -2,8 +2,8 @@
 // useChatSession - 聊天会话管理
 // ============================================
 
-import { useState, useCallback, useEffect } from 'react'
-import { useMessageStore, messageStore, useSessionFamily, autoApproveStore, childSessionStore } from '../store'
+import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useMessageStore, messageStore, useSessionFamily, autoApproveStore, childSessionStore, useActiveSessionStore } from '../store'
 import { useSessionManager, useGlobalEvents } from '../hooks'
 import { usePermissions, useRouter, usePermissionHandler, useMessageAnimation, useDirectory, useSessionContext } from '../hooks'
 import { useNotification } from './useNotification'
@@ -38,6 +38,13 @@ interface UseChatSessionOptions {
   refetchModels: () => Promise<void>
 }
 
+interface LiveRetryStatus {
+  sessionID: string
+  attempt: number
+  message: string
+  next: number
+}
+
 export function useChatSession({ chatAreaRef, currentModel, refetchModels }: UseChatSessionOptions) {
   // Store State
   const {
@@ -52,6 +59,7 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
     loadState,
     hasMoreHistory,
   } = useMessageStore()
+  const { statusMap } = useActiveSessionStore()
   
   // Agents
   const [agents, setAgents] = useState<ApiAgent[]>([])
@@ -71,6 +79,19 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
   const { currentDirectory, sidebarExpanded, setSidebarExpanded } = useDirectory()
   const { createSession, sessions } = useSessionContext()
   const { sendNotification } = useNotification()
+
+  const routeStatus = routeSessionId ? statusMap[routeSessionId] : undefined
+
+  // OpenAPI SessionStatus.retry: { attempt, message, next }
+  const retryStatus = useMemo<LiveRetryStatus | null>(() => {
+    if (!routeSessionId || routeStatus?.type !== 'retry') return null
+    return {
+      sessionID: routeSessionId,
+      attempt: routeStatus.attempt,
+      message: routeStatus.message,
+      next: routeStatus.next,
+    }
+  }, [routeSessionId, routeStatus])
 
   const getSessionTitle = useCallback((sessionId?: string) => {
     const session = sessions.find(s => s.id === sessionId)
@@ -542,6 +563,7 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
     revertedContent,
     loadState,
     hasMoreHistory,
+    retryStatus,
     agents,
     selectedAgent,
     setSelectedAgent,

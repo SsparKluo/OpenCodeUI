@@ -18,6 +18,7 @@ import type {
   ApiPart,
   ApiPermissionRequest,
   ApiQuestionRequest,
+  SessionStatusPayload,
 } from '../api/types'
 
 interface GlobalEventsCallbacks {
@@ -26,6 +27,7 @@ interface GlobalEventsCallbacks {
   onQuestionAsked?: (request: ApiQuestionRequest) => void
   onQuestionReplied?: (data: { sessionID: string; requestID: string }) => void
   onQuestionRejected?: (data: { sessionID: string; requestID: string }) => void
+  onSessionStatus?: (data: SessionStatusPayload) => void
   onScrollRequest?: () => void
   onSessionIdle?: (sessionID: string) => void
   onSessionError?: (sessionID: string) => void
@@ -296,6 +298,10 @@ export function useGlobalEvents(callbacks?: GlobalEventsCallbacks) {
           const meta = activeSessionStore.getSessionMeta(data.sessionID)
           const sessionLabel = meta?.title || data.sessionID.slice(0, 8)
           notificationStore.push('completed', sessionLabel, 'Session completed', data.sessionID, meta?.directory)
+        }
+
+        if (belongsToCurrentSession(data.sessionID)) {
+          callbacksRef.current?.onSessionStatus?.(data)
         }
       },
 

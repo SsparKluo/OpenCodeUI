@@ -693,26 +693,26 @@ function ActiveSessionItem({ entry, resolvedSession, isSelected, onSelect }: Act
         }`} title={displayTitle}>
           {displayTitle}
         </p>
-        <div className="flex items-center mt-0.5 h-4 min-w-0 overflow-hidden text-[10px] text-text-400 gap-1">
-          <span className={`shrink-0 ${statusConfig.color}`}>
+        <div className="flex items-center mt-0.5 h-4 min-w-0 overflow-hidden text-[10px] text-text-400 gap-1 whitespace-nowrap">
+          <span className={`shrink-0 whitespace-nowrap ${statusConfig.color}`}>
             {statusConfig.label}
           </span>
           {pending?.description && (
             <>
-              <span className="opacity-30">·</span>
-              <span className="truncate opacity-60">{pending.description}</span>
+              <span className="opacity-30 shrink-0">·</span>
+              <span className="truncate min-w-0 flex-1 opacity-60">{pending.description}</span>
             </>
           )}
           {isRetry && entry.status.type === 'retry' && (
             <>
-              <span className="opacity-30">·</span>
-              <span className="text-text-400 opacity-60">attempt {entry.status.attempt}</span>
+              <span className="opacity-30 shrink-0">·</span>
+              <span className="text-text-400 opacity-60 shrink-0 whitespace-nowrap">attempt {entry.status.attempt}</span>
             </>
           )}
           {directory && (
             <>
               <span className="opacity-30 shrink-0">·</span>
-              <span className="truncate opacity-50" title={directory}>
+              <span className="truncate min-w-0 flex-1 opacity-50" title={directory}>
                 {directory.replace(/\\/g, '/').split('/').filter(Boolean).pop()}
               </span>
             </>

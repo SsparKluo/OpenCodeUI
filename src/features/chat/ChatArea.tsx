@@ -8,6 +8,7 @@ import { MessageRenderer } from '../message'
 import { messageStore } from '../../store'
 import { SpinnerIcon } from '../../components/Icons'
 import type { Message } from '../../types/message'
+import { RetryStatusInline, type RetryStatusInlineData } from './RetryStatusInline'
 import {
   VIRTUOSO_START_INDEX,
   SCROLL_CHECK_INTERVAL_MS,
@@ -36,6 +37,7 @@ interface ChatAreaProps {
   canUndo?: boolean
   registerMessage?: (id: string, element: HTMLElement | null) => void
   isWideMode?: boolean
+  retryStatus?: RetryStatusInlineData | null
   /** 底部留白高度（输入框实际高度），0 则用默认值 */
   bottomPadding?: number
   onVisibleMessageIdsChange?: (ids: string[]) => void
@@ -179,6 +181,9 @@ function mergeConsecutiveToolMessages(messages: Message[]): Message[] {
 // 大数字作为起始索引，允许向前 prepend
 const START_INDEX = VIRTUOSO_START_INDEX
 
+// Virtuoso Header 是静态的，提到组件外部避免每次 render 重建
+const VirtuosoHeader = () => <div className="h-20" />
+
 export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({ 
   messages, 
   sessionId,
@@ -191,6 +196,7 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   canUndo,
   registerMessage,
   isWideMode = false,
+  retryStatus = null,
   bottomPadding = 0,
   onVisibleMessageIdsChange,
   onAtBottomChange,
@@ -478,6 +484,8 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   // firstItemIndex：基于可见消息 prepend 计数，避免合并后错位
   const firstItemIndex = START_INDEX - virtualPrependedCount
 
+  const messageMaxWidthClass = isWideMode ? 'max-w-[95%] xl:max-w-6xl' : 'max-w-2xl'
+
   useImperativeHandle(ref, () => ({
     scrollToBottom: (instant = false) => {
       virtuosoRef.current?.scrollToIndex({ 
@@ -599,10 +607,8 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
       registerMessage?.(msg.info.id, el)
     }
     
-    const maxWidthClass = isWideMode ? 'max-w-[95%] xl:max-w-6xl' : 'max-w-2xl'
-
     return (
-      <div ref={handleRef} className={`w-full ${maxWidthClass} mx-auto px-4 py-3 transition-[max-width] duration-300 ease-in-out`}>
+      <div ref={handleRef} className={`w-full ${messageMaxWidthClass} mx-auto px-4 py-3 transition-[max-width] duration-300 ease-in-out`}>
         <div className={`flex ${msg.info.role === 'user' ? 'justify-end' : 'justify-start'}`}>
           <div className={`min-w-0 group ${msg.info.role === 'assistant' ? 'w-full' : ''}`}>
             <MessageRenderer
@@ -619,10 +625,45 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
         </div>
       </div>
     )
-  }, [registerMessage, onUndo, canUndo, isWideMode, sessionId, turnDurationMap])
+  }, [registerMessage, onUndo, canUndo, messageMaxWidthClass, sessionId, turnDurationMap])
 
   // Session 正在加载且没有消息 → 显示全屏 spinner（仅在有 sessionId 时，新建对话不显示）
   const showSessionLoading = !!sessionId && loadState === 'loading' && visibleMessages.length === 0
+
+  // 通过 Virtuoso context 传递动态数据给 Footer，让 components 引用保持稳定
+  // 这样 Footer 组件不会被 remount（保留 RetryStatusInline 的 expanded 状态），
+  // 但在 context 变化时会 re-render
+  const virtuosoContext = useMemo(() => ({
+    retryStatus: retryStatus ?? null,
+    bottomPadding,
+    messageMaxWidthClass,
+  }), [retryStatus, bottomPadding, messageMaxWidthClass])
+
+  // Virtuoso components 必须引用稳定，否则每次 render 都会 remount Footer/Header
+  const virtuosoComponents = useMemo(() => ({
+    Header: VirtuosoHeader,
+    Footer: ({ context }: { context: typeof virtuosoContext }) => (
+      <>
+        {context.retryStatus && (
+          <div className={`w-full ${context.messageMaxWidthClass} mx-auto px-4`}>
+            <div className="flex justify-start">
+              <div className="w-full min-w-0">
+                <RetryStatusInline status={context.retryStatus} />
+              </div>
+            </div>
+          </div>
+        )}
+        <div
+          style={{
+            height: context.bottomPadding > 0
+              ? `${context.bottomPadding + 16}px`
+              : '256px'
+          }}
+        />
+      </>
+    )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [])
 
   return (
     <div className="h-full overflow-hidden contain-strict relative">
@@ -660,6 +701,7 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
             ref={virtuosoRef}
             data={visibleMessages}
             customScrollParent={scrollParent}
+            context={virtuosoContext}
             firstItemIndex={firstItemIndex}
             initialTopMostItemIndex={effectiveInitialIndex}
             startReached={handleLoadMore}
@@ -670,18 +712,7 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
             defaultItemHeight={VIRTUOSO_ESTIMATED_ITEM_HEIGHT}
             skipAnimationFrameInResizeObserver
             overscan={{ main: VIRTUOSO_OVERSCAN_PX, reverse: VIRTUOSO_OVERSCAN_PX }}
-            components={{
-              Header: () => <div className="h-20" />,
-              Footer: () => (
-                <div
-                  style={{
-                    height: bottomPadding > 0
-                      ? `${bottomPadding + 16}px`
-                      : '256px'
-                  }}
-                />
-              )
-            }}
+            components={virtuosoComponents}
             rangeChanged={(range) => {
               if (!onVisibleMessageIdsChange) return
               const start = Math.max(0, range.startIndex - MESSAGE_PREFETCH_BUFFER)

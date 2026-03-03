@@ -213,9 +213,12 @@ class ActiveSessionStore {
         this.deferredIdleSessions.delete(sessionId)
         delete newMap[sessionId]
       }
+    } else if (status.type === 'retry') {
+      this.deferredIdleSessions.delete(sessionId)
+      newMap[sessionId] = { ...status }
     } else {
       this.deferredIdleSessions.delete(sessionId)
-      newMap[sessionId] = status
+      newMap[sessionId] = { type: 'busy' }
     }
 
     this.state = { ...this.state, statusMap: newMap }

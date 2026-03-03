@@ -48,7 +48,7 @@ export const RetryPartView = memo(function RetryPartView({ part }: RetryPartView
         <div className="overflow-hidden">
           {shouldRenderBody && (
             <div className="mt-2 pt-2 border-t border-warning-100/20">
-              <p className="text-xs text-text-300 font-mono break-all">
+              <p className="text-xs text-text-300 font-mono whitespace-pre-wrap break-words overflow-x-hidden">
                 {error.data.message}
               </p>
               {error.data.statusCode && (
@@ -138,4 +138,3 @@ export const PatchPartView = memo(function PatchPartView({ part }: PatchPartView
     </div>
   )
 })
-
