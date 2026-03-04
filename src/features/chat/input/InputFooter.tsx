@@ -65,7 +65,7 @@ export const InputFooter = memo(function InputFooter({ sessionId, onNewChat, inp
   // 始终渲染同一个容器 div，避免 mount/unmount 导致高度跳变
   return (
     <div
-      className="flex items-center justify-center gap-2 pt-1 h-[20px] text-[11px] leading-none text-text-500 relative"
+      className="flex items-center justify-center gap-2 pt-2 text-[11px] leading-none text-text-500 relative"
       ref={popoverRef}
     >
       {!hasTodos ? (
@@ -81,17 +81,17 @@ export const InputFooter = memo(function InputFooter({ sessionId, onNewChat, inp
         <>
           <button
             onClick={() => setPopoverOpen(!popoverOpen)}
-            className={`flex items-center gap-1.5 hover:text-text-300 transition-colors ${
+            className={`flex items-center gap-1.5 min-w-0 hover:text-text-300 transition-colors ${
               popoverOpen ? 'text-text-300' : ''
             }`}
           >
             <MiniProgress size={12} progress={progress} done={isAllDone} />
-            <span className="tabular-nums">{stats.completed}/{stats.total}</span>
-            <span className="text-text-500/50">·</span>
-            <span className="truncate max-w-[200px]">{taskLabel}</span>
+            <span className="tabular-nums shrink-0">{stats.completed}/{stats.total}</span>
+            <span className="text-text-500/50 shrink-0">·</span>
+            <span className="truncate max-w-[120px] sm:max-w-[200px]">{taskLabel}</span>
           </button>
 
-          <span className="text-text-500/30">·</span>
+          <span className="text-text-500/30 shrink-0">·</span>
 
           <button
             onClick={onNewChat}
