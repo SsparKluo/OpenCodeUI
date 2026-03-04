@@ -218,6 +218,7 @@ export const FileExplorer = memo(function FileExplorer({
           width={32} 
           height={32} 
           className="opacity-30"
+          onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
         />
         <span className="text-center">Select a project to browse files</span>
       </div>
@@ -383,6 +384,7 @@ const FileTreeItem = memo(function FileTreeItem({
           className="shrink-0"
           loading="lazy"
           decoding="async"
+          onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
         />
 
         {/* Name */}
@@ -510,6 +512,7 @@ function FilePreview({ path, content, isLoading, error, onClose, isResizing = fa
             width={14}
             height={14}
             className="shrink-0"
+            onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
           />
           <span className="text-[11px] font-mono text-text-200 truncate">{fileName}</span>
           {/* Modified 标签暂不在 Files 预览显示 */}
@@ -866,6 +869,7 @@ function BinaryPlaceholder({ mimeType, fileName, onDownload }: BinaryPlaceholder
         width={32}
         height={32}
         className="opacity-50"
+        onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
       />
       <span className="font-medium text-text-300">{fileName}</span>
       <span>{formatMimeType(mimeType)}</span>

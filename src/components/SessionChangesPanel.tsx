@@ -5,7 +5,8 @@
 // ============================================
 
 import { memo, useState, useEffect, useCallback, useRef, useLayoutEffect, useMemo } from 'react'
-import { FileIcon, CloseIcon, RetryIcon, FolderIcon, FolderOpenIcon, ChevronRightIcon } from './Icons'
+import { CloseIcon, RetryIcon, ChevronRightIcon } from './Icons'
+import { getMaterialIconUrl } from '../utils/materialIcons'
 import { DiffViewer, type ViewMode } from './DiffViewer'
 import { getSessionDiff } from '../api/session'
 import type { FileDiff } from '../api/types'
@@ -369,8 +370,14 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
                       ${isSelected ? 'bg-bg-200/70 text-text-100' : 'text-text-300'}
                     `}
                   >
-                    <FileStatusIcon status={fileStatus} />
-                    <span className="flex-1 min-w-0 font-mono truncate">{diff.file}</span>
+                    <img
+                      src={getMaterialIconUrl(diff.file, 'file')}
+                      alt="" width={16} height={16}
+                      className="shrink-0"
+                      loading="lazy" decoding="async"
+                      onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+                    />
+                    <span className={`flex-1 min-w-0 font-mono truncate ${FILE_STATUS_COLOR[fileStatus]}`}>{diff.file}</span>
                     <div className="flex items-center gap-2 text-[10px] font-mono shrink-0">
                       {diff.additions > 0 && <span className="text-success-100">+{diff.additions}</span>}
                       {diff.deletions > 0 && <span className="text-danger-100">-{diff.deletions}</span>}
@@ -431,14 +438,18 @@ const DiffPreviewPanel = memo(function DiffPreviewPanel({
 }: DiffPreviewPanelProps) {
   const language = detectLanguage(diff.file) || 'text'
   const fileName = diff.file.split(/[/\\]/).pop() || diff.file
-  const fileStatus = getFileStatus(diff)
 
   return (
     <div className="flex flex-col h-full">
       {/* Preview Header */}
       <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border-100/50 bg-bg-100/30 shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <FileStatusIcon status={fileStatus} />
+          <img
+            src={getMaterialIconUrl(diff.file, 'file')}
+            alt="" width={14} height={14}
+            className="shrink-0"
+            onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+          />
           <span className="text-[11px] font-mono text-text-200 truncate flex-1 min-w-0">{fileName}</span>
           <div className="flex items-center gap-2 text-[10px] font-mono shrink-0">
             {diff.additions > 0 && <span className="text-success-100">+{diff.additions}</span>}
@@ -479,14 +490,10 @@ function getFileStatus(diff: FileDiff): FileStatus {
   return 'modified'
 }
 
-function FileStatusIcon({ status }: { status: FileStatus }) {
-  const colorClass = {
-    added: 'text-success-100',
-    deleted: 'text-danger-100',
-    modified: 'text-warning-100',
-  }[status]
-
-  return <FileIcon size={14} className={`${colorClass} shrink-0`} />
+const FILE_STATUS_COLOR: Record<FileStatus, string> = {
+  added: 'text-success-100',
+  deleted: 'text-danger-100',
+  modified: 'text-warning-100',
 }
 
 // ============================================
@@ -602,11 +609,7 @@ const ChangesTreeItem = memo(function ChangesTreeItem({
   const paddingLeft = 8 + depth * 16
 
   // 状态颜色
-  const statusColor = node.status ? {
-    added: 'text-success-100',
-    deleted: 'text-danger-100',
-    modified: 'text-warning-100',
-  }[node.status] : 'text-text-400'
+  const statusColor = node.status ? FILE_STATUS_COLOR[node.status] : 'text-text-400'
 
   if (node.type === 'directory') {
     return (
@@ -620,11 +623,13 @@ const ChangesTreeItem = memo(function ChangesTreeItem({
             size={12}
             className={`shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
           />
-          {isExpanded ? (
-            <FolderOpenIcon size={14} className={`${statusColor} shrink-0`} />
-          ) : (
-            <FolderIcon size={14} className={`${statusColor} shrink-0`} />
-          )}
+          <img
+            src={getMaterialIconUrl(node.path, 'directory', isExpanded)}
+            alt="" width={16} height={16}
+            className="shrink-0"
+            loading="lazy" decoding="async"
+            onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+          />
           <span className={`flex-1 min-w-0 truncate text-left ${node.status ? statusColor : ''}`}>{node.name}</span>
           <div className="flex items-center gap-1.5 text-[10px] font-mono pr-3 shrink-0">
             {node.additions > 0 && <span className="text-success-100">+{node.additions}</span>}
@@ -657,8 +662,14 @@ const ChangesTreeItem = memo(function ChangesTreeItem({
       `}
       style={{ paddingLeft: paddingLeft + 16 }}
     >
-      <FileStatusIcon status={node.status!} />
-      <span className="flex-1 min-w-0 font-mono truncate text-left">{node.name}</span>
+      <img
+        src={getMaterialIconUrl(node.name, 'file')}
+        alt="" width={16} height={16}
+        className="shrink-0"
+        loading="lazy" decoding="async"
+        onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+      />
+      <span className={`flex-1 min-w-0 font-mono truncate text-left ${node.status ? FILE_STATUS_COLOR[node.status] : ''}`}>{node.name}</span>
       <div className="flex items-center gap-1.5 text-[10px] font-mono pr-3 shrink-0">
         {node.additions > 0 && <span className="text-success-100">+{node.additions}</span>}
         {node.deletions > 0 && <span className="text-danger-100">-{node.deletions}</span>}

@@ -6,7 +6,8 @@
 
 import { memo, useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { CloseIcon, FileIcon } from './Icons'
+import { CloseIcon } from './Icons'
+import { getMaterialIconUrl } from '../utils/materialIcons'
 import { DiffViewer, type ViewMode } from './DiffViewer'
 import { ViewModeSwitch } from './FullscreenViewer'
 import { getSessionDiff } from '../api/session'
@@ -173,9 +174,12 @@ export const MultiFileDiffModal = memo(function MultiFileDiffModal({
                         : 'text-text-300 hover:bg-bg-200/40 hover:text-text-200'
                     }`}
                   >
-                    <FileIcon
-                      size={13}
-                      className={isSelected ? 'text-accent-main-100 shrink-0' : 'text-text-500 shrink-0'}
+                    <img
+                      src={getMaterialIconUrl(d.file, 'file')}
+                      alt="" width={14} height={14}
+                      className="shrink-0"
+                      loading="lazy" decoding="async"
+                      onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
                     />
                     <span className="font-mono truncate flex-1 min-w-0">{name}</span>
                     <div className="flex items-center gap-1 text-[10px] font-mono tabular-nums shrink-0">
@@ -195,6 +199,12 @@ export const MultiFileDiffModal = memo(function MultiFileDiffModal({
             <>
               {/* File path bar */}
               <div className="h-8 px-4 border-b border-border-100/20 flex items-center gap-2 shrink-0">
+                <img
+                  src={getMaterialIconUrl(selectedDiff.file, 'file')}
+                  alt="" width={14} height={14}
+                  className="shrink-0"
+                  onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+                />
                 <span className="font-mono text-[11px] text-text-300 truncate flex-1 min-w-0">{selectedDiff.file}</span>
                 <div className="flex items-center gap-1.5 text-[10px] font-mono tabular-nums shrink-0">
                   {selectedDiff.additions > 0 && <span className="text-success-100">+{selectedDiff.additions}</span>}

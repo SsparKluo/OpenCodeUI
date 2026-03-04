@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog } from '../../../components/ui'
 import { CodeBlock } from '../../../components/CodeBlock'
 import {
@@ -51,6 +51,8 @@ export function ContextDetailsDialog({ isOpen, onClose, contextLimit }: ContextD
 
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [hydratingId, setHydratingId] = useState<string | null>(null)
+  const [isHydratingBreakdown, setIsHydratingBreakdown] = useState(false)
+  const breakdownHydratedSessionRef = useRef<string | null>(null)
 
   const lastAssistantWithTokens = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -82,13 +84,66 @@ export function ContextDetailsDialog({ isOpen, onClose, contextLimit }: ContextD
   const contextMsg = lastAssistantWithTokens?.msg
   const contextTokens = contextMsg?.info.role === 'assistant' ? contextMsg.info.tokens : undefined
   const contextTotal = lastAssistantWithTokens?.total
+  const breakdownInputTokens = contextTokens
+    ? contextTokens.input + contextTokens.cache.read + contextTokens.cache.write
+    : 0
+
+  useEffect(() => {
+    if (!isOpen) {
+      breakdownHydratedSessionRef.current = null
+      setIsHydratingBreakdown(false)
+      return
+    }
+    if (!sessionId) return
+    if (breakdownHydratedSessionRef.current === sessionId) return
+
+    breakdownHydratedSessionRef.current = sessionId
+    setIsHydratingBreakdown(false)
+
+    const candidateIds = [...messages]
+      .reverse()
+      .filter((msg) => msg.info.role === 'assistant' && msg.parts.length === 0)
+      .map((msg) => msg.info.id)
+
+    if (!candidateIds.length) return
+
+    let active = true
+    setIsHydratingBreakdown(true)
+    void messageStore.prefetchMessageParts(sessionId, candidateIds).finally(() => {
+      if (active) setIsHydratingBreakdown(false)
+    })
+
+    return () => {
+      active = false
+    }
+  }, [isOpen, sessionId, messages])
 
   // Estimate context breakdown based on content sizes and input tokens
   const breakdownSegments = useMemo(() => {
-    const inputTokens = contextTokens?.input ?? 0
-    if (!inputTokens || !messages.length) return []
-    return estimateContextBreakdown({ messages, input: inputTokens })
-  }, [messages, contextTokens])
+    if (!breakdownInputTokens || !messages.length) return []
+    return estimateContextBreakdown({ messages, input: breakdownInputTokens })
+  }, [messages, breakdownInputTokens])
+
+  const breakdownMeta = useMemo(() => {
+    if (!breakdownInputTokens || !breakdownSegments.length) return null
+
+    const otherTokens = breakdownSegments.find((seg) => seg.key === 'other')?.tokens ?? 0
+    const attributedTokens = Math.max(0, breakdownInputTokens - otherTokens)
+    const attributedPercent = Math.round((attributedTokens / breakdownInputTokens) * 1000) / 10
+
+    const loadedMessages = messages.filter((msg) => msg.parts.length > 0).length
+    const missingAssistantParts = messages.filter(
+      (msg) => msg.info.role === 'assistant' && msg.parts.length === 0,
+    ).length
+
+    return {
+      attributedPercent,
+      loadedMessages,
+      totalMessages: messages.length,
+      missingAssistantParts,
+      hasOther: otherTokens > 0,
+    }
+  }, [messages, breakdownInputTokens, breakdownSegments])
 
   const handleToggleMessage = useCallback(
     async (msg: Message) => {
@@ -136,6 +191,21 @@ export function ContextDetailsDialog({ isOpen, onClose, contextLimit }: ContextD
         {breakdownSegments.length > 0 && (
           <div className="flex flex-col gap-2">
             <div className="text-[11px] font-medium text-text-400">Context Breakdown</div>
+            {breakdownMeta && (
+              <div className="flex items-center justify-between gap-2 text-[10px] text-text-500">
+                <span className="font-mono">
+                  Attributed {breakdownMeta.attributedPercent}% · Loaded {breakdownMeta.loadedMessages}/{breakdownMeta.totalMessages}
+                </span>
+                {isHydratingBreakdown ? (
+                  <span className="inline-flex items-center gap-1">
+                    <SpinnerIcon size={10} className="animate-spin" />
+                    Hydrating history...
+                  </span>
+                ) : breakdownMeta.missingAssistantParts > 0 ? (
+                  <span>{breakdownMeta.missingAssistantParts} compacted assistant messages</span>
+                ) : null}
+              </div>
+            )}
             <div className="h-3 w-full rounded-full overflow-hidden flex bg-bg-200/30">
               {breakdownSegments.map((seg) => (
                 <div
@@ -154,6 +224,11 @@ export function ContextDetailsDialog({ isOpen, onClose, contextLimit }: ContextD
                 </span>
               ))}
             </div>
+            {breakdownMeta?.hasOther && (
+              <div className="text-[10px] text-text-500">
+                "Other" includes system prompts, tool schemas, and cached context that cannot be reconstructed exactly
+              </div>
+            )}
           </div>
         )}
 
