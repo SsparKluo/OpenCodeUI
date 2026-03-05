@@ -278,13 +278,7 @@ jobs:
           # Write to file for multiline support
           echo "$BODY" > /tmp/release-body.md
           # Append download section
-          cat >> /tmp/release-body.md <<'DLEOF'
-
----
-
-**Desktop:** Windows (.exe), macOS (.dmg), Linux (.deb, .AppImage)
-**Mobile:** Android (.apk) — arm64, armeabi-v7a
-DLEOF
+          printf '\n---\n\n**Desktop:** Windows (.exe), macOS (.dmg), Linux (.deb, .AppImage)\n**Mobile:** Android (.apk) — arm64, armeabi-v7a\n' >> /tmp/release-body.md
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
