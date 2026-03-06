@@ -436,7 +436,9 @@ const ToolGroup = memo(function ToolGroup({ parts, stepFinish, duration, turnDur
           compact={true}
         />
         {stepFinish && (
-          <StepFinishPartView part={stepFinish} duration={duration} turnDuration={turnDuration} />
+          <div className="mt-2">
+            <StepFinishPartView part={stepFinish} duration={duration} turnDuration={turnDuration} />
+          </div>
         )}
       </div>
     )
@@ -480,7 +482,9 @@ const ToolGroup = memo(function ToolGroup({ parts, stepFinish, duration, turnDur
       </div>
 
       {stepFinish && (
-        <StepFinishPartView part={stepFinish} duration={duration} turnDuration={turnDuration} />
+        <div className="mt-2">
+          <StepFinishPartView part={stepFinish} duration={duration} turnDuration={turnDuration} />
+        </div>
       )}
     </div>
   )

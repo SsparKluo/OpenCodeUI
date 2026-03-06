@@ -57,7 +57,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       if (!blockCode) return <pre>{children}</pre>
 
       return (
-        <div className="my-4 w-full">
+        <div className="my-4 first:mt-0 last:mb-0 w-full">
           <CodeBlock code={blockCode.code} language={blockCode.language} />
         </div>
       )
@@ -65,16 +65,16 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     
     // Headings - Improved typography
     h1: ({ children }: any) => (
-      <h1 className="text-xl font-bold text-text-100 mt-8 mb-4 first:mt-0 tracking-tight">{children}</h1>
+      <h1 className="text-xl font-bold text-text-100 mt-8 mb-4 first:mt-0 last:mb-0 tracking-tight">{children}</h1>
     ),
     h2: ({ children }: any) => (
-      <h2 className="text-lg font-bold text-text-100 mt-6 mb-3 first:mt-0 tracking-tight pb-1 border-b border-border-100/50">{children}</h2>
+      <h2 className="text-lg font-bold text-text-100 mt-6 mb-3 first:mt-0 last:mb-0 tracking-tight pb-1 border-b border-border-100/50">{children}</h2>
     ),
     h3: ({ children }: any) => (
-      <h3 className="text-base font-semibold text-text-100 mt-5 mb-2 first:mt-0 tracking-tight">{children}</h3>
+      <h3 className="text-base font-semibold text-text-100 mt-5 mb-2 first:mt-0 last:mb-0 tracking-tight">{children}</h3>
     ),
     h4: ({ children }: any) => (
-      <h4 className="text-sm font-semibold text-text-100 mt-4 mb-2 first:mt-0 tracking-tight">{children}</h4>
+      <h4 className="text-sm font-semibold text-text-100 mt-4 mb-2 first:mt-0 last:mb-0 tracking-tight">{children}</h4>
     ),
     
     // Paragraphs
@@ -84,10 +84,10 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     
     // Lists
     ul: ({ children }: any) => (
-      <ul className="list-disc list-outside ml-5 mb-4 space-y-1 marker:text-text-400/80">{children}</ul>
+      <ul className="list-disc list-outside ml-5 mb-4 last:mb-0 space-y-1 marker:text-text-400/80">{children}</ul>
     ),
     ol: ({ children }: any) => (
-      <ol className="list-decimal list-outside ml-5 mb-4 space-y-1 marker:text-text-400/80">{children}</ol>
+      <ol className="list-decimal list-outside ml-5 mb-4 last:mb-0 space-y-1 marker:text-text-400/80">{children}</ol>
     ),
     li: ({ children }: any) => (
       <li className="text-text-200 pl-1 leading-7">{children}</li>
@@ -107,14 +107,14 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     
     // Blockquotes - Modern style
     blockquote: ({ children }: any) => (
-      <blockquote className="border-l-2 border-accent-main-100 pl-4 py-1 my-4 bg-bg-200/30 rounded-r-md text-text-300 italic">
+      <blockquote className="border-l-2 border-accent-main-100 pl-4 py-1 my-4 first:mt-0 last:mb-0 bg-bg-200/30 rounded-r-md text-text-300 italic">
         {children}
       </blockquote>
     ),
     
     // Tables - Modern style with striping
     table: ({ children }: any) => (
-      <div className="overflow-x-auto my-6 border border-border-200 rounded-lg shadow-sm w-full">
+      <div className="overflow-x-auto my-6 first:mt-0 last:mb-0 border border-border-200 rounded-lg shadow-sm w-full">
         <table className="min-w-full border-collapse text-sm divide-y divide-border-200">{children}</table>
       </div>
     ),
@@ -139,7 +139,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     ),
     
     // Horizontal rule
-    hr: () => <hr className="border-border-200 my-8" />,
+    hr: () => <hr className="border-border-200 my-8 first:mt-0 last:mb-0" />,
     
     // Strong and emphasis
     strong: ({ children }: any) => (
