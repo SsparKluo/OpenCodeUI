@@ -45,7 +45,7 @@ export const StepFinishPartView = memo(function StepFinishPartView({ part, durat
   if (!hasAny) return null
   
   return (
-    <div className="flex items-center gap-3 text-[10px] text-text-500 pl-5 py-0.5">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 py-0.5 text-[10px] leading-4 text-text-500">
       {show.tokens && totalTokens > 0 && (
         <span
           title={`Input: ${tokens.input}, Output: ${tokens.output}, Reasoning: ${tokens.reasoning}, Cache read: ${tokens.cache.read}, Cache write: ${tokens.cache.write}`}
