@@ -51,6 +51,10 @@ export const SlashCommandMenu = forwardRef<SlashCommandMenuHandle, SlashCommandM
       cmd => cmd.name.toLowerCase().includes(lowerQuery) || cmd.description?.toLowerCase().includes(lowerQuery),
     )
   }, [commands, isOpen, query])
+  const commandColumnWidth = useMemo(() => {
+    const maxCommandLength = commands.reduce((max, cmd) => Math.max(max, cmd.name.length + 1), 0)
+    return `${Math.min(Math.max(maxCommandLength + 1, 10), 18)}ch`
+  }, [commands])
   const activeIndex = filteredCommands.length === 0 ? 0 : Math.min(selectedIndex, filteredCommands.length - 1)
 
   // 动态计算菜单最大高度，防止在小屏幕上被 header 遮挡
@@ -210,13 +214,18 @@ export const SlashCommandMenu = forwardRef<SlashCommandMenuHandle, SlashCommandM
           <button
             key={cmd.name}
             title={cmd.description}
-            className={`w-full px-3 py-2.5 md:py-2 flex items-start gap-3 text-left transition-colors ${
+            className={`w-full px-3 py-2.5 md:py-2 flex items-center gap-3 text-left transition-colors ${
               index === activeIndex ? 'bg-accent-main-100/10' : 'hover:bg-bg-100 active:bg-bg-100'
             }`}
             onClick={() => onSelect(cmd)}
             onPointerEnter={() => setSelectedIndex(index)}
           >
-            <span className="text-accent-main-100 font-mono text-sm flex-shrink-0">/{cmd.name}</span>
+            <span
+              className="text-accent-main-100 font-mono text-sm flex-shrink-0 truncate leading-5"
+              style={{ width: commandColumnWidth }}
+            >
+              /{cmd.name}
+            </span>
             <div className="flex-1 min-w-0">
               {cmd.description && <div className="text-xs text-text-400 truncate">{cmd.description}</div>}
             </div>
