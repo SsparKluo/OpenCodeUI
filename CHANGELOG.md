@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.1.2] - 2026-03-07
+
+- fix: scope active session state to the current directory (2503c6b)
+
 ## [v0.1.1] - 2026-03-07
 
 Patch release focused on chat input polish, session list consistency, and smoother permission handling.
