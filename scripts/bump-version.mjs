@@ -48,6 +48,13 @@ const tagName = `v${version}`
 const today = new Date().toISOString().slice(0, 10)
 const isPrerelease = version.includes('-')
 
+function formatWithPrettier(relativePath) {
+  execSync(`npx prettier --write "${relativePath}"`, {
+    cwd: root,
+    stdio: 'pipe',
+  })
+}
+
 function replaceCargoPackageVersion(lockContent, packageName, nextVersion) {
   const packageBlocks = lockContent.split('[[package]]')
   const updatedBlocks = packageBlocks.map((block, index) => {
@@ -90,6 +97,7 @@ const tauriConfPath = resolve(root, 'src-tauri/tauri.conf.json')
 const tauriConf = JSON.parse(readFileSync(tauriConfPath, 'utf-8'))
 tauriConf.version = version
 writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2) + '\n')
+formatWithPrettier('src-tauri/tauri.conf.json')
 console.log(`  src-tauri/tauri.conf  ${oldVersion} -> ${version}`)
 
 // ---------------------------------------------------------------------------
