@@ -254,6 +254,24 @@ npm run dev
 
 Vite 启动在 `http://localhost:5173`，`/api` 自动代理到 `http://127.0.0.1:4096`。
 
+### 提交前校验
+
+提交 PR 前，建议先在本地跑一遍和 CI 相同的校验：
+
+```bash
+npm run validate
+```
+
+这条命令会顺序执行 TypeScript 检查、ESLint、单元测试和生产构建。
+
+如果你习惯 `type-check` 这个命名，也可以使用：
+
+```bash
+npm run type-check
+```
+
+GitHub Actions 的 `Build Validation` workflow 会在 PR 和 `main` 分支 push 时运行同一套校验。
+
 ## 桌面应用
 
 从 [Releases](https://github.com/lehhair/OpenCodeUI/releases) 下载安装包，或本地构建：

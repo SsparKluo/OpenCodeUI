@@ -254,6 +254,24 @@ npm run dev
 
 Vite starts at `http://localhost:5173`, `/api` is automatically proxied to `http://127.0.0.1:4096`.
 
+### Pre-PR Validation
+
+Before opening a PR, run the same validation steps locally that CI uses:
+
+```bash
+npm run validate
+```
+
+This command runs TypeScript validation, ESLint, unit tests, and a production build in sequence.
+
+If you prefer the hyphenated name, this alias is also available:
+
+```bash
+npm run type-check
+```
+
+GitHub Actions runs the same checks in the `Build Validation` workflow for every PR and every push to `main`.
+
 ## Desktop App
 
 Download the installer from [Releases](https://github.com/lehhair/OpenCodeUI/releases), or build locally:
