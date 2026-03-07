@@ -8,8 +8,8 @@ vi.mock('./DiffViewer', () => ({
   ViewModeSwitch: () => null,
 }))
 
-vi.mock('./FileExplorer', () => ({
-  CodePreview: ({ content }: { content: string }) => <div data-testid="code-preview">{content}</div>,
+vi.mock('./CodePreview', () => ({
+  CodePreview: ({ code }: { code: string }) => <div data-testid="code-preview">{code}</div>,
 }))
 
 describe('FullscreenViewer', () => {

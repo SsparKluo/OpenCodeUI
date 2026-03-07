@@ -16,7 +16,7 @@ import { CopyButton } from './ui'
 import { detectLanguage } from '../utils/languageUtils'
 import { extractContentFromUnifiedDiff } from '../utils/diffUtils'
 import { DiffViewer, type ViewMode } from './DiffViewer'
-import { CodePreview } from './FileExplorer'
+import { CodePreview } from './CodePreview'
 import { useDelayedRender } from '../hooks/useDelayedRender'
 
 // ============================================

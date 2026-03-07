@@ -8,9 +8,9 @@ import { memo, useCallback, useMemo, useEffect, useRef, useState, useLayoutEffec
 import { useFileExplorer, type FileTreeNode } from '../hooks'
 import { layoutStore, type PreviewFile } from '../store/layoutStore'
 import { ChevronRightIcon, ChevronDownIcon, RetryIcon, CloseIcon, AlertCircleIcon, DownloadIcon } from './Icons'
+import { CodePreview } from './CodePreview'
 import { getMaterialIconUrl } from '../utils/materialIcons'
 import { detectLanguage } from '../utils/languageUtils'
-import { useSyntaxHighlight } from '../hooks/useSyntaxHighlight'
 import {
   getPreviewCategory,
   isBinaryContent,
@@ -27,9 +27,6 @@ import type { FileContent } from '../api/types'
 // 常量
 const MIN_TREE_HEIGHT = 100
 const MIN_PREVIEW_HEIGHT = 150
-const LINE_HEIGHT = 20 // 每行高度（用于虚拟滚动）
-const OVERSCAN = 5 // 额外渲染的行数
-const MAX_LINE_LENGTH = 5000 // 超过此长度截断显示，避免 DOM 过大
 
 interface FileExplorerProps {
   directory?: string
@@ -975,193 +972,6 @@ export function DiffPreview({ hunks, isResizing = false }: DiffPreviewProps) {
           </div>
         </div>
       ))}
-    </div>
-  )
-}
-
-// ============================================
-// Code Preview - 统一使用虚拟滚动 + 禁用自动换行
-// 核心优化：
-// 1. 始终使用虚拟滚动，不论文件大小
-// 2. 禁用自动换行，使用水平滚动
-// 3. 超长行截断显示
-// ============================================
-
-interface CodePreviewProps {
-  code: string
-  language: string
-  truncateLines?: boolean
-  maxHeight?: number
-  isResizing?: boolean
-}
-
-/** 截断超长行，避免 DOM 过大 */
-function truncateLine(line: string): { text: string; truncated: boolean } {
-  if (line.length <= MAX_LINE_LENGTH) {
-    return { text: line, truncated: false }
-  }
-  return {
-    text: line.slice(0, MAX_LINE_LENGTH),
-    truncated: true,
-  }
-}
-
-/** 截断高亮 HTML，保持标签完整性 */
-function truncateHtml(html: string): { html: string; truncated: boolean } {
-  // 简单估算：如果原始 HTML 很长，进行截断
-  // 这里用一个保守的阈值，因为 HTML 有标签开销
-  if (html.length <= MAX_LINE_LENGTH * 2) {
-    return { html, truncated: false }
-  }
-  // 截断并闭合所有打开的标签
-  const truncated = html.slice(0, MAX_LINE_LENGTH * 2)
-  // 简单处理：直接截断，浏览器会自动修复
-  return { html: truncated, truncated: true }
-}
-
-export function CodePreview({ code, language, truncateLines = true, maxHeight, isResizing = false }: CodePreviewProps) {
-  const lines = useMemo(() => {
-    const raw = code.split('\n')
-    if (raw.length > 1 && raw[raw.length - 1] === '' && code.endsWith('\n')) {
-      raw.pop()
-    }
-    return raw
-  }, [code])
-  const totalHeight = lines.length * LINE_HEIGHT
-
-  // text 类型不走高亮，resize 时也禁用以提高性能
-  const enableHighlight = language !== 'text' && !isResizing
-  const { output: html, isLoading } = useSyntaxHighlight(code, { lang: language, enabled: enableHighlight })
-
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [scrollTop, setScrollTop] = useState(0)
-  const [containerHeight, setContainerHeight] = useState(0)
-
-  // 解析高亮后的行
-  const highlightedLines = useMemo(() => {
-    if (isLoading || !html) return null
-
-    const parser = new DOMParser()
-    const doc = parser.parseFromString(html as string, 'text/html')
-    const lineElements = doc.querySelectorAll('.line')
-
-    if (lineElements.length === 0) return null
-
-    return Array.from(lineElements).map(el => el.innerHTML || '')
-  }, [html, isLoading])
-
-  // 计算可见范围
-  const { startIndex, endIndex, offsetY } = useMemo(() => {
-    const start = Math.max(0, Math.floor(scrollTop / LINE_HEIGHT) - OVERSCAN)
-    const visibleCount = Math.ceil(containerHeight / LINE_HEIGHT)
-    const end = Math.min(lines.length, start + visibleCount + OVERSCAN * 2)
-    return {
-      startIndex: start,
-      endIndex: end,
-      offsetY: start * LINE_HEIGHT,
-    }
-  }, [scrollTop, containerHeight, lines.length])
-
-  // 监听容器大小变化 - resize 时完全跳过
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    // resize 时跳过 ResizeObserver
-    if (isResizing) return
-
-    let rafId: number | null = null
-    const updateHeight = () => {
-      if (rafId) cancelAnimationFrame(rafId)
-      rafId = requestAnimationFrame(() => {
-        setContainerHeight(container.clientHeight)
-      })
-    }
-
-    // 初始化立即执行
-    setContainerHeight(container.clientHeight)
-
-    const resizeObserver = new ResizeObserver(updateHeight)
-    resizeObserver.observe(container)
-
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId)
-      resizeObserver.disconnect()
-    }
-  }, [isResizing])
-
-  // 处理滚动
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    setScrollTop(e.currentTarget.scrollTop)
-  }, [])
-
-  // 渲染可见行
-  const visibleLines = useMemo(() => {
-    const result: React.ReactNode[] = []
-
-    for (let i = startIndex; i < endIndex; i++) {
-      const rawLine = lines[i] || ' '
-      const highlighted = highlightedLines?.[i]
-      const isHtml = highlighted && highlighted.includes('<')
-
-      // 截断处理
-      let displayContent: React.ReactNode
-      let isTruncated = false
-
-      if (isHtml && highlighted) {
-        if (truncateLines) {
-          const { html: truncatedHtml, truncated } = truncateHtml(highlighted)
-          isTruncated = truncated
-          displayContent = <span className="whitespace-pre" dangerouslySetInnerHTML={{ __html: truncatedHtml }} />
-        } else {
-          displayContent = <span className="whitespace-pre" dangerouslySetInnerHTML={{ __html: highlighted }} />
-        }
-      } else {
-        if (truncateLines) {
-          const { text, truncated } = truncateLine(highlighted || rawLine)
-          isTruncated = truncated
-          displayContent = <span className="text-text-200 whitespace-pre">{text}</span>
-        } else {
-          displayContent = <span className="text-text-200 whitespace-pre">{highlighted || rawLine}</span>
-        }
-      }
-
-      result.push(
-        <div key={i} className="flex hover:bg-bg-200/30" style={{ height: LINE_HEIGHT }}>
-          <span className="select-none text-text-500 w-10 text-right pr-3 shrink-0 border-r border-border-100/30 mr-3 leading-5">
-            {i + 1}
-          </span>
-          <span className="leading-5 pr-4">
-            {displayContent}
-            {isTruncated && <span className="text-text-500 ml-1">… (truncated)</span>}
-          </span>
-        </div>,
-      )
-    }
-    return result
-  }, [startIndex, endIndex, lines, highlightedLines, truncateLines])
-
-  return (
-    <div
-      ref={containerRef}
-      className="overflow-auto code-scrollbar"
-      onScroll={handleScroll}
-      style={maxHeight !== undefined ? { maxHeight } : undefined}
-    >
-      <div style={{ height: totalHeight, position: 'relative' }}>
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            transform: `translateY(${offsetY}px)`,
-          }}
-          className="font-mono text-[11px] leading-relaxed"
-        >
-          {visibleLines}
-        </div>
-      </div>
     </div>
   )
 }
