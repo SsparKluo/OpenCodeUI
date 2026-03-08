@@ -14,6 +14,7 @@ import { activeSessionStore } from '../store/activeSessionStore'
 import { notificationStore } from '../store/notificationStore'
 import { subscribeToEvents, getSessionStatus, getPendingPermissions, getPendingQuestions } from '../api'
 import type { ApiMessage, ApiPart, ApiPermissionRequest, ApiQuestionRequest, SessionStatusPayload } from '../api/types'
+import type { SessionStatusMap } from '../types/api/session'
 
 interface GlobalEventsCallbacks {
   onPermissionAsked?: (request: ApiPermissionRequest) => void
@@ -52,6 +53,57 @@ function cleanupExpired<T>(map: Map<string, PendingRequest<T>>) {
   }
 }
 
+async function fetchActiveScopeData(directories?: string[]) {
+  const scopes = directories && directories.length > 0 ? directories : [undefined]
+  const results = await Promise.all(
+    scopes.map(async directory => {
+      const [statusMap, permissions, questions] = await Promise.all([
+        getSessionStatus(directory).catch(() => ({}) as SessionStatusMap),
+        getPendingPermissions(undefined, directory).catch(() => []),
+        getPendingQuestions(undefined, directory).catch(() => []),
+      ])
+
+      return { directory, statusMap, permissions, questions }
+    }),
+  )
+
+  const mergedStatusMap: SessionStatusMap = {}
+  const permissionMap = new Map<string, ApiPermissionRequest>()
+  const questionMap = new Map<string, ApiQuestionRequest>()
+  const sessionMetaEntries: Array<{ sessionId: string; directory?: string }> = []
+
+  results.forEach(({ directory, statusMap, permissions, questions }) => {
+    Object.assign(mergedStatusMap, statusMap)
+
+    if (directory) {
+      Object.keys(statusMap).forEach(sessionId => {
+        sessionMetaEntries.push({ sessionId, directory })
+      })
+    }
+
+    permissions.forEach(permission => {
+      if (directory) {
+        sessionMetaEntries.push({ sessionId: permission.sessionID, directory })
+      }
+      permissionMap.set(permission.id, permission)
+    })
+
+    questions.forEach(question => {
+      if (directory) {
+        sessionMetaEntries.push({ sessionId: question.sessionID, directory })
+      }
+      questionMap.set(question.id, question)
+    })
+  })
+
+  return {
+    statusMap: mergedStatusMap,
+    permissions: Array.from(permissionMap.values()),
+    questions: Array.from(questionMap.values()),
+    sessionMetaEntries,
+  }
+}
+
 /**
  * 检查 sessionID 是否属于当前 session 或其子 session
  */
@@ -66,12 +118,12 @@ function belongsToCurrentSession(sessionId: string): boolean {
   return childSessionStore.belongsToSession(sessionId, currentSessionId)
 }
 
-export function useGlobalEvents(callbacks?: GlobalEventsCallbacks, directory?: string) {
+export function useGlobalEvents(callbacks?: GlobalEventsCallbacks, directories?: string[]) {
   // 使用 ref 保存 callbacks，避免重新订阅 SSE
   const callbacksRef = useRef(callbacks)
-  const directoryRef = useRef<string | undefined>(directory)
+  const directoriesRef = useRef<string[] | undefined>(directories)
   const refreshRef = useRef<(() => void) | null>(null)
-  const initializedDirectoryRef = useRef(false)
+  const initializedDirectoriesRef = useRef(false)
 
   useEffect(() => {
     callbacksRef.current = callbacks
@@ -94,14 +146,10 @@ export function useGlobalEvents(callbacks?: GlobalEventsCallbacks, directory?: s
     // ============================================
 
     const fetchAndInitialize = () => {
-      const directory = directoryRef.current
-      Promise.all([
-        getSessionStatus(directory).catch(() => ({}) as Record<string, import('../types/api/session').SessionStatus>),
-        getPendingPermissions(undefined, directory).catch(() => []),
-        getPendingQuestions(undefined, directory).catch(() => []),
-      ]).then(([statusMap, permissions, questions]) => {
+      fetchActiveScopeData(directoriesRef.current).then(({ statusMap, permissions, questions, sessionMetaEntries }) => {
         activeSessionStore.initialize(statusMap)
         activeSessionStore.initializePendingRequests(permissions, questions)
+        activeSessionStore.setSessionMetaBulk(sessionMetaEntries)
       })
     }
 
@@ -329,11 +377,11 @@ export function useGlobalEvents(callbacks?: GlobalEventsCallbacks, directory?: s
   }, []) // 空依赖，只订阅一次
 
   useEffect(() => {
-    directoryRef.current = directory
-    if (initializedDirectoryRef.current) {
+    directoriesRef.current = directories
+    if (initializedDirectoriesRef.current) {
       refreshRef.current?.()
       return
     }
-    initializedDirectoryRef.current = true
-  }, [directory])
+    initializedDirectoriesRef.current = true
+  }, [directories])
 }

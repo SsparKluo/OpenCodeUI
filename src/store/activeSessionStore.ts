@@ -37,6 +37,12 @@ export interface ActiveSessionEntry {
   }
 }
 
+interface SessionMetaEntry {
+  sessionId: string
+  title?: string
+  directory?: string
+}
+
 interface ActiveSessionState {
   statusMap: SessionStatusMap
   initialized: boolean
@@ -244,6 +250,25 @@ class ActiveSessionStore {
     const newDir = directory ?? existing?.directory
     if (newTitle !== existing?.title || newDir !== existing?.directory) {
       this.sessionMeta.set(sessionId, { title: newTitle, directory: newDir })
+      this.notify()
+    }
+  }
+
+  setSessionMetaBulk(entries: SessionMetaEntry[]) {
+    let changed = false
+
+    for (const entry of entries) {
+      const existing = this.sessionMeta.get(entry.sessionId)
+      const newTitle = entry.title ?? existing?.title
+      const newDir = entry.directory ?? existing?.directory
+
+      if (newTitle !== existing?.title || newDir !== existing?.directory) {
+        this.sessionMeta.set(entry.sessionId, { title: newTitle, directory: newDir })
+        changed = true
+      }
+    }
+
+    if (changed) {
       this.notify()
     }
   }

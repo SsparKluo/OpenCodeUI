@@ -39,7 +39,7 @@ import {
   type ModelInfo,
 } from '../api'
 import { getMessageText } from '../types/message'
-import { clipboardErrorHandler, copyTextToClipboard, createErrorHandler } from '../utils'
+import { clipboardErrorHandler, copyTextToClipboard, createErrorHandler, isSameDirectory } from '../utils'
 import { serverStorage } from '../utils/perServerStorage'
 import { UNDO_SCROLL_DELAY_MS, AUTO_SCROLL_SUPPRESS_DURATION_MS, STORAGE_KEY_SELECTED_AGENT } from '../constants'
 import type { ChatAreaHandle } from '../features/chat'
@@ -90,7 +90,7 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
   // Hooks
   const { resetPermissions } = usePermissions()
   const { sessionId: routeSessionId, navigateToSession, navigateHome } = useRouter()
-  const { currentDirectory, sidebarExpanded, setSidebarExpanded } = useDirectory()
+  const { currentDirectory, savedDirectories, sidebarExpanded, setSidebarExpanded } = useDirectory()
   const { createSession, sessions } = useSessionContext()
   const { sendNotification } = useNotification()
 
@@ -153,6 +153,21 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
 
   // Effective directory (used in multiple places)
   const effectiveDirectory = sessionDirectory || currentDirectory
+
+  const activeDirectories = useMemo(() => {
+    const directories: string[] = []
+
+    const pushDirectory = (directory?: string) => {
+      if (!directory) return
+      if (directories.some(existing => isSameDirectory(existing, directory))) return
+      directories.push(directory)
+    }
+
+    savedDirectories.forEach(directory => pushDirectory(directory.path))
+    pushDirectory(currentDirectory)
+
+    return directories
+  }, [savedDirectories, currentDirectory])
 
   // Global Events (SSE)
   useGlobalEvents(
@@ -250,7 +265,7 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
           .catch(() => {})
       },
     },
-    effectiveDirectory,
+    activeDirectories,
   )
 
   const handleVisibleMessageIdsChange = useCallback(
