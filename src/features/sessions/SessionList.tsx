@@ -21,7 +21,6 @@ interface SessionListProps {
   showHeader?: boolean
   grouped?: boolean
   density?: 'default' | 'compact'
-  variant?: 'default' | 'tree'
   showStats?: boolean
   /** Global 模式下显示每个 session 的目录名 */
   showDirectory?: boolean
@@ -50,7 +49,6 @@ export function SessionList({
   showHeader = true,
   grouped = true,
   density = 'default',
-  variant = 'default',
   showStats = true,
   showDirectory = false,
   scrollMaxHeight,
@@ -182,7 +180,6 @@ export function SessionList({
                       onDelete={() => setDeleteConfirm({ isOpen: true, sessionId: session.id })}
                       onRename={newTitle => onRename(session.id, newTitle)}
                       density={density}
-                      variant={variant}
                       showStats={showStats}
                       showDirectory={showDirectory}
                     />
@@ -203,7 +200,6 @@ export function SessionList({
                 onDelete={() => setDeleteConfirm({ isOpen: true, sessionId: session.id })}
                 onRename={newTitle => onRename(session.id, newTitle)}
                 density={density}
-                variant={variant}
                 showStats={showStats}
                 showDirectory={showDirectory}
               />
@@ -247,7 +243,6 @@ interface SessionItemProps {
   onDelete: () => void
   onRename: (newTitle: string) => void
   density?: 'default' | 'compact'
-  variant?: 'default' | 'tree'
   showStats?: boolean
   showDirectory?: boolean
 }
@@ -259,7 +254,6 @@ function SessionItem({
   onDelete,
   onRename,
   density = 'default',
-  variant = 'default',
   showStats: _showStats = true,
   showDirectory = false,
 }: SessionItemProps) {
@@ -391,64 +385,6 @@ function SessionItem({
   // 移动端操作按钮是否可见：长按触发的 showActions 状态
   // 桌面端：hover 触发
   const actionsVisible = isMobile ? showActions : false
-
-  if (variant === 'tree') {
-    return (
-      <div
-        ref={itemRef}
-        onClick={handleClick}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        className={`group relative flex items-center gap-3 rounded-lg cursor-pointer transition-all duration-200 select-none ${
-          isCompact ? 'px-3 py-2' : 'px-3 py-2.5'
-        } ${isSelected ? 'bg-bg-000/90 shadow-sm' : 'hover:bg-bg-200/45'} ${showActions ? 'bg-bg-200/50' : ''}`}
-      >
-        <div className={`min-w-0 flex-1 transition-[padding] duration-200 ${showActions ? 'pr-[60px]' : 'pr-[72px]'}`}>
-          <p
-            className={`${isCompact ? 'text-[13px]' : 'text-sm'} truncate font-medium ${
-              isSelected ? 'text-text-100' : 'text-text-200 group-hover:text-text-100'
-            }`}
-            title={session.title || 'Untitled Chat'}
-          >
-            {session.title || 'Untitled Chat'}
-          </p>
-        </div>
-
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 z-10">
-          <span
-            className={`text-[10px] text-text-400 tabular-nums whitespace-nowrap transition-all duration-200 ${
-              actionsVisible ? 'opacity-0 pointer-events-none' : 'opacity-100 group-hover:opacity-0'
-            }`}
-          >
-            {session.time?.updated ? formatRelativeTime(session.time.updated) : ''}
-          </span>
-          <div
-            className={`absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-0.5 transition-all duration-200 ${
-              actionsVisible
-                ? 'opacity-100 pointer-events-auto'
-                : 'opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto'
-            }`}
-          >
-            <button
-              onClick={handleStartEdit}
-              className="p-1.5 rounded-md hover:bg-bg-300 active:bg-bg-300 text-text-400 hover:text-text-100 transition-colors focus:outline-none"
-              title="Rename"
-            >
-              <PencilIcon className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={handleDelete}
-              className="p-1.5 rounded-md hover:bg-danger-bg active:bg-danger-bg text-text-400 hover:text-danger-100 active:text-danger-100 transition-colors focus:outline-none"
-              title="Delete"
-            >
-              <TrashIcon className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div

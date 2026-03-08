@@ -231,12 +231,14 @@ export function SidePanel({
   const folderProjects = useMemo<ProjectItem[]>(() => {
     const list = projects.filter(project => project.id !== 'global')
 
-    if (currentProject.id === 'global') {
-      return list
+    if (
+      currentProject.id !== 'global' &&
+      !list.some(project => isSameDirectory(project.worktree, currentProject.worktree))
+    ) {
+      list.unshift(currentProject)
     }
 
-    const remaining = list.filter(project => !isSameDirectory(project.worktree, currentProject.worktree))
-    return [currentProject, ...remaining]
+    return list
   }, [projects, currentProject])
 
   const handleSelectProject = useCallback(
