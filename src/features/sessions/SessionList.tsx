@@ -400,13 +400,13 @@ function SessionItem({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className={`group relative flex items-center gap-3 rounded-lg cursor-pointer transition-all duration-200 select-none ${
-          isCompact ? 'px-3 py-2' : 'px-3 py-2.5'
-        } ${isSelected ? 'bg-bg-000/90 shadow-sm' : 'hover:bg-bg-200/45'} ${showActions ? 'bg-bg-200/50' : ''}`}
+        className={`group relative flex items-center gap-2 rounded-md cursor-pointer transition-all duration-150 select-none ${
+          isCompact ? 'px-2 py-1.5' : 'px-2.5 py-1.5'
+        } ${isSelected ? 'bg-bg-000/80' : 'hover:bg-bg-200/35'} ${showActions ? 'bg-bg-200/40' : ''}`}
       >
-        <div className={`min-w-0 flex-1 transition-[padding] duration-200 ${showActions ? 'pr-[60px]' : 'pr-[72px]'}`}>
+        <div className={`min-w-0 flex-1 transition-[padding] duration-200 ${showActions ? 'pr-[56px]' : 'pr-[64px]'}`}>
           <p
-            className={`${isCompact ? 'text-[13px]' : 'text-sm'} truncate font-medium ${
+            className={`${isCompact ? 'text-[12px]' : 'text-[13px]'} truncate font-medium ${
               isSelected ? 'text-text-100' : 'text-text-200 group-hover:text-text-100'
             }`}
             title={session.title || 'Untitled Chat'}
@@ -417,7 +417,7 @@ function SessionItem({
 
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 z-10">
           <span
-            className={`text-[10px] text-text-400 tabular-nums whitespace-nowrap transition-all duration-200 ${
+            className={`text-[10px] text-text-400/80 tabular-nums whitespace-nowrap transition-all duration-200 ${
               actionsVisible ? 'opacity-0 pointer-events-none' : 'opacity-100 group-hover:opacity-0'
             }`}
           >

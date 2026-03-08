@@ -8,7 +8,7 @@ import { SessionList } from '../../sessions'
 
 const DIRECTORY_PAGE_SIZE = 8
 const MAX_VISIBLE_SESSIONS = 6
-const SESSION_LIST_MAX_HEIGHT = MAX_VISIBLE_SESSIONS * 56 + 12
+const SESSION_LIST_MAX_HEIGHT = MAX_VISIBLE_SESSIONS * 40 + 12
 const NOOP = () => {}
 
 export interface FolderRecentProject {
@@ -26,14 +26,14 @@ interface FolderRecentListProps {
   onDeleteSession: (session: ApiSession) => Promise<void>
 }
 
-function getInitialExpandedProject(projects: FolderRecentProject[], currentDirectory?: string): string | null {
-  if (projects.length === 0) return null
+function getInitialExpandedProjects(projects: FolderRecentProject[], currentDirectory?: string): string[] {
+  if (projects.length === 0) return []
 
   const currentProject = currentDirectory
     ? projects.find(project => isSameDirectory(project.worktree, currentDirectory))
     : undefined
 
-  return currentProject?.id || projects[0].id
+  return [currentProject?.id || projects[0].id]
 }
 
 export function FolderRecentList({
@@ -44,14 +44,15 @@ export function FolderRecentList({
   onRenameSession,
   onDeleteSession,
 }: FolderRecentListProps) {
-  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(() =>
-    getInitialExpandedProject(projects, currentDirectory),
+  const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>(() =>
+    getInitialExpandedProjects(projects, currentDirectory),
   )
 
   useEffect(() => {
-    setExpandedProjectId(prev => {
-      if (prev && projects.some(project => project.id === prev)) return prev
-      return getInitialExpandedProject(projects, currentDirectory)
+    setExpandedProjectIds(prev => {
+      const next = prev.filter(id => projects.some(project => project.id === id))
+      if (next.length > 0) return next
+      return getInitialExpandedProjects(projects, currentDirectory)
     })
   }, [projects, currentDirectory])
 
@@ -60,15 +61,17 @@ export function FolderRecentList({
     const currentProject = projects.find(project => isSameDirectory(project.worktree, currentDirectory))
     if (!currentProject) return
 
-    setExpandedProjectId(currentProject.id)
+    setExpandedProjectIds(prev => (prev.includes(currentProject.id) ? prev : [currentProject.id, ...prev]))
   }, [projects, currentDirectory])
 
   const handleToggleProject = useCallback((projectId: string) => {
-    setExpandedProjectId(prev => (prev === projectId ? null : projectId))
+    setExpandedProjectIds(prev =>
+      prev.includes(projectId) ? prev.filter(id => id !== projectId) : [...prev, projectId],
+    )
   }, [])
 
   return (
-    <div className="h-full overflow-y-auto custom-scrollbar px-2 py-2">
+    <div className="h-full overflow-y-auto custom-scrollbar px-2 py-1.5">
       {projects.length === 0 ? (
         <div className="flex h-full flex-col items-center justify-center px-6 text-center text-text-400 opacity-70">
           <p className="text-xs font-medium text-text-300">No project folders yet</p>
@@ -80,7 +83,7 @@ export function FolderRecentList({
             <FolderRecentSection
               key={project.id}
               project={project}
-              isExpanded={expandedProjectId === project.id}
+              isExpanded={expandedProjectIds.includes(project.id)}
               isCurrent={isSameDirectory(project.worktree, currentDirectory)}
               selectedSessionId={selectedSessionId}
               onToggle={() => handleToggleProject(project.id)}
@@ -151,8 +154,8 @@ function FolderRecentSection({
     <div ref={ref} className="rounded-lg">
       <button
         onClick={onToggle}
-        className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors ${
-          isExpanded ? 'bg-bg-200/40' : 'hover:bg-bg-200/30'
+        className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors ${
+          isExpanded ? 'bg-bg-200/35' : 'hover:bg-bg-200/25'
         }`}
         title={project.worktree}
       >
@@ -165,7 +168,7 @@ function FolderRecentSection({
           className={isCurrent ? 'shrink-0 text-accent-main-100' : 'shrink-0 text-text-400/90'}
         />
 
-        <div className="min-w-0 flex-1 truncate text-[13px] font-medium text-text-100">{projectName}</div>
+        <div className="min-w-0 flex-1 truncate text-[12px] font-medium text-text-100">{projectName}</div>
 
         {isExpanded && isLoading && <SpinnerIcon size={14} className="shrink-0 animate-spin text-text-400" />}
       </button>
@@ -174,7 +177,7 @@ function FolderRecentSection({
         className={`grid transition-all duration-200 ease-out ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
       >
         <div className="overflow-hidden">
-          <div className="ml-5 pl-2 pt-0.5">
+          <div className="pt-0.5">
             <SessionList
               sessions={sessions}
               selectedId={selectedSessionId}
