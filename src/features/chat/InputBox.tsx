@@ -323,8 +323,8 @@ function InputBoxComponent({
     const textarea = textareaRef.current
     if (!textarea) return
 
-    // 文本为空时重置为最小高度
-    if (!text.trim()) {
+    // 只有真正空字符串时才重置高度；保留仅空格/空行时的换行高度
+    if (text.length === 0) {
       textarea.style.height = '24px'
       return
     }
@@ -1054,10 +1054,10 @@ function InputBoxComponent({
                     {/* Attachments Preview - 显示在输入框上方 */}
                     <div
                       className={`overflow-hidden transition-all duration-300 ease-out ${
-                        attachments.length > 0 ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'
+                        attachments.length > 0 ? 'max-h-44 opacity-100' : 'max-h-0 opacity-0'
                       }`}
                     >
-                      <div className="px-4 pt-3">
+                      <div className="max-h-40 overflow-y-auto overscroll-contain px-4 pt-3 pb-1 custom-scrollbar">
                         <AttachmentPreview attachments={attachments} onRemove={handleRemoveAttachment} />
                       </div>
                     </div>

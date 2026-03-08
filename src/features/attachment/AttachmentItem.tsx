@@ -40,17 +40,18 @@ function AttachmentItemComponent({
       )
     : null
 
-  // 宽度模型：学习 ReasoningPartView 的做法
-  // 收起时固定宽度，展开时限制到更紧凑的上限
-  // 避免长文件名把主界面中的附件胶囊撑得过宽
-  const collapsedWidth = className ? '' : 'w-[140px]'
-  const expandedWidth = 'w-[min(100%,360px)] min-w-[140px] max-w-full'
+  // 宽度模型：
+  // - 输入框预览（传入 className）保持固定胶囊宽度
+  // - 主界面未展开保持旧的 140px 胶囊
+  // - 主界面展开后改为由预览内容主导宽度，但不超过消息列宽
+  const collapsedWidth = className || 'w-[140px]'
+  const expandedWidth = className || 'w-fit min-w-[140px] max-w-[min(100%,28rem)]'
 
   return (
     <div
-      className={`relative group flex flex-col overflow-hidden transition-all duration-300 ease-out ${
-        className || ''
-      } ${isExpanded ? expandedWidth : collapsedWidth}`}
+      className={`relative group flex min-w-0 max-w-full flex-col overflow-hidden transition-all duration-300 ease-out ${
+        isExpanded ? expandedWidth : collapsedWidth
+      }`}
     >
       {/* 标签头部 */}
       <div
@@ -112,7 +113,7 @@ function AttachmentItemComponent({
             isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
           }`}
         >
-          <div className="overflow-hidden">
+          <div className="min-w-0 overflow-hidden">
             {shouldRenderBody && (
               <ExpandedContent
                 attachment={attachment}
@@ -151,9 +152,11 @@ function MetaRow({
 }) {
   if (!value) return null
   return (
-    <div className="flex gap-2">
+    <div className="flex min-w-0 gap-2">
       <span className="text-text-400 shrink-0 select-none">{label}:</span>
-      <span className={`font-mono break-all text-text-200 ${copyable ? 'select-all' : ''} ${className}`}>{value}</span>
+      <span className={`min-w-0 font-mono break-all text-text-200 ${copyable ? 'select-all' : ''} ${className}`}>
+        {value}
+      </span>
     </div>
   )
 }
@@ -169,13 +172,13 @@ function ExpandedContent({ attachment, imageError, onImageError, onOpenDetail }:
 
   if (isImage && url && !imageError) {
     contentNode = (
-      <div className="p-2">
+      <div className="flex justify-center p-2">
         <img
           src={url}
           alt={attachment.displayName}
           onError={onImageError}
           loading="lazy"
-          className="max-h-64 w-full rounded object-contain bg-bg-300/50"
+          className="block h-auto max-h-64 w-auto max-w-full rounded bg-bg-300/50 object-contain"
         />
       </div>
     )
@@ -190,7 +193,7 @@ function ExpandedContent({ attachment, imageError, onImageError, onOpenDetail }:
   }
 
   return (
-    <div className="mt-1 rounded-md bg-bg-200 border border-border-300 overflow-hidden w-full">
+    <div className="mt-1 min-w-0 max-w-full rounded-md border border-border-300 bg-bg-200 overflow-hidden">
       {contentNode}
 
       {/* 操作按钮栏 */}
@@ -333,7 +336,7 @@ function ActionBar({ attachment, hasContent, hasDownloadable, onOpenDetail, show
 
   return (
     <div
-      className={`flex items-center gap-1 px-2 py-1 bg-bg-100/30 ${showBorderTop ? 'border-t border-border-300/50' : ''}`}
+      className={`flex flex-wrap items-center gap-1 px-2 py-1 bg-bg-100/30 ${showBorderTop ? 'border-t border-border-300/50' : ''}`}
     >
       <button
         onClick={handleOpenDetail}

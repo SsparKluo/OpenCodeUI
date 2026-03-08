@@ -185,7 +185,7 @@ const UserMessageView = memo(function UserMessageView({ message, onUndo, canUndo
 
         {/* 用户附件 */}
         {(fileParts.length > 0 || agentParts.length > 0) && (
-          <div className="mt-1 flex flex-wrap gap-2 justify-end">
+          <div className="mt-1 flex max-w-full min-w-0 flex-wrap gap-2 justify-end">
             {fileParts.map(part => (
               <FilePartView key={part.id} part={part} />
             ))}
@@ -217,7 +217,7 @@ const UserMessageView = memo(function UserMessageView({ message, onUndo, canUndo
             >
               <div className="overflow-hidden">
                 {shouldRenderSystemContext && (
-                  <div className="pt-2 flex flex-wrap gap-2 justify-end">
+                  <div className="pt-2 flex max-w-full min-w-0 flex-wrap gap-2 justify-end">
                     {syntheticParts.map(part => (
                       <SyntheticTextPartView key={part.id} part={part} />
                     ))}
