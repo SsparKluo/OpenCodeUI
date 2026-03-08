@@ -41,10 +41,10 @@ function AttachmentItemComponent({
     : null
 
   // 宽度模型：学习 ReasoningPartView 的做法
-  // 收起时固定宽度，展开时用百分比+max限制（可被 CSS 过渡）
-  // 不用 w-auto（无法过渡），用 w-full（百分比 → 计算像素 → 可过渡）
+  // 收起时固定宽度，展开时限制到更紧凑的上限
+  // 避免长文件名把主界面中的附件胶囊撑得过宽
   const collapsedWidth = className ? '' : 'w-[140px]'
-  const expandedWidth = 'w-full min-w-[140px] max-w-[440px]'
+  const expandedWidth = 'w-[min(100%,360px)] min-w-[140px] max-w-full'
 
   return (
     <div

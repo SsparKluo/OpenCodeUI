@@ -740,14 +740,14 @@ export const InputToolbarModelSelector = memo(function InputToolbarModelSelector
           </div>
 
           {/* List — 复用 PC 端的样式：sticky header + 横向布局 */}
-          <div className="overflow-y-auto custom-scrollbar flex-1 relative max-h-[min(320px,40vh)]">
+          <div className="overflow-y-auto custom-scrollbar flex-1 relative max-h-[min(320px,40vh)] scroll-pb-3">
             {flatList.length === 0 ? (
               <div className="px-4 py-10 text-center">
                 <div className="text-sm text-text-400">No models found</div>
                 <div className="text-xs text-text-500 mt-1">Try a different keyword</div>
               </div>
             ) : (
-              <div className="px-1 pb-1">
+              <div className="px-1 pb-3">
                 {flatList.map((item, index) => {
                   if (item.type === 'header') {
                     return (
