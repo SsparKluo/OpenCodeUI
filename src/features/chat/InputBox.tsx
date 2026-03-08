@@ -156,11 +156,16 @@ function InputBoxComponent({
   // Refs
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const inputContainerRef = useRef<HTMLDivElement>(null)
+  const attachmentRailRef = useRef<HTMLDivElement>(null)
   const mentionMenuRef = useRef<MentionMenuHandle>(null)
   const slashMenuRef = useRef<SlashCommandMenuHandle>(null)
   const prevRevertedTextRef = useRef<string | undefined>(undefined)
   const contentWrapRef = useRef<HTMLDivElement>(null)
   const [expandedHeight, setExpandedHeight] = useState(0)
+  const [attachmentsOverflowing, setAttachmentsOverflowing] = useState(false)
+  const [showAttachmentLeftFade, setShowAttachmentLeftFade] = useState(false)
+  const [showAttachmentRightFade, setShowAttachmentRightFade] = useState(false)
+  const prevAttachmentCountRef = useRef(0)
 
   // ============================================
   // 历史消息导航（类终端体验）
@@ -337,6 +342,83 @@ function InputBoxComponent({
     const maxH = isMobile ? Math.max(80, viewportH - 48 - 100 - 72) : viewportH * 0.35
     textarea.style.height = Math.max(24, Math.min(scrollHeight, maxH)) + 'px'
   }, [text, isMobile])
+
+  const syncAttachmentRailState = useCallback(() => {
+    const el = attachmentRailRef.current
+    if (!el) {
+      setAttachmentsOverflowing(false)
+      setShowAttachmentLeftFade(false)
+      setShowAttachmentRightFade(false)
+      return
+    }
+
+    const nextOverflow = el.scrollWidth > el.clientWidth + 1
+    const nextLeftFade = nextOverflow && el.scrollLeft > 2
+    const nextRightFade = nextOverflow && el.scrollLeft + el.clientWidth < el.scrollWidth - 2
+
+    setAttachmentsOverflowing(prev => (prev === nextOverflow ? prev : nextOverflow))
+    setShowAttachmentLeftFade(prev => (prev === nextLeftFade ? prev : nextLeftFade))
+    setShowAttachmentRightFade(prev => (prev === nextRightFade ? prev : nextRightFade))
+  }, [])
+
+  const handleAttachmentRailWheel = useCallback(
+    (e: React.WheelEvent<HTMLDivElement>) => {
+      const el = attachmentRailRef.current
+      if (!el) return
+
+      const maxScrollLeft = el.scrollWidth - el.clientWidth
+      if (maxScrollLeft <= 1) return
+
+      const dominantDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+      if (Math.abs(dominantDelta) < 0.5) return
+
+      const nextScrollLeft = Math.max(0, Math.min(el.scrollLeft + dominantDelta, maxScrollLeft))
+      if (Math.abs(nextScrollLeft - el.scrollLeft) < 1) return
+
+      e.preventDefault()
+      el.scrollLeft = nextScrollLeft
+      syncAttachmentRailState()
+    },
+    [syncAttachmentRailState],
+  )
+
+  useEffect(() => {
+    const el = attachmentRailRef.current
+
+    if (!el || attachments.length === 0) {
+      prevAttachmentCountRef.current = 0
+      setAttachmentsOverflowing(false)
+      setShowAttachmentLeftFade(false)
+      setShowAttachmentRightFade(false)
+      return
+    }
+
+    let frameId = requestAnimationFrame(() => {
+      const attachmentCountIncreased = attachments.length > prevAttachmentCountRef.current
+      if (attachmentCountIncreased) {
+        el.scrollTo({
+          left: el.scrollWidth,
+          behavior: prevAttachmentCountRef.current === 0 ? 'auto' : 'smooth',
+        })
+      }
+      syncAttachmentRailState()
+      prevAttachmentCountRef.current = attachments.length
+    })
+
+    const measure = () => syncAttachmentRailState()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    if (el.firstElementChild instanceof HTMLElement) {
+      ro.observe(el.firstElementChild)
+    }
+    window.addEventListener('resize', measure)
+
+    return () => {
+      cancelAnimationFrame(frameId)
+      ro.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [attachments.length, syncAttachmentRailState])
 
   // 计算
   const canSend = (text.trim().length > 0 || attachments.length > 0) && !disabled
@@ -1053,12 +1135,37 @@ function InputBoxComponent({
                   <div className="overflow-hidden">
                     {/* Attachments Preview - 显示在输入框上方 */}
                     <div
-                      className={`overflow-hidden transition-all duration-300 ease-out ${
-                        attachments.length > 0 ? 'max-h-44 opacity-100' : 'max-h-0 opacity-0'
+                      className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+                        attachments.length > 0 ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
                       }`}
                     >
-                      <div className="max-h-40 overflow-y-auto overscroll-contain px-4 pt-3 pb-1 custom-scrollbar">
-                        <AttachmentPreview attachments={attachments} onRemove={handleRemoveAttachment} />
+                      <div className="overflow-hidden">
+                        <div className="px-4 pt-3 pb-1">
+                          <div className="relative">
+                            <div
+                              ref={attachmentRailRef}
+                              onScroll={syncAttachmentRailState}
+                              onWheel={handleAttachmentRailWheel}
+                              className="overflow-x-auto overflow-y-hidden overscroll-x-contain no-scrollbar touch-pan-x"
+                              style={{ WebkitOverflowScrolling: 'touch' }}
+                            >
+                              <AttachmentPreview
+                                attachments={attachments}
+                                onRemove={handleRemoveAttachment}
+                                variant="rail"
+                                className="pr-4"
+                              />
+                            </div>
+
+                            {attachmentsOverflowing && showAttachmentLeftFade && (
+                              <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-bg-000 via-bg-000/95 to-transparent" />
+                            )}
+
+                            {attachmentsOverflowing && showAttachmentRightFade && (
+                              <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-bg-000 via-bg-000/95 to-transparent" />
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
 

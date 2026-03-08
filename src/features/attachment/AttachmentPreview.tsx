@@ -7,7 +7,7 @@ interface AttachmentPreviewProps {
   className?: string
   size?: 'sm' | 'md'
   expandable?: boolean
-  variant?: 'wrap' | 'list' | 'grid'
+  variant?: 'wrap' | 'list' | 'grid' | 'rail'
   /** @deprecated use variant='list' or variant='wrap' */
   direction?: 'row' | 'column'
 }
@@ -36,12 +36,14 @@ export function AttachmentPreview({
     wrap: 'flex flex-wrap',
     list: 'flex flex-col items-end', // List aligns to end (user message)
     grid: 'grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-2 w-full',
+    rail: 'inline-flex min-w-max snap-x snap-proximity flex-nowrap items-start',
   }[mode]
 
   const itemClasses = {
     wrap: 'w-[140px]',
     list: 'w-full max-w-[280px]', // Slightly wider in list
     grid: 'w-full min-w-0', // min-w-0 required for flex/grid truncation
+    rail: 'w-[140px] shrink-0 snap-start',
   }[mode]
 
   return (
