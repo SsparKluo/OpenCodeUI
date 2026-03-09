@@ -4,20 +4,19 @@
 // ============================================
 
 use futures_util::StreamExt;
-use papaya::HashMap as PaHashMap;
 use serde::{Deserialize, Serialize};
-#[cfg(not(target_os = "android"))]
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{ipc::Channel, Manager, State};
 
 // Desktop-only imports for service management
 #[cfg(not(target_os = "android"))]
-use std::process::{Command, Stdio};
+use papaya::HashMap as PaHashMap;
 #[cfg(not(target_os = "android"))]
-use std::sync::atomic::AtomicBool;
+use std::{
+    process::{Command, Stdio},
+    sync::{atomic::AtomicBool, Arc},
+};
 #[cfg(not(target_os = "android"))]
 use tauri::Emitter;
 
@@ -286,14 +285,14 @@ mod tests {
 #[cfg(not(target_os = "android"))]
 struct OpenDirectoryState {
     /// per-window 待处理目录: window label → directory path
-    pending: Mutex<HashMap<String, String>>,
+    pending: PaHashMap<String, Arc<str>>,
 }
 
 #[cfg(not(target_os = "android"))]
 impl Default for OpenDirectoryState {
     fn default() -> Self {
         Self {
-            pending: Mutex::new(HashMap::new()),
+            pending: PaHashMap::new(),
         }
     }
 }
@@ -318,8 +317,12 @@ fn extract_directory_from_args(args: &[String]) -> Option<String> {
 fn get_cli_directory(
     window: tauri::Window,
     state: State<'_, OpenDirectoryState>,
-) -> Option<String> {
-    state.pending.lock().ok()?.remove(window.label())
+) -> Option<Arc<str>> {
+    state
+        .pending
+        .pin()
+        .remove(window.label())
+        .map(|str| str.clone())
 }
 
 // ============================================
@@ -514,9 +517,8 @@ fn create_new_window(app: &tauri::AppHandle, directory: Option<String>) {
         if let Some(state) = app.try_state::<OpenDirectoryState>() {
             state
                 .pending
-                .lock()
-                .unwrap()
-                .insert(label.clone(), dir.clone());
+                .pin()
+                .insert(label.clone(), Arc::from(dir.clone()));
         }
     }
 
@@ -578,9 +580,8 @@ pub fn run() {
                     if let Some(state) = app.try_state::<OpenDirectoryState>() {
                         state
                             .pending
-                            .lock()
-                            .unwrap()
-                            .insert("main".to_string(), dir);
+                            .pin()
+                            .insert("main".to_string(), Arc::from(dir));
                     }
                 }
             }

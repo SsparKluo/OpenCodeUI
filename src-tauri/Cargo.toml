@@ -16,7 +16,6 @@ name = "app_lib"
 futures-util = "0.3"
 log = "0.4"
 papaya = "0.2.3"
-parking_lot = { version = "0.12.5", features = ["hardware-lock-elision"] }
 reqwest = { version = "0.12", default-features = false, features = [
   "rustls-tls",
   "stream"
