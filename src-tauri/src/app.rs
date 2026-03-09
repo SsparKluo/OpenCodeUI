@@ -330,11 +330,12 @@ fn get_cli_directory(
 #[cfg(not(target_os = "android"))]
 mod service {
     use super::*;
+    use std::sync::atomic::AtomicU32;
 
     /// 跟踪我们是否启动了 opencode serve 进程
     pub struct ServiceState {
         /// 我们启动的子进程 PID
-        pub child_pid: Mutex<Option<u32>>,
+        pub child_pid: AtomicU32,
         /// 是否由我们启动（用于关闭时判断是否需要询问）
         pub we_started: AtomicBool,
     }
@@ -342,7 +343,7 @@ mod service {
     impl Default for ServiceState {
         fn default() -> Self {
             Self {
-                child_pid: Mutex::new(None),
+                child_pid: AtomicU32::new(0),
                 we_started: AtomicBool::new(false),
             }
         }
@@ -446,7 +447,7 @@ mod service {
         let pid = child.id();
         log::info!("Started opencode serve, PID: {}", pid);
 
-        *state.child_pid.lock().map_err(|e| e.to_string())? = Some(pid);
+        state.child_pid.store(pid, Ordering::SeqCst);
         state.we_started.store(true, Ordering::SeqCst);
 
         for _ in 0..30 {
@@ -464,10 +465,10 @@ mod service {
     /// 停止 opencode serve
     #[tauri::command]
     pub async fn stop_opencode_service(state: State<'_, ServiceState>) -> Result<(), String> {
-        let pid = state.child_pid.lock().map_err(|e| e.to_string())?.take();
+        let pid = state.child_pid.load(Ordering::SeqCst);
         state.we_started.store(false, Ordering::SeqCst);
 
-        if let Some(pid) = pid {
+        if pid > 0 {
             log::info!("Stopping opencode serve, PID: {}", pid);
             kill_process_by_pid(pid);
         }
@@ -489,8 +490,8 @@ mod service {
         stop_service: bool,
     ) -> Result<(), String> {
         if stop_service {
-            let pid = state.child_pid.lock().map_err(|e| e.to_string())?.take();
-            if let Some(pid) = pid {
+            let pid = state.child_pid.load(Ordering::SeqCst);
+            if pid > 0 {
                 log::info!("Closing app and stopping opencode serve, PID: {}", pid);
                 kill_process_by_pid(pid);
             }
