@@ -129,10 +129,11 @@ export const ReasoningPartView = memo(function ReasoningPartView({ part, isStrea
         >
           <div ref={summaryContainerRef} className="relative min-w-0 flex-1 overflow-hidden">
             <span className="relative inline-block min-w-0 max-w-full align-top">
-              <span className={`block min-w-0 italic ${summaryClassName}`}>
+              <span
+                className={`block min-w-0 italic ${summaryClassName} ${isPartStreaming ? 'reasoning-shimmer-text' : ''}`}
+              >
                 {expanded ? expandedMetaText : summaryText}
               </span>
-              {isPartStreaming && <span aria-hidden="true" className="reasoning-breath-bar" />}
             </span>
             <span
               ref={summaryMeasureRef}

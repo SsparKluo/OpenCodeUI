@@ -773,6 +773,39 @@ textarea.custom-scrollbar::-webkit-scrollbar-thumb {
   animation: breathe 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+@keyframes reasoning-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.reasoning-shimmer-text {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--text-200)) 0%,
+    hsl(var(--text-200)) 35%,
+    hsl(var(--text-100)) 50%,
+    hsl(var(--text-200)) 65%,
+    hsl(var(--text-200)) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: reasoning-shimmer 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reasoning-shimmer-text {
+    animation: none !important;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
 @keyframes reasoning-breath-bar {
   0%,
   100% {
