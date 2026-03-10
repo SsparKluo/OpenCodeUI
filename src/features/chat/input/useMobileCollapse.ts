@@ -129,6 +129,27 @@ export function useMobileCollapse({
     }
   }, [isFocused])
 
+  // ---- isFocused 逃逸阀 ----
+  // 场景：用户点了容器内按钮（如 agent selector），handleBlur 正确阻止了收起，
+  // 但此后 textarea 不再聚焦，isFocused 卡在 true。
+  // 需要监听 document pointerdown：如果点击/触摸发生在容器外部 → 清除 isFocused。
+  // 同时，滚动事件也应该能清除（用户在 chat 区域滑动 = 离开输入区域）。
+  useEffect(() => {
+    if (!isFocused || !isMobile) return
+
+    const handleOutsidePointerDown = (e: PointerEvent) => {
+      // 点击在容器内部，不清除
+      if (inputContainerRef.current?.contains(e.target as Node)) return
+      setIsFocused(false)
+    }
+
+    // 使用 capture 确保在任何 stopPropagation 之前捕获
+    document.addEventListener('pointerdown', handleOutsidePointerDown, { capture: true })
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointerDown, { capture: true })
+    }
+  }, [isFocused, isMobile, inputContainerRef])
+
   // ---- 持续追踪展开态内容区高度 ----
   useEffect(() => {
     const el = contentWrapRef.current
