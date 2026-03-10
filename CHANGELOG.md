@@ -1,5 +1,30 @@
 # Changelog
 
+## [v0.1.13] - 2026-03-10
+
+- fix: SSE reconnect race conditions and stale timeout constant (7614d53)
+- test: add unit tests for HTTP module and Tauri environment detection (79b77af)
+- chore: eliminate all 8 lint warnings (0 errors, 0 warnings) (b312bb6)
+- fix: URL-encode query string values in buildQueryString (f6a434e)
+- fix: add AbortController-based timeout to HTTP request() (7962278)
+- fix: pending permission/question cache supports multiple requests per session (b421172)
+- fix: SSE parser now handles CRLF line endings and multi-line data correctly (d4553d5)
+- chore: remove dead storage key exports (WIDE_MODE, THEME_MODE, SIDEBAR_WIDTH, MODEL_VARIANT_PREFIX) (2901c99)
+- refactor: replace bare console.error with unified error handlers across 14 files (7a0c86c)
+- refactor: move theme/wideMode into themeStore, eliminate prop drilling through Sidebar and SettingsDialog (9c8b2d7)
+- refactor: split messageStore into store, types, and React hooks layers (caef036)
+- refactor: extract App.tsx hooks (useViewportHeight, useCancelHint, useCloseServiceDialog) (2dd70e3)
+- refactor: split SidePanel into focused sidebar components (673db54)
+- refactor: extract InputBox utility functions to input/inputUtils.ts (a1c0eee)
+- refactor: split SettingsDialog into focused component files (72f5ed4)
+- refactor: consolidate duplicated formatting functions into utils/formatUtils.ts (a981c89)
+- refactor: deduplicate diff content extraction (fad37d4)
+- refactor: extract ModalShell to unify modal overlay infrastructure (ae9f96e)
+- chore: remove unnecessary eslint-disable in logger.ts (118740c)
+- chore: clean up dependencies (0c50ac0)
+- refactor: add dev-only logger, replace bare console.log with logger.log (91fc303)
+- refactor: remove dead code files (test-shiki.ts, editorUtils.ts, toolUtils.ts) (3a3f37a)
+
 ## [v0.1.12] - 2026-03-09
 
 - fix: preserve changelog ordering during release prep (039b906)
