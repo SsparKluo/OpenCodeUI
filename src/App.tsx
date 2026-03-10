@@ -15,13 +15,15 @@ import { RightPanel } from './components/RightPanel'
 import { OutlineIndex } from './components/OutlineIndex'
 import { BottomPanel } from './components/BottomPanel'
 import { useTheme, useModels, useModelSelection, useChatSession, useGlobalKeybindings } from './hooks'
+import { useViewportHeight } from './hooks/useViewportHeight'
+import { useCancelHint } from './hooks/useCancelHint'
+import { useCloseServiceDialog } from './hooks/useCloseServiceDialog'
 import type { KeybindingHandlers } from './hooks/useKeybindings'
 import { keybindingStore } from './store/keybindingStore'
 import { layoutStore } from './store/layoutStore'
 import { STORAGE_KEY_WIDE_MODE } from './constants'
 import { restoreModelSelection } from './utils/sessionHelpers'
 import { findModelByKey } from './utils/modelUtils'
-import { isTauri } from './utils/tauri'
 import type { Attachment } from './api'
 import { createPtySession } from './api/pty'
 import { autoApproveStore } from './store/autoApproveStore'
@@ -43,13 +45,6 @@ function App() {
   // ============================================
   const chatAreaRef = useRef<ChatAreaHandle>(null)
   const modelSelectorRef = useRef<ModelSelectorHandle>(null)
-  const lastEscTimeRef = useRef(0)
-  const escHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // ============================================
-  // Cancel Hint (double-Esc to abort)
-  // ============================================
-  const [showCancelHint, setShowCancelHint] = useState(false)
 
   // ============================================
   // Full Auto Hint
@@ -134,42 +129,8 @@ function App() {
     })
   }, [])
 
-  // Viewport height tracking
-  // - Tauri Android: 原生 setPadding 让 WebView 自动 resize，直接用 window.innerHeight
-  // - Browser/PWA: 通过 visualViewport 计算键盘遮挡区域
-  useEffect(() => {
-    const root = document.documentElement
-    const isTauriApp = root.classList.contains('tauri-app')
-
-    if (isTauriApp) {
-      // Tauri: 原生层已处理键盘 resize，只需跟踪 innerHeight
-      const updateAppHeight = () => {
-        root.style.setProperty('--app-height', `${window.innerHeight}px`)
-      }
-      updateAppHeight()
-      window.addEventListener('resize', updateAppHeight)
-      return () => window.removeEventListener('resize', updateAppHeight)
-    }
-
-    // Browser/PWA: 用 visualViewport 检测键盘
-    const updateViewport = () => {
-      const viewport = window.visualViewport
-      if (!viewport) return
-      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
-      root.style.setProperty('--keyboard-inset-bottom', `${Math.round(inset)}px`)
-    }
-    updateViewport()
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', updateViewport)
-      window.visualViewport.addEventListener('scroll', updateViewport)
-    }
-    return () => {
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', updateViewport)
-        window.visualViewport.removeEventListener('scroll', updateViewport)
-      }
-    }
-  }, [])
+  // Viewport height tracking (移动端键盘适配)
+  useViewportHeight()
 
   // ============================================
   // Wide Mode
@@ -266,6 +227,11 @@ function App() {
     handleCopyLastResponse,
     restoreAgentFromMessage,
   } = useChatSession({ chatAreaRef, currentModel, refetchModels })
+
+  // ============================================
+  // Cancel Hint (double-Esc to abort)
+  // ============================================
+  const { showCancelHint, handleCancelMessage } = useCancelHint(isStreaming, handleAbort)
 
   // 赋值 ref（需在 useChatSession 之后，因为 handleVisibleMessageIdsChange 来自该 hook）
   handleVisibleMessageIdsChangeRef.current = handleVisibleMessageIdsChange
@@ -402,29 +368,7 @@ function App() {
       toggleAgent: handleToggleAgentWithSync,
 
       // Message
-      cancelMessage: () => {
-        if (!isStreaming) return
-
-        const now = Date.now()
-        const elapsed = now - lastEscTimeRef.current
-
-        if (elapsed < 600) {
-          // 双击确认 → 真正取消
-          lastEscTimeRef.current = 0
-          setShowCancelHint(false)
-          if (escHintTimerRef.current) clearTimeout(escHintTimerRef.current)
-          handleAbort()
-        } else {
-          // 第一次按 → 显示提示
-          lastEscTimeRef.current = now
-          setShowCancelHint(true)
-          if (escHintTimerRef.current) clearTimeout(escHintTimerRef.current)
-          escHintTimerRef.current = setTimeout(() => {
-            setShowCancelHint(false)
-            lastEscTimeRef.current = 0
-          }, 1500)
-        }
-      },
+      cancelMessage: handleCancelMessage,
       copyLastResponse: handleCopyLastResponse,
       toggleFullAuto: () => {
         autoApproveStore.setFullAuto(!autoApproveStore.fullAuto)
@@ -441,8 +385,7 @@ function App() {
       handleNextSession,
       handleNewTerminal,
       handleToggleAgentWithSync,
-      isStreaming,
-      handleAbort,
+      handleCancelMessage,
       handleCopyLastResponse,
     ],
   )
@@ -625,38 +568,8 @@ function App() {
 
   // ============================================
   // Close Service Dialog (Tauri desktop only)
-  // 监听 Rust 侧的 close-requested 事件
   // ============================================
-  const [showCloseDialog, setShowCloseDialog] = useState(false)
-
-  useEffect(() => {
-    if (!isTauri()) return
-
-    let unlisten: (() => void) | undefined
-
-    // 动态 import Tauri event API
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('close-requested', () => {
-        setShowCloseDialog(true)
-      }).then(fn => {
-        unlisten = fn
-      })
-    })
-
-    return () => {
-      unlisten?.()
-    }
-  }, [])
-
-  const handleCloseDialogConfirm = useCallback(async (stopService: boolean) => {
-    if (!isTauri()) return
-    try {
-      const { invoke } = await import('@tauri-apps/api/core')
-      await invoke('confirm_close_app', { stopService })
-    } catch (e) {
-      console.error('[CloseDialog] Failed to close app:', e)
-    }
-  }, [])
+  const { showCloseDialog, handleCloseDialogConfirm, handleCloseDialogCancel } = useCloseServiceDialog()
 
   // ============================================
   // Dialog Collapsed State
@@ -673,18 +586,6 @@ function App() {
   useEffect(() => {
     if (questionRequestId) setQuestionCollapsed(false)
   }, [questionRequestId])
-
-  // streaming 结束时清理 cancel hint
-  useEffect(() => {
-    if (!isStreaming) {
-      setShowCancelHint(false)
-      lastEscTimeRef.current = 0
-      if (escHintTimerRef.current) {
-        clearTimeout(escHintTimerRef.current)
-        escHintTimerRef.current = null
-      }
-    }
-  }, [isStreaming])
 
   const revertedMessage = revertedContent
     ? {
@@ -910,7 +811,7 @@ function App() {
         <CloseServiceDialog
           isOpen={showCloseDialog}
           onConfirm={handleCloseDialogConfirm}
-          onCancel={() => setShowCloseDialog(false)}
+          onCancel={handleCloseDialogCancel}
         />
       </Suspense>
     </div>
