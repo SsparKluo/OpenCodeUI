@@ -8,7 +8,6 @@
 
 const isDev = import.meta.env.DEV
 
-/* eslint-disable no-console */
 const noop = (..._args: unknown[]) => {}
 
 export const logger = {
@@ -21,4 +20,3 @@ export const logger = {
   /** Always outputs — indicates a real error */
   error: console.error.bind(console),
 }
-/* eslint-enable no-console */
