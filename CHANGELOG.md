@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.1.15] - 2026-03-10
+
+- fix: slow scroll during streaming causes jitter by pulling user back to bottom (860683e)
+- fix: isFocused stuck after toolbar button click prevents capsule collapse (aaaa727)
+- refactor: extract FloatingActions and CollapsedCapsule components from InputBox (273bd98)
+- refactor: extract useInputHistory hook from InputBox (d920da9)
+- refactor: extract useAttachmentRail hook from InputBox (2150d82)
+- refactor: extract useMobileCollapse hook from InputBox (c5fd39b)
+- fix: mobile input capsule state not resetting on session switch + blur collapsing on toolbar interaction (474938e)
+
 ## [v0.1.14] - 2026-03-10
 
 - fix: session switch scroll + eliminate all content flicker during load (d823799)
