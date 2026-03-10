@@ -8,6 +8,7 @@
 // 3. 同步路由和 store 的 currentSessionId
 
 import { useCallback, useEffect, useRef } from 'react'
+import { logger } from '../utils/logger'
 import { messageStore, type RevertState, type SessionState } from '../store'
 import {
   getSessionMessages,
@@ -223,7 +224,7 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
         historyLimitRef.current.get(sessionId) ?? Math.max(INITIAL_MESSAGE_LIMIT, state.messages.length)
       let currentJson = historyJsonRef.current.get(sessionId) ?? serializeStateMessageIds(state)
 
-      console.log(
+      logger.log(
         `[SessionManager] loadMore:start session=${sessionId} limit=${currentLimit} localCount=${state.messages.length} localHasMore=${state.hasMoreHistory} first=${state.messages[0]?.info.id ?? 'none'} last=${state.messages[state.messages.length - 1]?.info.id ?? 'none'}`,
       )
 
@@ -231,7 +232,7 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
         const targetLimit = Math.min(currentLimit + HISTORY_LOAD_BATCH_SIZE, MAX_HISTORY_MESSAGES)
 
         if (targetLimit <= currentLimit) {
-          console.log(
+          logger.log(
             `[SessionManager] loadMore:no-more session=${sessionId} reason=limit-cap currentLimit=${currentLimit}`,
           )
           messageStore.prependMessages(sessionId, [], false)
@@ -243,13 +244,13 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
         historyLimitRef.current.set(sessionId, targetLimit)
         historyJsonRef.current.set(sessionId, nextJson)
 
-        console.log(
+        logger.log(
           `[SessionManager] loadMore:fetched session=${sessionId} targetLimit=${targetLimit} apiCount=${apiMessages.length} jsonChanged=${currentJson !== nextJson} first=${apiMessages[0]?.info.id ?? 'none'} last=${apiMessages[apiMessages.length - 1]?.info.id ?? 'none'}`,
         )
 
         // 核心规则：新拉取 JSON 与本地缓存 JSON 相同 => 没有更多历史
         if (currentJson === nextJson) {
-          console.log(
+          logger.log(
             `[SessionManager] loadMore:no-more session=${sessionId} reason=json-unchanged apiCount=${apiMessages.length}`,
           )
           messageStore.prependMessages(sessionId, [], false)
@@ -268,7 +269,7 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
         const hasMore = apiMessages.length >= targetLimit && targetLimit < MAX_HISTORY_MESSAGES
 
         if (prependCandidates.length > 0) {
-          console.log(
+          logger.log(
             `[SessionManager] loadMore:prepend session=${sessionId} prependCount=${prependCandidates.length} hasMore=${hasMore} first=${prependCandidates[0]?.info.id ?? 'none'} last=${prependCandidates[prependCandidates.length - 1]?.info.id ?? 'none'}`,
           )
           messageStore.prependMessages(sessionId, prependCandidates, hasMore)
@@ -276,7 +277,7 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
         }
 
         // JSON 有变化但暂无可前插历史：继续扩大 limit 强拉
-        console.log(
+        logger.log(
           `[SessionManager] loadMore:changed-no-prepend-continue session=${sessionId} targetLimit=${targetLimit} apiCount=${apiMessages.length} hasMore=${hasMore}`,
         )
 
@@ -436,7 +437,7 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
           historyJsonRef.current.set(sessionId, serializeStateMessageIds(cached))
         }
 
-        console.log('[SessionManager] switch:use-cached', {
+        logger.log('[SessionManager] switch:use-cached', {
           sessionId,
           cachedCount: cached.messages.length,
           cachedLimit,
@@ -444,7 +445,7 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
         return
       }
 
-      console.log('[SessionManager] switch:fetch-session', { sessionId })
+      logger.log('[SessionManager] switch:fetch-session', { sessionId })
       void loadSessionRef.current(sessionId)
     }
   }, [sessionId])

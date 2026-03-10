@@ -6,6 +6,7 @@ import { useDirectory } from '../hooks'
 import { createPtySession, removePtySession } from '../api/pty'
 import type { TerminalTab } from '../store/layoutStore'
 import { ResizablePanel } from './ui/ResizablePanel'
+import { logger } from '../utils/logger'
 
 const SessionChangesPanel = lazy(() =>
   import('./SessionChangesPanel').then(module => ({ default: module.SessionChangesPanel })),
@@ -53,9 +54,9 @@ export const RightPanel = memo(function RightPanel() {
   // 创建新终端
   const handleNewTerminal = useCallback(async () => {
     try {
-      console.log('[RightPanel] Creating PTY session, directory:', currentDirectory)
+      logger.log('[RightPanel] Creating PTY session, directory:', currentDirectory)
       const pty = await createPtySession({ cwd: currentDirectory }, currentDirectory)
-      console.log('[RightPanel] PTY created:', pty)
+      logger.log('[RightPanel] PTY created:', pty)
       const tab: TerminalTab = {
         id: pty.id,
         title: pty.title || 'Terminal',

@@ -20,6 +20,7 @@ import {
   MESSAGE_PREFETCH_BUFFER,
 } from '../../constants'
 import { useIsMobile } from '../../hooks'
+import { logger } from '../../utils/logger'
 
 interface ChatAreaProps {
   messages: Message[]
@@ -199,7 +200,7 @@ export const ChatArea = memo(
           return
         }
 
-        console.log(
+        logger.log(
           `[ChatArea] startReached:trigger session=${sessionId ?? 'none'} visibleCount=${visibleMessagesCountRef.current} prependedCount=${virtualPrependedCountRef.current} storePrepended=${prependedCount}`,
         )
 
@@ -210,12 +211,12 @@ export const ChatArea = memo(
           await Promise.all([onLoadMore(), minDelay])
 
           const latestHasMore = sessionId ? messageStore.getSessionState(sessionId)?.hasMoreHistory : hasMoreHistory
-          console.log(
+          logger.log(
             `[ChatArea] startReached:done session=${sessionId ?? 'none'} visibleCount=${visibleMessagesCountRef.current} prependedCount=${virtualPrependedCountRef.current} storePrepended=${prependedCount} hasMore=${String(latestHasMore)}`,
           )
 
           if (sessionId && hadMoreBeforeLoad && !latestHasMore) {
-            console.log('[ChatArea] startReached:no-more-hint', { sessionId })
+            logger.log('[ChatArea] startReached:no-more-hint', { sessionId })
             triggerNoMoreHint()
           }
         } finally {
@@ -317,7 +318,7 @@ export const ChatArea = memo(
 
         const timer = setTimeout(() => {
           if (!isLoadingMoreRef.current) {
-            console.log(`[ChatArea] startReached:auto-chain session=${sessionId ?? 'none'}`)
+            logger.log(`[ChatArea] startReached:auto-chain session=${sessionId ?? 'none'}`)
             void handleLoadMore()
           }
         }, 120)

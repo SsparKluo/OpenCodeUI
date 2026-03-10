@@ -10,6 +10,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { getPtyConnectUrl, updatePtySession } from '../api/pty'
 import { layoutStore } from '../store/layoutStore'
+import { logger } from '../utils/logger'
 
 // ============================================
 // 终端主题 - 与应用主题配合
@@ -210,17 +211,17 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
       fitAddon.fit()
 
       const wsUrl = getPtyConnectUrl(ptyId, directory)
-      console.log('[Terminal] Connecting to:', wsUrl, reconnectAttempt > 0 ? `(reconnect #${reconnectAttempt})` : '')
+      logger.log('[Terminal] Connecting to:', wsUrl, reconnectAttempt > 0 ? `(reconnect #${reconnectAttempt})` : '')
       ws = new WebSocket(wsUrl)
       wsRef.current = ws
 
       ws.onopen = () => {
-        console.log('[Terminal] WebSocket connected:', ptyId)
+        logger.log('[Terminal] WebSocket connected:', ptyId)
         if (!mountedRef.current) return
         reconnectAttempt = 0 // 重置重连计数
         layoutStore.updateTerminalTab(ptyId, { status: 'connected' })
         const { cols, rows } = terminal
-        console.log('[Terminal] Sending size:', cols, 'x', rows)
+        logger.log('[Terminal] Sending size:', cols, 'x', rows)
         updatePtySession(ptyId, { size: { cols, rows } }, directory).catch(() => {})
       }
 
@@ -230,7 +231,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
       }
 
       ws.onclose = e => {
-        console.log('[Terminal] WebSocket closed:', ptyId, e.code, e.reason)
+        logger.log('[Terminal] WebSocket closed:', ptyId, e.code, e.reason)
         if (!mountedRef.current) return
         layoutStore.updateTerminalTab(ptyId, { status: 'disconnected' })
 
@@ -253,7 +254,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
       }
 
       ws.onerror = e => {
-        console.log('[Terminal] WebSocket error:', ptyId, e)
+        logger.log('[Terminal] WebSocket error:', ptyId, e)
         // onclose 会在 onerror 之后触发，重连逻辑交给 onclose
       }
 

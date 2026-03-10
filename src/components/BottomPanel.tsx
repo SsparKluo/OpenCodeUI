@@ -5,6 +5,7 @@ import { layoutStore, useLayoutStore, type TerminalTab, type PanelTab } from '..
 import { createPtySession, removePtySession, listPtySessions } from '../api/pty'
 import { useMessageStore } from '../store'
 import { ResizablePanel } from './ui/ResizablePanel'
+import { logger } from '../utils/logger'
 
 const Terminal = lazy(() => import('./Terminal').then(module => ({ default: module.Terminal })))
 const SessionChangesPanel = lazy(() =>
@@ -62,7 +63,7 @@ export const BottomPanel = memo(function BottomPanel({ directory }: BottomPanelP
 
         // 拉取新目录下的 PTY 会话
         const sessions = await listPtySessions(directory)
-        console.log('[BottomPanel] PTY sessions for', directory, ':', sessions)
+        logger.log('[BottomPanel] PTY sessions for', directory, ':', sessions)
 
         for (const pty of sessions) {
           const tab: TerminalTab = {
@@ -85,9 +86,9 @@ export const BottomPanel = memo(function BottomPanel({ directory }: BottomPanelP
   // 创建新终端
   const handleNewTerminal = useCallback(async () => {
     try {
-      console.log('[BottomPanel] Creating PTY session, directory:', directory)
+      logger.log('[BottomPanel] Creating PTY session, directory:', directory)
       const pty = await createPtySession({ cwd: directory }, directory)
-      console.log('[BottomPanel] PTY created:', pty)
+      logger.log('[BottomPanel] PTY created:', pty)
       const tab: TerminalTab = {
         id: pty.id,
         title: pty.title || 'Terminal',

@@ -28,6 +28,7 @@ import {
 } from '../api/mcp'
 import type { MCPStatus, McpServerConfig } from '../types/api/mcp'
 import { useDirectory } from '../hooks'
+import { logger } from '../utils/logger'
 
 // ============================================
 // Types
@@ -59,7 +60,7 @@ export const McpPanel = memo(function McpPanel({ isResizing: _isResizing }: McpP
     try {
       setError(null)
       const statusResponse = await getMcpStatus(currentDirectory)
-      console.log('[McpPanel] Status:', statusResponse)
+      logger.log('[McpPanel] Status:', statusResponse)
 
       // 构建 server entries
       const entries: ServerEntry[] = Object.entries(statusResponse).map(([name, status]) => ({

@@ -8,6 +8,7 @@ import { Terminal } from './Terminal'
 import { PlusIcon, CloseIcon, TerminalIcon, ChevronDownIcon } from './Icons'
 import { layoutStore, useLayoutStore, type TerminalTab } from '../store/layoutStore'
 import { createPtySession, removePtySession, listPtySessions } from '../api/pty'
+import { logger } from '../utils/logger'
 
 // 常量
 const MIN_HEIGHT = 100
@@ -38,7 +39,7 @@ export const TerminalPanel = memo(function TerminalPanel({ directory }: Terminal
       try {
         setIsRestoring(true)
         const sessions = await listPtySessions(directory)
-        console.log('[TerminalPanel] Found existing PTY sessions:', sessions)
+        logger.log('[TerminalPanel] Found existing PTY sessions:', sessions)
 
         if (sessions.length > 0) {
           // 恢复所有已有的 sessions，但不自动打开面板
@@ -67,9 +68,9 @@ export const TerminalPanel = memo(function TerminalPanel({ directory }: Terminal
   // 创建新终端
   const handleNewTerminal = useCallback(async () => {
     try {
-      console.log('[TerminalPanel] Creating PTY session, directory:', directory)
+      logger.log('[TerminalPanel] Creating PTY session, directory:', directory)
       const pty = await createPtySession({ cwd: directory }, directory)
-      console.log('[TerminalPanel] PTY created:', pty)
+      logger.log('[TerminalPanel] PTY created:', pty)
       const tab: TerminalTab = {
         id: pty.id,
         title: pty.title || 'Terminal',

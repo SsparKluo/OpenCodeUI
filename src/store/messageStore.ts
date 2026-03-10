@@ -12,6 +12,7 @@ import type { Message, Part, MessageInfo, FilePart, AgentPart } from '../types/m
 import type { ApiMessageWithParts, ApiMessage, ApiPart, ApiSession, Attachment } from '../api/types'
 import { MAX_HISTORY_MESSAGES, MESSAGE_PART_PERSIST_THRESHOLD, MESSAGE_PREFETCH_BUFFER } from '../constants'
 import { messageCacheStore } from './messageCacheStore'
+import { logger } from '../utils/logger'
 
 // ============================================
 // Types
@@ -634,7 +635,7 @@ class MessageStore {
     }
 
     if (oldestId) {
-      console.log('[MessageStore] Evicting old session:', oldestId)
+      logger.log('[MessageStore] Evicting old session:', oldestId)
       this.sessions.delete(oldestId)
       this.sessionAccessTime.delete(oldestId)
       this.purgePersistedKeysForSession(oldestId)
