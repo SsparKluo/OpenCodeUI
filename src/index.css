@@ -775,27 +775,27 @@ textarea.custom-scrollbar::-webkit-scrollbar-thumb {
 
 @keyframes reasoning-shimmer {
   0% {
-    background-position: -200% 0;
+    background-position: 200% 0;
   }
   100% {
-    background-position: 200% 0;
+    background-position: -200% 0;
   }
 }
 
 .reasoning-shimmer-text {
   background: linear-gradient(
     90deg,
-    hsl(var(--text-200)) 0%,
+    transparent 0%,
     hsl(var(--text-200)) 35%,
     hsl(var(--text-100)) 50%,
     hsl(var(--text-200)) 65%,
-    hsl(var(--text-200)) 100%
+    transparent 100%
   );
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: reasoning-shimmer 2.4s ease-in-out infinite;
+  animation: reasoning-shimmer 2.4s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
