@@ -298,8 +298,9 @@ export function useSyntaxHighlight(code: string, options: HighlightOptions & { m
 
   useEffect(() => {
     if (!enabled) {
-      // 禁用时清除 output，防止返回旧代码的高亮结果给调用方
-      setOutput(null)
+      // 禁用时保留上次结果（而非清空），避免 enabled 切换导致无意义的
+      // null → value 重渲染循环。调用方 resize 结束后 enabled 恢复为 true，
+      // 缓存命中直接返回，不会触发额外渲染。
       setIsLoading(false)
       return
     }
@@ -373,4 +374,104 @@ export function useSyntaxHighlight(code: string, options: HighlightOptions & { m
   }, [code, normalizedLang, selectedTheme, mode, enabled])
 
   return { output, isLoading }
+}
+
+// ============================================
+// Ref 版本 — tokens 不经过 React state/props
+// 用于 CodePreview 等需要处理超大 token 数组的场景
+// ============================================
+
+/**
+ * 与 useSyntaxHighlight 功能相同，但 tokens 存在 ref 里，
+ * 只通过一个自增的 version number 触发渲染。
+ * 避免 React 在 fiber 层面持有/比较巨大的 token 数组。
+ */
+export function useSyntaxHighlightRef(
+  code: string,
+  options: Omit<HighlightOptions, 'mode'> = {},
+): { tokensRef: React.RefObject<HighlightTokens | null>; version: number } {
+  const { lang = 'text', theme, enabled = true } = options
+  const normalizedLang = normalizeLanguage(lang)
+
+  const isDark = useIsDarkMode()
+  const selectedTheme = theme || getShikiTheme(isDark)
+
+  const tokensRef = useRef<HighlightTokens | null>(null)
+  const [version, setVersion] = useState(0)
+  const prevKeyRef = useRef<{ code: string; lang: string; theme: BundledTheme } | null>(null)
+
+  useEffect(() => {
+    if (!enabled) {
+      return
+    }
+
+    let cancelled = false
+    const prevKey = prevKeyRef.current
+    const isThemeOnlyChange =
+      !!prevKey && prevKey.code === code && prevKey.lang === normalizedLang && prevKey.theme !== selectedTheme
+    prevKeyRef.current = { code, lang: normalizedLang, theme: selectedTheme }
+
+    const shouldDefer = isThemeOnlyChange
+
+    // 先检查缓存
+    const cacheKey = getCacheKey(code, normalizedLang, selectedTheme)
+    const cachedResult = tokensCache.get(cacheKey)
+
+    if (cachedResult !== undefined) {
+      tokensRef.current = cachedResult
+      setVersion(v => v + 1)
+      return
+    }
+
+    // code 变了时清空 ref，version 不变所以不触发额外渲染
+    if (!isThemeOnlyChange) {
+      tokensRef.current = null
+    }
+
+    async function highlight() {
+      try {
+        const result = await highlightWithCache(code, normalizedLang, selectedTheme, 'tokens')
+        if (!cancelled) {
+          tokensRef.current = result as HighlightTokens | null
+          setVersion(v => v + 1)
+        }
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.warn('[Syntax] Shiki error:', err)
+        }
+        if (!cancelled) {
+          tokensRef.current = null
+          setVersion(v => v + 1)
+        }
+      }
+    }
+
+    const schedule = () => {
+      if (shouldDefer) {
+        const idleWindow = window as Window & IdleWindowApi
+        if (typeof idleWindow.requestIdleCallback === 'function') {
+          const idleId = idleWindow.requestIdleCallback(
+            () => {
+              void highlight()
+            },
+            { timeout: THEME_SWITCH_DISABLE_MS * 2 },
+          )
+          return () => idleWindow.cancelIdleCallback?.(idleId)
+        }
+        const timeoutId = window.setTimeout(() => highlight(), THEME_SWITCH_DISABLE_MS)
+        return () => clearTimeout(timeoutId)
+      }
+      highlight()
+      return () => {}
+    }
+
+    const cancelSchedule = schedule()
+
+    return () => {
+      cancelled = true
+      cancelSchedule()
+    }
+  }, [code, normalizedLang, selectedTheme, enabled])
+
+  return { tokensRef, version }
 }

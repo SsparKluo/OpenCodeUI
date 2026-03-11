@@ -874,7 +874,9 @@ function TextMediaPreview({ dataUrl, text, language, fileName, isResizing = fals
       {mode === 'preview' ? (
         <ImagePreview dataUrl={dataUrl} fileName={fileName} />
       ) : (
-        <CodePreview code={text} language={language} isResizing={isResizing} />
+        <div className="flex-1 min-h-0">
+          <CodePreview code={text} language={language} isResizing={isResizing} />
+        </div>
       )}
     </div>
   )

@@ -158,8 +158,8 @@ export const FullscreenViewer = memo(function FullscreenViewer(props: Fullscreen
         </div>
       </div>
 
-      {/* Content - 用 max-height 限制，减去 header 44px */}
-      <div className="overflow-auto custom-scrollbar" style={{ maxHeight: 'calc(min(90vh, 1000px) - 44px)' }}>
+      {/* Content - 用固定 height 限制（减去 header 44px），子组件各自管理滚动 */}
+      <div className="overflow-auto custom-scrollbar" style={{ height: 'calc(min(90vh, 1000px) - 44px)' }}>
         {props.mode === 'diff' && resolvedDiff ? (
           <DiffViewer
             before={resolvedDiff.before}

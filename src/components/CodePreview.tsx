@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSyntaxHighlight } from '../hooks/useSyntaxHighlight'
+import { useSyntaxHighlightRef, type HighlightTokens } from '../hooks/useSyntaxHighlight'
 
 const LINE_HEIGHT = 20
 const OVERSCAN = 5
@@ -13,24 +13,6 @@ interface CodePreviewProps {
   isResizing?: boolean
 }
 
-function truncateLine(line: string): { text: string; truncated: boolean } {
-  if (line.length <= MAX_LINE_LENGTH) {
-    return { text: line, truncated: false }
-  }
-  return {
-    text: line.slice(0, MAX_LINE_LENGTH),
-    truncated: true,
-  }
-}
-
-function truncateHtml(html: string): { html: string; truncated: boolean } {
-  if (html.length <= MAX_LINE_LENGTH * 2) {
-    return { html, truncated: false }
-  }
-
-  return { html: html.slice(0, MAX_LINE_LENGTH * 2), truncated: true }
-}
-
 export function CodePreview({ code, language, truncateLines = true, maxHeight, isResizing = false }: CodePreviewProps) {
   const lines = useMemo(() => {
     const raw = code.split('\n')
@@ -41,24 +23,17 @@ export function CodePreview({ code, language, truncateLines = true, maxHeight, i
   }, [code])
   const totalHeight = lines.length * LINE_HEIGHT
 
-  const enableHighlight = language !== 'text' && !isResizing
-  const { output: html, isLoading } = useSyntaxHighlight(code, { lang: language, enabled: enableHighlight })
+  // tokens 存在 ref 里，不经过 React state/props
+  // version 是一个自增 number，只用来通知 useMemo 重算可视行
+  const enableHighlight = language !== 'text'
+  const { tokensRef, version } = useSyntaxHighlightRef(code, {
+    lang: language,
+    enabled: enableHighlight,
+  })
 
   const containerRef = useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [containerHeight, setContainerHeight] = useState(0)
-
-  const highlightedLines = useMemo(() => {
-    if (isLoading || !html) return null
-
-    const parser = new DOMParser()
-    const doc = parser.parseFromString(html as string, 'text/html')
-    const lineElements = doc.querySelectorAll('.line')
-
-    if (lineElements.length === 0) return null
-
-    return Array.from(lineElements).map(el => el.innerHTML || '')
-  }, [html, isLoading])
 
   const { startIndex, endIndex, offsetY } = useMemo(() => {
     const start = Math.max(0, Math.floor(scrollTop / LINE_HEIGHT) - OVERSCAN)
@@ -99,31 +74,45 @@ export function CodePreview({ code, language, truncateLines = true, maxHeight, i
     setScrollTop(e.currentTarget.scrollTop)
   }, [])
 
+  // 直接在 useMemo 里读 ref，通过 version 触发重算
+  // tokens 数组本身不出现在任何 React 管线里
   const visibleLines = useMemo(() => {
+    // version 在依赖里只是触发重算的信号，不实际使用
+    void version
+    const tokens = tokensRef.current
     const result: React.ReactNode[] = []
 
     for (let i = startIndex; i < endIndex; i++) {
       const rawLine = lines[i] || ' '
-      const highlighted = highlightedLines?.[i]
-      const isHtml = highlighted && highlighted.includes('<')
+      const lineTokens = tokens?.[i]
 
       let displayContent: React.ReactNode
       let isTruncated = false
 
-      if (isHtml && highlighted) {
+      if (lineTokens && lineTokens.length > 0) {
         if (truncateLines) {
-          const { html: truncatedHtml, truncated } = truncateHtml(highlighted)
+          const { elements, truncated } = renderTokensTruncated(lineTokens)
           isTruncated = truncated
-          displayContent = <span className="whitespace-pre" dangerouslySetInnerHTML={{ __html: truncatedHtml }} />
+          displayContent = <span className="whitespace-pre">{elements}</span>
         } else {
-          displayContent = <span className="whitespace-pre" dangerouslySetInnerHTML={{ __html: highlighted }} />
+          displayContent = (
+            <span className="whitespace-pre">
+              {lineTokens.map((token, j) => (
+                <span key={j} style={token.color ? { color: token.color } : undefined}>
+                  {token.content}
+                </span>
+              ))}
+            </span>
+          )
         }
-      } else if (truncateLines) {
-        const { text, truncated } = truncateLine(highlighted || rawLine)
-        isTruncated = truncated
-        displayContent = <span className="text-text-200 whitespace-pre">{text}</span>
       } else {
-        displayContent = <span className="text-text-200 whitespace-pre">{highlighted || rawLine}</span>
+        // 无 token，纯文本 fallback
+        if (truncateLines && rawLine.length > MAX_LINE_LENGTH) {
+          isTruncated = true
+          displayContent = <span className="text-text-200 whitespace-pre">{rawLine.slice(0, MAX_LINE_LENGTH)}</span>
+        } else {
+          displayContent = <span className="text-text-200 whitespace-pre">{rawLine}</span>
+        }
       }
 
       result.push(
@@ -139,16 +128,19 @@ export function CodePreview({ code, language, truncateLines = true, maxHeight, i
       )
     }
     return result
-  }, [startIndex, endIndex, lines, highlightedLines, truncateLines])
+  }, [startIndex, endIndex, lines, version, tokensRef, truncateLines])
 
   return (
     <div
       ref={containerRef}
-      className="overflow-auto code-scrollbar"
+      className="overflow-y-auto overflow-x-hidden code-scrollbar h-full"
       onScroll={handleScroll}
       style={maxHeight !== undefined ? { maxHeight } : undefined}
     >
-      <div style={{ height: totalHeight, position: 'relative' }}>
+      {/* 虚拟滚动占位：contain: strict 隔离内部 layout，
+          外层容器宽度变化时浏览器不会对这块做 reflow */}
+      <div style={{ height: totalHeight, position: 'relative', contain: 'strict' }}>
+        {/* 可见行区域：独立横向滚动，只有 20-30 行参与 layout */}
         <div
           style={{
             position: 'absolute',
@@ -157,11 +149,55 @@ export function CodePreview({ code, language, truncateLines = true, maxHeight, i
             right: 0,
             transform: `translateY(${offsetY}px)`,
           }}
-          className="font-mono text-[11px] leading-relaxed"
+          className="font-mono text-[11px] leading-relaxed overflow-x-auto code-scrollbar"
         >
           {visibleLines}
         </div>
       </div>
     </div>
   )
+}
+
+// ============================================
+// Token 截断渲染
+// ============================================
+
+type HighlightToken = HighlightTokens[number][number]
+
+function renderTokensTruncated(lineTokens: HighlightToken[]): {
+  elements: React.ReactNode[]
+  truncated: boolean
+} {
+  const elements: React.ReactNode[] = []
+  let charCount = 0
+  let truncated = false
+
+  for (let j = 0; j < lineTokens.length; j++) {
+    const token = lineTokens[j]
+    const remaining = MAX_LINE_LENGTH - charCount
+
+    if (remaining <= 0) {
+      truncated = true
+      break
+    }
+
+    if (token.content.length > remaining) {
+      elements.push(
+        <span key={j} style={token.color ? { color: token.color } : undefined}>
+          {token.content.slice(0, remaining)}
+        </span>,
+      )
+      truncated = true
+      break
+    }
+
+    elements.push(
+      <span key={j} style={token.color ? { color: token.color } : undefined}>
+        {token.content}
+      </span>,
+    )
+    charCount += token.content.length
+  }
+
+  return { elements, truncated }
 }

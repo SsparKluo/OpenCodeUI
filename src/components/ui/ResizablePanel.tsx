@@ -77,15 +77,7 @@ export const ResizablePanel = memo(function ResizablePanel({
       document.body.style.cursor = cursor
       document.body.style.userSelect = 'none'
 
-      // 性能优化：Resize 时隐藏内容或暂停重绘 (可选，目前使用 display:none 在 contentRef 上)
-      // 之前我们是 display:none content，这样虽然性能好但体验一般（内容消失）
-      // Sidebar 是实时渲染的。为了"跟 Sidebar 一样"，我们可以尝试不隐藏内容，
-      // 但如果内容太重（Terminal），可能会卡。
-      // 这里我们保留 "resize-start" 事件，让子组件自己决定是否隐藏
       window.dispatchEvent(new CustomEvent('panel-resize-start'))
-
-      // 暂时保持 display: none 以确保流畅度，如果需要实时预览可以去掉
-      // content.style.display = 'none'
 
       const startX = e.clientX
       const startY = e.clientY
@@ -115,7 +107,6 @@ export const ResizablePanel = memo(function ResizablePanel({
         if (rafRef.current) cancelAnimationFrame(rafRef.current)
 
         if (content) {
-          // content.style.display = ''
           window.dispatchEvent(new CustomEvent('panel-resize-end'))
         }
 
