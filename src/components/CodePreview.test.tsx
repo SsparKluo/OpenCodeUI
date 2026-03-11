@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { CodePreview } from './CodePreview'
 
 vi.mock('../hooks/useSyntaxHighlight', () => ({
-  useSyntaxHighlight: () => ({
-    output: null,
-    isLoading: false,
+  useSyntaxHighlightRef: () => ({
+    tokensRef: { current: null },
+    version: 0,
   }),
 }))
 
