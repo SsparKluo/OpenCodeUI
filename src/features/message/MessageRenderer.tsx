@@ -1,4 +1,5 @@
 import { memo, useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react'
+import { animate } from 'motion'
 import { ChevronDownIcon, ChevronRightIcon, UndoIcon } from '../../components/Icons'
 import { CopyButton, SmoothHeight } from '../../components/ui'
 import { useDelayedRender } from '../../hooks'
@@ -56,6 +57,26 @@ export const MessageRenderer = memo(function MessageRenderer({
 
   return <AssistantMessageView message={message} turnDuration={turnDuration} onEnsureParts={onEnsureParts} />
 })
+
+// ============================================
+// 入场生长动画 hook — 新消息作为对话流的延续，从 height 0 平滑展开
+// ============================================
+
+function useEntryGrowAnimation(created: number) {
+  const ref = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || Date.now() - created > 3000) return
+    const targetHeight = el.scrollHeight
+    el.style.height = '0px'
+    el.style.overflow = 'hidden'
+    animate(el, { height: `${targetHeight}px` }, { duration: 0.2, ease: 'ease-out' }).then(() => {
+      el.style.height = ''
+      el.style.overflow = ''
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return ref
+}
 
 // ============================================
 // Collapsible User Text
@@ -163,6 +184,8 @@ const UserMessageView = memo(function UserMessageView({ message, onUndo, canUndo
   const shouldRenderSystemContext = useDelayedRender(showSystemContext)
   const { collapseUserMessages } = useTheme()
 
+  const wrapperRef = useEntryGrowAnimation(info.time.created)
+
   // 分离不同类型的 parts
   const textParts = parts.filter((p): p is TextPart => p.type === 'text' && !p.synthetic)
   const syntheticParts = parts.filter((p): p is TextPart => p.type === 'text' && !!p.synthetic)
@@ -173,7 +196,7 @@ const UserMessageView = memo(function UserMessageView({ message, onUndo, canUndo
   const messageText = textParts.map(p => p.text).join('')
 
   return (
-    <div className="flex flex-col items-end group">
+    <div ref={wrapperRef} className="flex flex-col items-end group">
       <div className="flex flex-col gap-1 items-end w-full">
         {/* 消息文本 */}
         {messageText && (
@@ -260,6 +283,8 @@ const AssistantMessageView = memo(function AssistantMessageView({
 }) {
   const { parts, isStreaming, info } = message
 
+  const wrapperRef = useEntryGrowAnimation(info.time.created)
+
   useEffect(() => {
     if (parts.length === 0 && onEnsureParts) {
       onEnsureParts(message.info.id)
@@ -316,7 +341,7 @@ const AssistantMessageView = memo(function AssistantMessageView({
   }
 
   return (
-    <div className="flex flex-col gap-2 w-full group">
+    <div ref={wrapperRef} className="flex flex-col gap-2 w-full group">
       {/* 消息级 SmoothHeight：streaming 时所有高度变化统一平滑过渡 */}
       <SmoothHeight isActive={!!isStreaming}>
         <div className="flex flex-col gap-2">
