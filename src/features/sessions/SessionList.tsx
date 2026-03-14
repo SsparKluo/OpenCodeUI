@@ -3,6 +3,7 @@ import { SearchIcon, PencilIcon, TrashIcon, ComposeIcon } from '../../components
 import { formatRelativeTime } from '../../utils/dateUtils'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useIsMobile } from '../../hooks'
+import { useSessionActiveEntry } from '../../store/activeSessionStore'
 import type { ApiSession } from '../../api'
 
 interface SessionListProps {
@@ -256,6 +257,18 @@ export function SessionListItem({
   const inputRef = useRef<HTMLInputElement>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const touchMoved = useRef(false)
+
+  // 活跃状态标记
+  const activeEntry = useSessionActiveEntry(session.id)
+  const activeStatus = activeEntry
+    ? activeEntry.pendingAction?.type === 'permission'
+      ? { dot: 'bg-warning-100', label: 'Awaiting Permission', pulse: false }
+      : activeEntry.pendingAction?.type === 'question'
+        ? { dot: 'bg-info-100', label: 'Awaiting Answer', pulse: false }
+        : activeEntry.status.type === 'retry'
+          ? { dot: 'bg-warning-100', label: 'Retrying', pulse: false }
+          : { dot: 'bg-success-100', label: 'Working', pulse: true }
+    : null
   const itemRef = useRef<HTMLDivElement>(null)
   const isMobile = useIsMobile()
   const isCompact = density === 'compact'
@@ -405,6 +418,18 @@ export function SessionListItem({
         <div
           className={`flex items-center ${isCompact ? 'mt-1' : 'mt-1.5'} h-4 text-[10px] text-text-400 gap-1 overflow-hidden`}
         >
+          {/* 活跃状态标记 */}
+          {activeStatus && (
+            <>
+              <span className="relative shrink-0 flex items-center justify-center w-3 h-3">
+                <span className={`absolute w-1.5 h-1.5 rounded-full ${activeStatus.dot}`} />
+                {activeStatus.pulse && (
+                  <span className={`absolute w-1.5 h-1.5 rounded-full ${activeStatus.dot} animate-ping opacity-50`} />
+                )}
+              </span>
+              <span className="opacity-30 shrink-0">·</span>
+            </>
+          )}
           {/* 时间 */}
           {session.time?.updated && (
             <span className="shrink-0 opacity-60">{formatRelativeTime(session.time.updated)}</span>

@@ -11,7 +11,7 @@
 //
 // 与 notificationStore 完全独立，不互相依赖
 
-import { useSyncExternalStore } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
 import type { SessionStatus, SessionStatusMap } from '../types/api/session'
 
 // ============================================
@@ -302,4 +302,13 @@ export function useBusySessions(): ActiveSessionEntry[] {
 
 export function useBusyCount(): number {
   return useSyncExternalStore(activeSessionStore.subscribe, activeSessionStore.getBusyCountSnapshot)
+}
+
+/** 按 sessionId 查活跃状态，不活跃时返回 undefined */
+export function useSessionActiveEntry(sessionId: string): ActiveSessionEntry | undefined {
+  const getSnapshot = useCallback(
+    () => activeSessionStore.getBusySessions().find(e => e.sessionId === sessionId),
+    [sessionId],
+  )
+  return useSyncExternalStore(activeSessionStore.subscribe, getSnapshot)
 }
