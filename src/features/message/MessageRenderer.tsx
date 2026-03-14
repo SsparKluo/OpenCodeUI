@@ -1,6 +1,6 @@
 import { memo, useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react'
 import { ChevronDownIcon, ChevronRightIcon, UndoIcon } from '../../components/Icons'
-import { CopyButton } from '../../components/ui'
+import { CopyButton, SmoothHeight } from '../../components/ui'
 import { useDelayedRender } from '../../hooks'
 import { useTheme } from '../../hooks/useTheme'
 import {
@@ -317,60 +317,65 @@ const AssistantMessageView = memo(function AssistantMessageView({
 
   return (
     <div className="flex flex-col gap-2 w-full group">
-      {renderItems.map((item: RenderItem, idx: number) => {
-        // 耗时只在最后一个含 stepFinish 的 item 上显示
-        const isLastStepFinish =
-          idx ===
-          renderItems.findLastIndex(it => (it.type === 'tool-group' ? !!it.stepFinish : it.part.type === 'step-finish'))
+      {/* 消息级 SmoothHeight：streaming 时所有高度变化统一平滑过渡 */}
+      <SmoothHeight isActive={!!isStreaming}>
+        <div className="flex flex-col gap-2">
+          {renderItems.map((item: RenderItem, idx: number) => {
+            // 耗时只在最后一个含 stepFinish 的 item 上显示
+            const isLastStepFinish =
+              idx ===
+              renderItems.findLastIndex(it =>
+                it.type === 'tool-group' ? !!it.stepFinish : it.part.type === 'step-finish',
+              )
 
-        if (item.type === 'tool-group') {
-          return (
-            <ToolGroup
-              key={item.parts[0].id}
-              parts={item.parts as ToolPart[]}
-              stepFinish={item.stepFinish}
-              duration={isLastStepFinish ? duration : undefined}
-              turnDuration={isLastStepFinish ? turnDuration : undefined}
-              isStreaming={isStreaming}
-            />
-          )
-        }
+            if (item.type === 'tool-group') {
+              return (
+                <ToolGroup
+                  key={item.parts[0].id}
+                  parts={item.parts as ToolPart[]}
+                  stepFinish={item.stepFinish}
+                  duration={isLastStepFinish ? duration : undefined}
+                  turnDuration={isLastStepFinish ? turnDuration : undefined}
+                  isStreaming={isStreaming}
+                />
+              )
+            }
 
-        const part = item.part
-        switch (part.type) {
-          case 'text':
-            return <TextPartView key={part.id} part={part as TextPart} isStreaming={isStreaming} />
-          case 'reasoning': {
-            // 通过源 parts 数组判断思考是否已结束，而非依赖 renderItems 位置
-            // 这样即使空 text part 被 renderItems 过滤，也能正确检测到思考结束
-            const reasoningDone = endedReasoningIds.has(part.id)
-            return (
-              <ReasoningPartView
-                key={part.id}
-                part={part as ReasoningPart}
-                isStreaming={isStreaming && !reasoningDone}
-              />
-            )
-          }
-          case 'step-finish':
-            return (
-              <StepFinishPartView
-                key={part.id}
-                part={part as StepFinishPart}
-                duration={isLastStepFinish ? duration : undefined}
-                turnDuration={isLastStepFinish ? turnDuration : undefined}
-              />
-            )
-          case 'subtask':
-            return <SubtaskPartView key={part.id} part={part as SubtaskPart} />
-          case 'retry':
-            return <RetryPartView key={part.id} part={part as RetryPart} />
-          case 'compaction':
-            return <CompactionPartView key={part.id} part={part as CompactionPart} />
-          default:
-            return null
-        }
-      })}
+            const part = item.part
+            switch (part.type) {
+              case 'text':
+                return <TextPartView key={part.id} part={part as TextPart} isStreaming={isStreaming} />
+              case 'reasoning': {
+                const reasoningDone = endedReasoningIds.has(part.id)
+                return (
+                  <ReasoningPartView
+                    key={part.id}
+                    part={part as ReasoningPart}
+                    isStreaming={isStreaming && !reasoningDone}
+                  />
+                )
+              }
+              case 'step-finish':
+                return (
+                  <StepFinishPartView
+                    key={part.id}
+                    part={part as StepFinishPart}
+                    duration={isLastStepFinish ? duration : undefined}
+                    turnDuration={isLastStepFinish ? turnDuration : undefined}
+                  />
+                )
+              case 'subtask':
+                return <SubtaskPartView key={part.id} part={part as SubtaskPart} />
+              case 'retry':
+                return <RetryPartView key={part.id} part={part as RetryPart} />
+              case 'compaction':
+                return <CompactionPartView key={part.id} part={part as CompactionPart} />
+              default:
+                return null
+            }
+          })}
+        </div>
+      </SmoothHeight>
 
       {/* Message-level error */}
       {messageError && <MessageErrorView error={messageError} />}
@@ -405,25 +410,13 @@ const ToolGroup = memo(function ToolGroup({ parts, stepFinish, duration, turnDur
   const totalCount = parts.length
   const isAllDone = doneCount === totalCount
 
-  // ── Single tool, NOT streaming: compact layout ──
-  // streaming 中即使只有 1 个 tool 也用 timeline 布局，避免后续变成多 tool 时 DOM 结构跳变
-  if (totalCount === 1 && !isStreaming) {
-    return (
-      <div className="flex flex-col">
-        <ToolPartView part={parts[0]} isFirst={true} isLast={true} compact={true} />
-        {stepFinish && (
-          <div className="mt-2">
-            <StepFinishPartView part={stepFinish} duration={duration} turnDuration={turnDuration} />
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // ── Timeline layout (multi-tool or streaming single-tool) ──
-  // steps header 只在多工具时显示
+  // compact: 单工具且非 streaming 时用紧凑布局（图标内联，无 timeline 连接线）
+  const isSingleCompact = totalCount === 1 && !isStreaming
+  // steps header: 仅多工具时显示
   const showStepsHeader = totalCount > 1
 
+  // 统一容器结构 — ToolPartView 始终在同一 React 树位置，
+  // streaming→idle / 1→N 工具切换时不 remount，expanded 状态不丢失
   return (
     <div className="flex flex-col">
       {showStepsHeader && (
@@ -445,26 +438,26 @@ const ToolGroup = memo(function ToolGroup({ parts, stepFinish, duration, turnDur
         </button>
       )}
 
-      {showStepsHeader ? (
-        <div
-          className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
-            expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-          }`}
-        >
-          <div className="flex flex-col overflow-hidden">
-            {shouldRenderBody &&
-              parts.map((part, idx) => (
-                <ToolPartView key={part.id} part={part} isFirst={idx === 0} isLast={idx === parts.length - 1} />
-              ))}
-          </div>
+      <div
+        className={
+          showStepsHeader
+            ? `grid transition-[grid-template-rows] duration-300 ease-in-out ${expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`
+            : ''
+        }
+      >
+        <div className={showStepsHeader ? 'flex flex-col overflow-hidden' : 'flex flex-col'}>
+          {(!showStepsHeader || shouldRenderBody) &&
+            parts.map((part, idx) => (
+              <ToolPartView
+                key={part.id}
+                part={part}
+                isFirst={idx === 0}
+                isLast={idx === parts.length - 1}
+                compact={isSingleCompact}
+              />
+            ))}
         </div>
-      ) : (
-        <div className="flex flex-col">
-          {parts.map((part, idx) => (
-            <ToolPartView key={part.id} part={part} isFirst={idx === 0} isLast={idx === parts.length - 1} />
-          ))}
-        </div>
-      )}
+      </div>
 
       {stepFinish && (
         <div className="mt-2">

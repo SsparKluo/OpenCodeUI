@@ -34,6 +34,7 @@
     "clsx": "^2.1.1",
     "diff": "^8.0.3",
     "lucide-react": "^0.576.0",
+    "motion": "^12.36.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
