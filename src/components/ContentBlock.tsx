@@ -225,14 +225,6 @@ export const ContentBlock = memo(function ContentBlock({
         }`}
       >
         <div className="overflow-hidden">
-          {/* Loading skeleton */}
-          {isLoading && !hasContent && (
-            <div className="px-3 py-3 space-y-2">
-              <div className="h-3 bg-bg-300/40 rounded animate-pulse w-3/4" />
-              <div className="h-3 bg-bg-300/40 rounded animate-pulse w-1/2" />
-            </div>
-          )}
-
           {/* Content */}
           {hasContent && (
             <div ref={contentRef} className="relative group/content">
