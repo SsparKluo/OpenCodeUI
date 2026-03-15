@@ -5,20 +5,10 @@
 // flex-direction: column-reverse 实现原生 stick-to-bottom：
 // - scrollTop=0 是底部，负值是向上滚动
 // - 新内容向上生长，浏览器自动维持底部锚定，零 JS auto-scroll
-// - IntersectionObserver 触发 loadMore
-// - useLayoutEffect 补偿 prepend 滚动偏移（方向反转）
+// - 消息反序渲染：DOM 前面=视觉底部，loadMore append 到 DOM 末尾=视觉顶部
+// - IntersectionObserver 触发 loadMore，prepend 时临时禁用 content-visibility
 
-import {
-  useRef,
-  useImperativeHandle,
-  forwardRef,
-  memo,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useState,
-} from 'react'
+import { useRef, useImperativeHandle, forwardRef, memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { animate } from 'motion/mini'
 import { MessageRenderer } from '../message'
 import { messageStore } from '../../store'
@@ -81,11 +71,11 @@ export const ChatArea = memo(
       const loadMoreRef = useRef(onLoadMore)
       loadMoreRef.current = onLoadMore
       const isLoadingRef = useRef(false)
-      const messagesRef = useRef<HTMLDivElement>(null)
       const [isLoadingMore, setIsLoadingMore] = useState(false)
-      // prepend 补偿用
-      const prevScrollHeightRef = useRef(0)
-      const prevFirstIdRef = useRef<string | null>(null)
+
+      // Guard: 防止 session 初始加载时 sentinel 在视口内立即触发 loadMore。
+      // 只有用户主动滚离底部后解除。
+      const loadMoreBlockedRef = useRef(true)
 
       const { isWideMode } = useTheme()
       const isMobile = useIsMobile()
@@ -129,6 +119,9 @@ export const ChatArea = memo(
           const prev = isAtBottomRef.current
           isAtBottomRef.current = atBottom
           if (prev !== atBottom) onAtBottomChange?.(atBottom)
+
+          // 用户滚离底部 → 解除 loadMore guard
+          if (!atBottom) loadMoreBlockedRef.current = false
         }
         el.addEventListener('scroll', onScroll, { passive: true })
         return () => el.removeEventListener('scroll', onScroll)
@@ -145,23 +138,16 @@ export const ChatArea = memo(
         if (sessionId === prevSessionIdRef.current) return
         prevSessionIdRef.current = sessionId
         isAtBottomRef.current = true
+        loadMoreBlockedRef.current = true // 重置 guard
         onAtBottomChange?.(true)
 
         requestAnimationFrame(() => {
           const el = scrollRef.current
-          if (el) el.scrollTop = 0 // column-reverse: 0 = 底部
+          if (!el) return
+          el.scrollTop = 0 // column-reverse: 0 = 底部
 
           // 消息列表整体淡入 — 一次命令式 animate，零 React 开销
-          if (messagesRef.current) {
-            animate(
-              messagesRef.current,
-              { opacity: [0, 1] },
-              {
-                duration: 0.2,
-                ease: 'easeOut',
-              },
-            )
-          }
+          animate(el, { opacity: [0, 1] }, { duration: 0.2, ease: 'easeOut' })
         })
       }, [sessionId, onAtBottomChange])
 
@@ -177,6 +163,8 @@ export const ChatArea = memo(
       // ============================================
       // Load more: IntersectionObserver on top sentinel
       // ============================================
+      // prepend 时临时 .prepending 禁用 content-visibility，
+      // 确保 column-reverse 下新节点用真实高度，避免估算高度导致跳变。
 
       useEffect(() => {
         const sentinel = topSentinelRef.current
@@ -186,6 +174,8 @@ export const ChatArea = memo(
         const observer = new IntersectionObserver(
           ([entry]) => {
             if (!entry.isIntersecting || isLoadingRef.current) return
+            if (loadMoreBlockedRef.current) return
+
             const fn = loadMoreRef.current
             if (!fn) return
 
@@ -196,13 +186,20 @@ export const ChatArea = memo(
 
             isLoadingRef.current = true
             setIsLoadingMore(true)
-            // 快照 scrollHeight 用于补偿
-            prevScrollHeightRef.current = root.scrollHeight
-            prevFirstIdRef.current = visibleMessages[0]?.info.id ?? null
+
+            // 临时禁用 content-visibility，让所有消息用真实高度
+            root.classList.add('prepending')
 
             Promise.resolve(fn()).finally(() => {
               isLoadingRef.current = false
               setIsLoadingMore(false)
+
+              // double rAF: 等 React 渲染 + 浏览器 paint 后恢复 content-visibility
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  root.classList.remove('prepending')
+                })
+              })
             })
           },
           { root, rootMargin: '200px 0px 0px 0px' },
@@ -212,28 +209,8 @@ export const ChatArea = memo(
         return () => observer.disconnect()
       }, [sessionId, visibleMessages])
 
-      // ============================================
-      // Prepend compensation (useLayoutEffect)
-      // ============================================
-      // column-reverse 下 scrollTop 为负，prepend 在负方向远端增加高度。
-      // 补偿方向与普通滚动相反：scrollTop -= heightDiff。
-
-      useLayoutEffect(() => {
-        const el = scrollRef.current
-        if (!el) return
-        if (!prevFirstIdRef.current) return
-
-        const currentFirstId = visibleMessages[0]?.info.id ?? null
-        if (currentFirstId === prevFirstIdRef.current) return
-
-        const heightDiff = el.scrollHeight - prevScrollHeightRef.current
-        if (heightDiff > 0) {
-          el.scrollTop -= heightDiff
-        }
-
-        prevFirstIdRef.current = currentFirstId
-        prevScrollHeightRef.current = el.scrollHeight
-      }, [visibleMessages])
+      // column-reverse 下 prepend 在负方向远端，scrollTop 不变，视口自然不跳。
+      // 不需要手动补偿。
 
       // ============================================
       // Visible message tracking (for outline)
@@ -338,6 +315,9 @@ export const ChatArea = memo(
         return groups
       }, [visibleMessages])
 
+      // column-reverse 下 DOM 顺序反转：最新在前（视觉底部），最旧在后（视觉顶部）
+      const reversedGroups = useMemo(() => messageGroups.slice().reverse(), [messageGroups])
+
       const renderMessageGroup = useCallback(
         (messages: Message[]) => {
           const isUser = messages[0].info.role === 'user'
@@ -389,57 +369,58 @@ export const ChatArea = memo(
             ref={scrollRef}
             className="h-full overflow-y-auto overflow-x-hidden custom-scrollbar contain-content flex flex-col-reverse"
           >
-            {/* Shim: column-reverse 下 DOM 第一个子元素在视觉最底。
-                flex-1 占满剩余空间，内容不满一屏时把消息推到顶部。溢出时缩为 0。 */}
+            {/* column-reverse: DOM 第一个 = 视觉最底。所有子元素直接平铺，无 wrapper。
+                DOM 顺序（上→下）：shim, bottomSpacing, retryStatus, messages(新→旧), loadingIndicator, topSpacing, sentinel
+                视觉顺序（上→下）：sentinel, topSpacing, loadingIndicator, messages(旧→新), retryStatus, bottomSpacing, shim
+            */}
+
+            {/* Shim: flex-1 占满剩余空间，消息不满一屏时推到视觉顶部 */}
             <div className="flex-1" />
-            {/* 内容包裹层：内部正常 DOM 顺序 */}
-            <div>
-              {/* Top sentinel for loadMore */}
-              <div ref={topSentinelRef} className="h-px" aria-hidden="true" />
 
-              {/* Top spacing */}
-              <div className="h-20" />
+            {/* Bottom spacing (视觉底部) */}
+            <div
+              className="shrink-0"
+              style={{
+                height: bottomPadding > 0 ? `${bottomPadding + 16}px` : '256px',
+              }}
+            />
 
-              {/* Loading more indicator */}
-              {visibleMessages.length > 0 && isLoadingMore && (
-                <div className="flex justify-center py-3">
-                  <div className="flex items-center gap-2 text-text-400 text-xs">
-                    <span className="w-3.5 h-3.5 border-2 border-text-400/30 border-t-text-400 rounded-full animate-spin" />
-                    Loading history...
+            {/* Retry status */}
+            {retryStatus && (
+              <div className={`w-full ${messageMaxWidthClass} mx-auto px-4 shrink-0`}>
+                <div className="flex justify-start">
+                  <div className="w-full min-w-0">
+                    <RetryStatusInline status={retryStatus} />
                   </div>
                 </div>
-              )}
-
-              {/* Messages */}
-              <div ref={messagesRef}>
-                {messageGroups.map(group => {
-                  const first = group[0]
-                  return (
-                    <div key={first.info.id} className="chat-message-item">
-                      {renderMessageGroup(group)}
-                    </div>
-                  )
-                })}
               </div>
+            )}
 
-              {/* Retry status */}
-              {retryStatus && (
-                <div className={`w-full ${messageMaxWidthClass} mx-auto px-4`}>
-                  <div className="flex justify-start">
-                    <div className="w-full min-w-0">
-                      <RetryStatusInline status={retryStatus} />
-                    </div>
-                  </div>
+            {/* Messages: loadMore 的旧消息 append 到 DOM 末尾 = 视觉顶部，column-reverse 天然不跳 */}
+            {reversedGroups.map(group => {
+              const first = group[0]
+              return (
+                <div key={first.info.id} className="chat-message-item shrink-0">
+                  {renderMessageGroup(group)}
                 </div>
-              )}
+              )
+            })}
 
-              {/* Bottom spacing */}
-              <div
-                style={{
-                  height: bottomPadding > 0 ? `${bottomPadding + 16}px` : '256px',
-                }}
-              />
-            </div>
+            {/* Loading more indicator (视觉顶部附近) */}
+            {visibleMessages.length > 0 && isLoadingMore && (
+              <div className="flex justify-center py-3 shrink-0">
+                <div className="flex items-center gap-2 text-text-400 text-xs">
+                  <span className="w-3.5 h-3.5 border-2 border-text-400/30 border-t-text-400 rounded-full animate-spin" />
+                  Loading history...
+                </div>
+              </div>
+            )}
+
+            {/* Top spacing (视觉顶部) */}
+            <div className="h-20 shrink-0" />
+
+            {/* Top sentinel for loadMore (视觉最顶部) */}
+            <div ref={topSentinelRef} className="h-px shrink-0" aria-hidden="true" />
           </div>
         </div>
       )
