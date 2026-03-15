@@ -377,7 +377,7 @@ export const ChatArea = memo(
             <div
               className="shrink-0"
               style={{
-                height: bottomPadding > 0 ? `${bottomPadding + 16}px` : '256px',
+                height: bottomPadding > 0 ? `${bottomPadding + 48}px` : '256px',
               }}
             />
 
