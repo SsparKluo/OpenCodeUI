@@ -109,9 +109,15 @@ function App() {
 
   // Full Auto hint: 订阅 toggle 变更，在输入框上方弹提示
   useEffect(() => {
-    return autoApproveStore.onFullAutoChange(enabled => {
+    return autoApproveStore.onFullAutoChange(mode => {
       if (fullAutoHintTimerRef.current) clearTimeout(fullAutoHintTimerRef.current)
-      setFullAutoHint(enabled ? 'Act without asking · on' : 'Act without asking · off')
+      const label =
+        mode === 'global'
+          ? 'Auto-approve: all sessions'
+          : mode === 'session'
+            ? 'Auto-approve: this session'
+            : 'Auto-approve: off'
+      setFullAutoHint(label)
       fullAutoHintTimerRef.current = setTimeout(() => setFullAutoHint(null), 2000)
     })
   }, [])
@@ -344,7 +350,14 @@ function App() {
       cancelMessage: handleCancelMessage,
       copyLastResponse: handleCopyLastResponse,
       toggleFullAuto: () => {
-        autoApproveStore.setFullAuto(!autoApproveStore.fullAuto)
+        const mode = autoApproveStore.fullAutoMode
+        if (mode === 'off') {
+          autoApproveStore.setFullAutoMode('session', routeSessionId ?? undefined)
+        } else if (mode === 'session') {
+          autoApproveStore.setFullAutoMode('global')
+        } else {
+          autoApproveStore.setFullAutoMode('off')
+        }
       },
     }),
     [

@@ -4,17 +4,17 @@ import { CheckIcon, ClockIcon, CircleIcon, CloseIcon, FastForwardIcon } from '..
 import { CircularProgress } from '../../../components/CircularProgress'
 import { useTodos, useTodoStats, useCurrentTask, todoStore } from '../../../store'
 import { getSessionTodos } from '../../../api/session'
-import { autoApproveStore } from '../../../store/autoApproveStore'
+import { autoApproveStore, type FullAutoMode } from '../../../store/autoApproveStore'
 import type { TodoItem } from '../../../types/api/event'
 
 // ============================================
 // Full Auto 状态 hook
 // ============================================
 
-function useFullAuto(): boolean {
+function useFullAutoMode(): FullAutoMode {
   return useSyncExternalStore(
     cb => autoApproveStore.onFullAutoChange(cb),
-    () => autoApproveStore.fullAuto,
+    () => autoApproveStore.fullAutoMode,
   )
 }
 
@@ -35,7 +35,7 @@ export const InputFooter = memo(function InputFooter({ sessionId, onNewChat, inp
   const [popoverOpen, setPopoverOpen] = useState(false)
   const popoverRef = useRef<HTMLDivElement>(null)
   const loadedRef = useRef<string | null>(null)
-  const fullAuto = useFullAuto()
+  const fullAutoMode = useFullAutoMode()
 
   // 加载 session 时拉取初始 todos
   useEffect(() => {
@@ -78,16 +78,34 @@ export const InputFooter = memo(function InputFooter({ sessionId, onNewChat, inp
       className="relative flex h-full w-full items-center justify-center gap-2 text-[11px] leading-none text-text-500"
       ref={popoverRef}
     >
-      {/* Fast-forward toggle */}
+      {/* Full Auto 三态切换: off → session → global → off */}
       <button
-        onClick={() => autoApproveStore.setFullAuto(!fullAuto)}
+        onClick={() => {
+          if (fullAutoMode === 'off') {
+            autoApproveStore.setFullAutoMode('session', sessionId ?? undefined)
+          } else if (fullAutoMode === 'session') {
+            autoApproveStore.setFullAutoMode('global')
+          } else {
+            autoApproveStore.setFullAutoMode('off')
+          }
+        }}
         className="shrink-0 flex items-center justify-center hover:text-text-300 transition-colors"
-        title={fullAuto ? 'Act without asking · click to disable' : 'Act without asking'}
+        title={
+          fullAutoMode === 'off'
+            ? 'Auto-approve: off'
+            : fullAutoMode === 'session'
+              ? 'Auto-approve: this session · click for all sessions'
+              : 'Auto-approve: all sessions · click to disable'
+        }
       >
         <FastForwardIcon
           size={11}
           className={`transition-colors ${
-            fullAuto ? 'text-warning-100 drop-shadow-[0_0_4px_var(--color-warning-100)]' : ''
+            fullAutoMode === 'global'
+              ? 'text-danger-100 drop-shadow-[0_0_4px_var(--color-danger-100)]'
+              : fullAutoMode === 'session'
+                ? 'text-warning-100 drop-shadow-[0_0_4px_var(--color-warning-100)]'
+                : ''
           }`}
         />
       </button>
