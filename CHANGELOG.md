@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.2.4] - 2026-03-16
+
+- fix: Full Auto 全局模式在 SSE 事件层拦截，确保非当前会话的权限请求也能自动放行 (1046837)
+- feat: Full Auto 三态模式 — 单击循环 off/会话级(黄)/全局(红)，会话级只放行当前会话，全局放行所有，纯内存刷新即清 (db95fc7)
+- fix: 去掉 steps header 入场动画，保持与其他元素一致不做特殊处理 (1e725a5)
+- fix: 虚拟滚动横向滚动条修复 — 去掉 probe 元素改用 scrollWidth 历史最大值追踪，SplitDiffView proxy scrollbar 加 gutter 占位对齐 (beee631)
+
 ## [v0.2.3] - 2026-03-15
 
 - fix: probe 最长行选取改用 monoDisplayWidth 估算渲染宽度，CJK/全角字符按双倍计，修复含中文注释时横向滚动不到位 (d1fb35a)
