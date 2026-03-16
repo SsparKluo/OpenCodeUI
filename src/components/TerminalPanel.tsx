@@ -4,6 +4,7 @@
 // ============================================
 
 import { memo, useCallback, useRef, useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Terminal } from './Terminal'
 import { PlusIcon, CloseIcon, TerminalIcon, ChevronDownIcon } from './Icons'
 import { layoutStore, useLayoutStore, type TerminalTab } from '../store/layoutStore'
@@ -20,6 +21,7 @@ interface TerminalPanelProps {
 }
 
 export const TerminalPanel = memo(function TerminalPanel({ directory }: TerminalPanelProps) {
+  const { t } = useTranslation(['components', 'common'])
   const { bottomPanelOpen, bottomPanelHeight, terminalTabs, activeTerminalId } = useLayoutStore()
 
   const [isResizing, setIsResizing] = useState(false)
@@ -203,7 +205,7 @@ export const TerminalPanel = memo(function TerminalPanel({ directory }: Terminal
           <button
             onClick={handleNewTerminal}
             className="p-1.5 ml-1 text-text-400 hover:text-text-100 hover:bg-bg-200/50 rounded-md transition-colors shrink-0"
-            title="New Terminal"
+            title={t('terminal.newTerminal')}
           >
             <PlusIcon size={14} />
           </button>
@@ -214,7 +216,7 @@ export const TerminalPanel = memo(function TerminalPanel({ directory }: Terminal
           <button
             onClick={handleCollapse}
             className="p-1.5 text-text-400 hover:text-text-100 hover:bg-bg-200/50 rounded-md transition-colors"
-            title="Hide Panel"
+            title={t('terminal.hidePanel')}
           >
             <ChevronDownIcon size={14} />
           </button>
@@ -226,17 +228,17 @@ export const TerminalPanel = memo(function TerminalPanel({ directory }: Terminal
         {isRestoring ? (
           <div className="flex flex-col items-center justify-center h-full text-text-400 text-sm gap-2">
             <TerminalIcon size={24} className="opacity-30 animate-pulse" />
-            <span>Restoring sessions...</span>
+            <span>{t('terminal.restoringSessions')}</span>
           </div>
         ) : terminalTabs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-text-400 text-sm gap-2">
             <TerminalIcon size={24} className="opacity-30" />
-            <span>No terminals</span>
+            <span>{t('terminal.noTerminals')}</span>
             <button
               onClick={handleNewTerminal}
               className="px-3 py-1.5 text-xs bg-bg-200/50 hover:bg-bg-200 text-text-200 rounded-md transition-colors"
             >
-              Create Terminal
+              {t('terminal.createTerminal')}
             </button>
           </div>
         ) : (
@@ -276,6 +278,7 @@ const TerminalTabButton = memo(function TerminalTabButton({
   onDragOver,
   onDragEnd,
 }: TerminalTabButtonProps) {
+  const { t } = useTranslation(['components', 'common'])
   // 状态指示器颜色
   const statusColor = {
     connecting: 'bg-warning-100',
@@ -337,7 +340,7 @@ const TerminalTabButton = memo(function TerminalTabButton({
           hover:bg-danger-100/20 text-text-400 hover:text-danger-100
           ${isActive ? '' : 'opacity-0 group-hover:opacity-100'}
         `}
-        title="Close terminal"
+        title={t('terminal.closeTerminal')}
       >
         <CloseIcon size={12} />
       </button>

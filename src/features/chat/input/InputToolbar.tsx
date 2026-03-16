@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronDownIcon, SendIcon, StopIcon, PaperclipIcon, AgentIcon, ThinkingIcon } from '../../../components/Icons'
 import { DropdownMenu, MenuItem, IconButton, AnimatedPresence } from '../../../components/ui'
 import { InputToolbarModelSelector } from '../ModelSelector'
@@ -55,6 +56,7 @@ export function InputToolbar({
   modelsLoading = false,
   inputContainerRef,
 }: InputToolbarProps) {
+  const { t } = useTranslation(['chat', 'common'])
   const isMobile = useIsMobile()
   const useBrowserFileInput = !isTauri() || isTauriMobile()
 
@@ -254,14 +256,20 @@ export function InputToolbar({
               onClick={() => setVariantMenuOpen(!variantMenuOpen)}
               disabled={controlsDisabled}
               className="flex items-center gap-1.5 px-2 py-1.5 text-sm rounded-lg transition-all duration-150 hover:bg-bg-200 active:scale-95 cursor-pointer min-w-0 overflow-hidden w-full"
-              title={selectedVariant ? selectedVariant.charAt(0).toUpperCase() + selectedVariant.slice(1) : 'Default'}
+              title={
+                selectedVariant
+                  ? selectedVariant.charAt(0).toUpperCase() + selectedVariant.slice(1)
+                  : t('inputToolbar.default')
+              }
             >
               {/* 移动端隐藏 ThinkingIcon */}
               <span className="text-text-400 hidden md:inline shrink-0">
                 <ThinkingIcon />
               </span>
               <span className="text-xs text-text-300 truncate">
-                {selectedVariant ? selectedVariant.charAt(0).toUpperCase() + selectedVariant.slice(1) : 'Default'}
+                {selectedVariant
+                  ? selectedVariant.charAt(0).toUpperCase() + selectedVariant.slice(1)
+                  : t('inputToolbar.default')}
               </span>
               <span className="text-text-400 hidden md:inline shrink-0">
                 <ChevronDownIcon />
@@ -278,7 +286,7 @@ export function InputToolbar({
             >
               <div ref={variantMenuRef}>
                 <MenuItem
-                  label="Default"
+                  label={t('inputToolbar.default')}
                   icon={<ThinkingIcon />}
                   selected={!selectedVariant}
                   onClick={() => {
@@ -322,18 +330,18 @@ export function InputToolbar({
                 }}
               />
             )}
-            <IconButton aria-label="Attach file" disabled={controlsDisabled} onClick={handleFileClick}>
+            <IconButton aria-label={t('inputToolbar.attachFile')} disabled={controlsDisabled} onClick={handleFileClick}>
               <PaperclipIcon />
             </IconButton>
           </>
         </AnimatedPresence>
         {!canSend && isStreaming && !isSending ? (
-          <IconButton aria-label="Stop generation" variant="solid" onClick={onAbort}>
+          <IconButton aria-label={t('inputToolbar.stopGeneration')} variant="solid" onClick={onAbort}>
             <StopIcon />
           </IconButton>
         ) : (
           <IconButton
-            aria-label={isSending ? 'Sending message' : 'Send message'}
+            aria-label={isSending ? t('inputToolbar.sendingMessage') : t('inputToolbar.sendMessage')}
             variant="solid"
             disabled={!canSend || isSending}
             onClick={onSend}

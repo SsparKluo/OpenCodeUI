@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Dialog } from '../../components/ui/Dialog'
 import { SunIcon, GlobeIcon, SettingsIcon, KeyboardIcon, CloseIcon, BellIcon, PlugIcon } from '../../components/Icons'
 import { useIsMobile } from '../../hooks'
@@ -9,8 +10,6 @@ import { ChatSettings } from './components/ChatSettings'
 import { NotificationSettings } from './components/NotificationSettings'
 import { ServiceSettings } from './components/ServiceSettings'
 import { ServersSettings } from './components/ServersSettings'
-
-const APP_VERSION_LABEL = `OpenCodeUI v${__APP_VERSION__}`
 
 // ============================================
 // Types
@@ -28,48 +27,38 @@ interface SettingsDialogProps {
 // Nav Tabs
 // ============================================
 
-const TABS: { id: SettingsTab; label: string; description: string; icon: React.ReactNode }[] = [
-  {
-    id: 'servers',
-    label: 'Servers',
-    description: 'Backend connections and fast active endpoint switching',
-    icon: <GlobeIcon size={15} />,
-  },
-  {
-    id: 'chat',
-    label: 'Chat',
-    description: 'Reasoning style, path display, and conversation behavior',
-    icon: <SettingsIcon size={15} />,
-  },
-  {
-    id: 'appearance',
-    label: 'Appearance',
-    description: 'Theme, color mode, and layout preferences',
-    icon: <SunIcon size={15} />,
-  },
-  {
-    id: 'notifications',
-    label: 'Notifications',
-    description: 'Desktop and in-app alerts',
-    icon: <BellIcon size={15} />,
-  },
-  {
-    id: 'service',
-    label: 'Service',
-    description: 'Local opencode service management',
-    icon: <PlugIcon size={15} />,
-  },
-  {
-    id: 'keybindings',
-    label: 'Shortcuts',
-    description: 'Customize keyboard shortcuts for faster workflows',
-    icon: <KeyboardIcon size={15} />,
-  },
-]
+const TAB_ICONS: Record<SettingsTab, React.ReactNode> = {
+  servers: <GlobeIcon size={15} />,
+  chat: <SettingsIcon size={15} />,
+  appearance: <SunIcon size={15} />,
+  notifications: <BellIcon size={15} />,
+  service: <PlugIcon size={15} />,
+  keybindings: <KeyboardIcon size={15} />,
+}
 
-const TAB_GROUPS: { label: string; tabs: SettingsTab[] }[] = [
-  { label: 'Core', tabs: ['servers', 'chat', 'appearance', 'notifications'] },
-  { label: 'Advanced', tabs: ['service', 'keybindings'] },
+const TAB_IDS: SettingsTab[] = ['servers', 'chat', 'appearance', 'notifications', 'service', 'keybindings']
+
+const TAB_LABEL_KEYS: Record<SettingsTab, string> = {
+  servers: 'tabs.servers',
+  chat: 'tabs.chat',
+  appearance: 'tabs.appearance',
+  notifications: 'tabs.notifications',
+  service: 'tabs.service',
+  keybindings: 'tabs.shortcuts',
+}
+
+const TAB_DESC_KEYS: Record<SettingsTab, string> = {
+  servers: 'tabs.serversDesc',
+  chat: 'tabs.chatDesc',
+  appearance: 'tabs.appearanceDesc',
+  notifications: 'tabs.notificationsDesc',
+  service: 'tabs.serviceDesc',
+  keybindings: 'tabs.shortcutsDesc',
+}
+
+const GROUP_DEFS: { labelKey: string; tabs: SettingsTab[] }[] = [
+  { labelKey: 'groups.core', tabs: ['servers', 'chat', 'appearance', 'notifications'] },
+  { labelKey: 'groups.advanced', tabs: ['service', 'keybindings'] },
 ]
 
 // ============================================
@@ -100,6 +89,7 @@ function TabContent({ tab }: { tab: SettingsTab }) {
 // ============================================
 
 export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: SettingsDialogProps) {
+  const { t } = useTranslation(['settings'])
   const isMobile = useIsMobile()
   const isTauriDesktop = isTauri() && !isMobile
   const normalizeTab = useCallback((next: SettingsDialogProps['initialTab']): SettingsTab => {
@@ -108,11 +98,32 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
   }, [])
   const [tab, setTab] = useState<SettingsTab>(normalizeTab(initialTab))
 
-  const visibleTabs = isTauriDesktop ? TABS : TABS.filter(t => t.id !== 'service')
-  const groupedTabs = TAB_GROUPS.map(group => ({
-    ...group,
-    tabs: group.tabs.map(id => visibleTabs.find(t => t.id === id)).filter((t): t is (typeof TABS)[number] => !!t),
-  })).filter(group => group.tabs.length > 0)
+  const visibleTabIds = useMemo(
+    () => (isTauriDesktop ? TAB_IDS : TAB_IDS.filter(id => id !== 'service')),
+    [isTauriDesktop],
+  )
+
+  const visibleTabs = useMemo(
+    () =>
+      visibleTabIds.map(id => ({
+        id,
+        label: t(TAB_LABEL_KEYS[id]),
+        description: t(TAB_DESC_KEYS[id]),
+        icon: TAB_ICONS[id],
+      })),
+    [visibleTabIds, t],
+  )
+
+  const groupedTabs = useMemo(
+    () =>
+      GROUP_DEFS.map(group => ({
+        label: t(group.labelKey),
+        tabs: group.tabs
+          .map(id => visibleTabs.find(vt => vt.id === id))
+          .filter((vt): vt is (typeof visibleTabs)[number] => !!vt),
+      })).filter(group => group.tabs.length > 0),
+    [visibleTabs, t],
+  )
 
   useEffect(() => {
     if (!isOpen) return
@@ -148,7 +159,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
     [tab, visibleTabs],
   )
 
-  const activeTabMeta = visibleTabs.find(t => t.id === tab) || visibleTabs[0] || TABS[0]
+  const activeTabMeta = visibleTabs.find(vt => vt.id === tab) || visibleTabs[0]
 
   // 移动端：顶部 tab 切换 + 全屏内容
   if (isMobile) {
@@ -158,8 +169,8 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
           {/* Top: Title + Close */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border-100/50 shrink-0">
             <div>
-              <div className="text-sm font-semibold text-text-100">Settings</div>
-              <div className="text-[11px] text-text-400 mt-0.5">{APP_VERSION_LABEL}</div>
+              <div className="text-sm font-semibold text-text-100">{t('title')}</div>
+              <div className="text-[11px] text-text-400 mt-0.5">{t('version', { version: __APP_VERSION__ })}</div>
             </div>
             <button
               onClick={onClose}
@@ -203,10 +214,8 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
           onKeyDown={handleTabKeyDown}
         >
           <div className="px-3 mb-4">
-            <div className="text-sm font-semibold text-text-100">Settings</div>
-            <div className="text-[11px] text-text-400 mt-0.5 leading-relaxed">
-              Customize UI, behavior, and server setup
-            </div>
+            <div className="text-sm font-semibold text-text-100">{t('title')}</div>
+            <div className="text-[11px] text-text-400 mt-0.5 leading-relaxed">{t('subtitle')}</div>
           </div>
           <div className="space-y-3">
             {groupedTabs.map(group => (
@@ -236,7 +245,9 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
             ))}
           </div>
 
-          <div className="mt-auto pt-3 px-3 text-[10px] text-text-400">{APP_VERSION_LABEL}</div>
+          <div className="mt-auto pt-3 px-3 text-[10px] text-text-400">
+            {t('version', { version: __APP_VERSION__ })}
+          </div>
         </nav>
 
         {/* Right Content */}
@@ -249,7 +260,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
             <button
               onClick={onClose}
               className="p-2 text-text-400 hover:text-text-200 hover:bg-bg-100 rounded-md transition-colors -mr-1"
-              aria-label="Close settings"
+              aria-label={t('closeSettings')}
             >
               <CloseIcon size={18} />
             </button>

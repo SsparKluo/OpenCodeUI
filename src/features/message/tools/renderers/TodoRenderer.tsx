@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronDownIcon, CheckIcon, ClockIcon, CloseIcon, CircleIcon } from '../../../../components/Icons'
 import type { ToolRendererProps } from '../types'
 import { useDelayedRender } from '../../../../hooks'
@@ -34,6 +35,7 @@ export function TodoRenderer({ part }: ToolRendererProps) {
 // ============================================
 
 function TodoList({ todos }: { todos: TodoItem[] }) {
+  const { t } = useTranslation('message')
   const [collapsed, setCollapsed] = useState(false)
   const shouldRenderBody = useDelayedRender(!collapsed)
   const completed = todos.filter(t => t.status === 'completed').length
@@ -50,11 +52,9 @@ function TodoList({ todos }: { todos: TodoItem[] }) {
           <span className={`text-text-400 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
             <ChevronDownIcon />
           </span>
-          <span className="text-text-300 font-medium font-mono">Tasks</span>
+          <span className="text-text-300 font-medium font-mono">{t('todo.tasks')}</span>
         </div>
-        <span className="text-text-500 tabular-nums font-mono">
-          {completed}/{total}
-        </span>
+        <span className="text-text-500 tabular-nums font-mono">{t('todo.completedCount', { completed, total })}</span>
       </div>
 
       {/* List */}

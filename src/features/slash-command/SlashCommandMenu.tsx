@@ -4,6 +4,7 @@
 // ============================================
 
 import { useState, useEffect, useLayoutEffect, useRef, useImperativeHandle, forwardRef, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { getCommands, type Command } from '../../api/command'
 import { TerminalIcon } from '../../components/Icons'
 import { apiErrorHandler } from '../../utils'
@@ -36,6 +37,7 @@ export const SlashCommandMenu = forwardRef<SlashCommandMenuHandle, SlashCommandM
   { isOpen, query, rootPath, onSelect, onClose },
   ref,
 ) {
+  const { t } = useTranslation(['commands', 'common'])
   const [commands, setCommands] = useState<Command[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -197,17 +199,17 @@ export const SlashCommandMenu = forwardRef<SlashCommandMenuHandle, SlashCommandM
       {/* Header */}
       <div className="px-3 py-2 border-b border-border-200 flex items-center gap-2 text-xs text-text-400">
         <TerminalIcon size={14} />
-        <span>Commands</span>
+        <span>{t('slashCommand.commands')}</span>
         {query && <span className="text-text-300">/ {query}</span>}
       </div>
 
       {/* Items List */}
       <div ref={listRef} className="flex-1 overflow-y-auto custom-scrollbar">
-        {loading && <div className="px-3 py-4 text-center text-sm text-text-400">Loading...</div>}
+        {loading && <div className="px-3 py-4 text-center text-sm text-text-400">{t('common:loading')}</div>}
 
         {!loading && filteredCommands.length === 0 && (
           <div className="px-3 py-4 text-center text-sm text-text-400">
-            {query ? 'No matching commands' : 'No commands available'}
+            {query ? t('slashCommand.noMatchingCommands') : t('slashCommand.noCommandsAvailable')}
           </div>
         )}
 
@@ -237,9 +239,9 @@ export const SlashCommandMenu = forwardRef<SlashCommandMenuHandle, SlashCommandM
 
       {/* Footer Hints - 只在桌面端显示 */}
       <div className="hidden md:flex px-3 py-1.5 border-t border-border-200 text-xs text-text-500 gap-3">
-        <span>↑↓ select</span>
-        <span>↵ run</span>
-        <span>esc cancel</span>
+        <span>{t('common:upDownSelect')}</span>
+        <span>{t('common:enterRun')}</span>
+        <span>{t('common:escCancel')}</span>
       </div>
     </div>
   )

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   PathAutoIcon,
   PathUnixIcon,
@@ -16,6 +17,7 @@ import { Toggle, SegmentedControl, SettingRow, SettingsCard } from './SettingsUI
 import type { PathMode } from '../../../utils/directoryUtils'
 
 export function ChatSettings() {
+  const { t } = useTranslation(['settings'])
   const { pathMode, setPathMode, effectiveStyle, detectedStyle, isAutoMode } = usePathMode()
   const { sidebarFolderRecents } = useLayoutStore()
   const [autoApprove, setAutoApprove] = useState(autoApproveStore.enabled)
@@ -50,13 +52,13 @@ export function ChatSettings() {
   return (
     <div className="space-y-4">
       <div className="grid gap-4 xl:grid-cols-2">
-        <SettingsCard title="Paths & Formatting" description="How file paths are displayed in messages and tools">
+        <SettingsCard title={t('chat.pathsFormatting')} description={t('chat.pathsFormattingDesc')}>
           <SegmentedControl
             value={pathMode}
             options={[
-              { value: 'auto', label: 'Auto', icon: <PathAutoIcon size={14} /> },
-              { value: 'unix', label: 'Unix /', icon: <PathUnixIcon size={14} /> },
-              { value: 'windows', label: 'Win \\', icon: <PathWindowsIcon size={14} /> },
+              { value: 'auto', label: t('chat.auto'), icon: <PathAutoIcon size={14} /> },
+              { value: 'unix', label: t('chat.unixSlash'), icon: <PathUnixIcon size={14} /> },
+              { value: 'windows', label: t('chat.winBackslash'), icon: <PathWindowsIcon size={14} /> },
             ]}
             onChange={v => setPathMode(v as PathMode)}
           />
@@ -73,10 +75,10 @@ export function ChatSettings() {
           )}
         </SettingsCard>
 
-        <SettingsCard title="Agent Behavior" description="Execution defaults for tool actions">
+        <SettingsCard title={t('chat.agentBehavior')} description={t('chat.agentBehaviorDesc')}>
           <SettingRow
-            label="Auto-Approve"
-            description="Use local rules for always, send once to server"
+            label={t('chat.autoApprove')}
+            description={t('chat.autoApproveDesc')}
             icon={<BoltIcon size={14} />}
             onClick={handleAutoApprove}
           >

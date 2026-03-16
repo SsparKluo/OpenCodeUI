@@ -5,6 +5,7 @@
  */
 
 import { memo, useState, useEffect, useMemo, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { CloseIcon } from './Icons'
 import { getMaterialIconUrl } from '../utils/materialIcons'
 import { DiffViewer, type ViewMode } from './DiffViewer'
@@ -34,6 +35,7 @@ export const MultiFileDiffModal = memo(function MultiFileDiffModal({
   onClose,
   sessionId,
 }: MultiFileDiffModalProps) {
+  const { t } = useTranslation(['components', 'common'])
   const [loading, setLoading] = useState(false)
   const [diffs, setDiffs] = useState<FileDiff[]>([])
   const [selectedFileIndex, setSelectedFileIndex] = useState(0)
@@ -102,7 +104,7 @@ export const MultiFileDiffModal = memo(function MultiFileDiffModal({
       {/* Toolbar */}
       <div className="flex items-center justify-between h-11 px-4 border-b border-border-100/40 shrink-0">
         <div className="flex items-center gap-4 min-w-0">
-          <span className="text-text-100 font-medium text-[13px]">Session Changes</span>
+          <span className="text-text-100 font-medium text-[13px]">{t('multiFileDiff.sessionChanges')}</span>
           <div className="flex items-center gap-3 text-[11px] font-mono text-text-400 tabular-nums">
             <span>
               {stats.files} file{stats.files !== 1 ? 's' : ''}
@@ -122,7 +124,7 @@ export const MultiFileDiffModal = memo(function MultiFileDiffModal({
           <button
             onClick={onClose}
             className="p-1 text-text-400 hover:text-text-100 hover:bg-bg-200/60 rounded-md transition-colors"
-            title="Close (Esc)"
+            title={t('common:closeEsc')}
           >
             <CloseIcon size={16} />
           </button>
@@ -135,11 +137,11 @@ export const MultiFileDiffModal = memo(function MultiFileDiffModal({
         <div className="w-56 border-r border-border-100/30 flex flex-col shrink-0">
           <div className="flex-1 overflow-y-auto custom-scrollbar py-1">
             {loading ? (
-              <div className="p-4 text-center text-text-400 text-xs">Loading...</div>
+              <div className="p-4 text-center text-text-400 text-xs">{t('common:loading')}</div>
             ) : error ? (
               <div className="p-4 text-center text-danger-100 text-xs">{error}</div>
             ) : diffs.length === 0 ? (
-              <div className="p-4 text-center text-text-400 text-xs">No changes found</div>
+              <div className="p-4 text-center text-text-400 text-xs">{t('multiFileDiff.noChangesFound')}</div>
             ) : (
               diffs.map((d, idx) => {
                 const name = d.file.split(/[/\\]/).pop() || d.file
@@ -213,7 +215,7 @@ export const MultiFileDiffModal = memo(function MultiFileDiffModal({
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-text-400 text-xs">
-              {loading ? 'Loading changes...' : 'Select a file to view changes'}
+              {loading ? t('sessionChanges.loadingChanges') : t('multiFileDiff.selectFile')}
             </div>
           )}
         </div>

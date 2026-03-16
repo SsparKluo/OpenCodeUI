@@ -1,4 +1,5 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ContentBlock } from '../../../../components'
 import { ChevronRightIcon, ExternalLinkIcon, StopIcon } from '../../../../components/Icons'
 import { useDelayedRender } from '../../../../hooks'
@@ -22,13 +23,14 @@ const EMPTY_MESSAGES: Message[] = []
 // ============================================
 
 export const TaskRenderer = memo(function TaskRenderer({ part }: ToolRendererProps) {
+  const { t } = useTranslation('message')
   const { state } = part
   const [expanded, setExpanded] = useState(() => state.status === 'running' || state.status === 'pending')
   const shouldRenderBody = useDelayedRender(expanded)
 
   // 从 input 中提取任务信息
   const input = state.input as Record<string, unknown> | undefined
-  const description = (input?.description as string) || 'Subtask'
+  const description = (input?.description as string) || t('task.subtask')
   const prompt = (input?.prompt as string) || ''
   const agentType = (input?.subagent_type as string) || 'general'
 
@@ -120,7 +122,7 @@ export const TaskRenderer = memo(function TaskRenderer({ part }: ToolRendererPro
                 {/* 完成时的输出 */}
                 {isCompleted && state.output !== undefined && state.output !== null && (
                   <ContentBlock
-                    label="Result"
+                    label={t('task.result')}
                     content={typeof state.output === 'string' ? state.output : JSON.stringify(state.output, null, 2)}
                     defaultCollapsed={true}
                     maxHeight={150}
@@ -130,7 +132,7 @@ export const TaskRenderer = memo(function TaskRenderer({ part }: ToolRendererPro
                 {/* 错误信息 */}
                 {isError && state.error !== undefined && (
                   <ContentBlock
-                    label="Error"
+                    label={t('task.error')}
                     content={typeof state.error === 'string' ? state.error : JSON.stringify(state.error)}
                     variant="error"
                   />
@@ -167,6 +169,7 @@ const TaskHeader = memo(function TaskHeader({
   sessionId,
   onStop,
 }: TaskHeaderProps) {
+  const { t } = useTranslation('message')
   const handleOpenSession = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
@@ -218,7 +221,7 @@ const TaskHeader = memo(function TaskHeader({
           role="button"
           onClick={onStop}
           className="flex-shrink-0 w-[18px] h-[18px] p-0 flex items-center justify-center bg-accent-main-000 hover:bg-accent-main-200 text-oncolor-100 rounded-sm transition-all active:scale-90"
-          title="Stop"
+          title={t('task.stop')}
         >
           <StopIcon size={10} />
         </div>
@@ -229,7 +232,7 @@ const TaskHeader = memo(function TaskHeader({
         <button
           onClick={handleOpenSession}
           className="flex-shrink-0 p-1 text-text-500 hover:text-accent-main-100 transition-all"
-          title="Open session"
+          title={t('task.openSession')}
         >
           <ExternalLinkIcon size={12} />
         </button>
@@ -248,6 +251,7 @@ interface SubSessionViewProps {
 }
 
 const SubSessionView = memo(function SubSessionView({ sessionId }: SubSessionViewProps) {
+  const { t } = useTranslation('message')
   const scrollRef = useRef<HTMLDivElement>(null)
   const loadedRef = useRef(false)
 
@@ -309,7 +313,7 @@ const SubSessionView = memo(function SubSessionView({ sessionId }: SubSessionVie
   }
 
   if (visibleMessages.length === 0) {
-    return <div className="text-xs text-text-500 italic py-2">Waiting for response...</div>
+    return <div className="text-xs text-text-500 italic py-2">{t('task.waitingForResponse')}</div>
   }
 
   return (

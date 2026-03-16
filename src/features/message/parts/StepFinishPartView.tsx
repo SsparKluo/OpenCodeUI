@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../../hooks/useTheme'
 import type { StepFinishPart } from '../../../types/message'
 import { formatNumber, formatCost, formatDuration } from '../../../utils/formatUtils'
@@ -16,6 +17,7 @@ export const StepFinishPartView = memo(function StepFinishPartView({
   duration,
   turnDuration,
 }: StepFinishPartViewProps) {
+  const { t } = useTranslation('message')
   const { stepFinishDisplay: show } = useTheme()
   const { tokens, cost } = part
   const totalTokens = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
@@ -34,20 +36,23 @@ export const StepFinishPartView = memo(function StepFinishPartView({
     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 py-0.5 text-[10px] leading-4 text-text-500">
       {show.tokens && totalTokens > 0 && (
         <span
-          title={`Input: ${tokens.input}, Output: ${tokens.output}, Reasoning: ${tokens.reasoning}, Cache read: ${tokens.cache.read}, Cache write: ${tokens.cache.write}`}
+          title={`${t('stepFinish.inputTokens', { input: tokens.input })}, ${t('stepFinish.outputTokens', { output: tokens.output })}, ${t('stepFinish.reasoningTokens', { reasoning: tokens.reasoning })}, ${t('stepFinish.cacheRead', { read: tokens.cache.read })}, ${t('stepFinish.cacheWrite', { write: tokens.cache.write })}`}
         >
-          {formatNumber(totalTokens)} tokens
+          {formatNumber(totalTokens)} {t('tokens')}
         </span>
       )}
       {show.cache && cacheHit > 0 && (
-        <span className="text-text-600" title={`Cache read: ${tokens.cache.read}, write: ${tokens.cache.write}`}>
-          ({formatNumber(cacheHit)} cached)
+        <span
+          className="text-text-600"
+          title={`${t('stepFinish.cacheRead', { read: tokens.cache.read })}, ${t('stepFinish.cacheWrite', { write: tokens.cache.write })}`}
+        >
+          ({t('stepFinish.cached', { count: formatNumber(cacheHit) })})
         </span>
       )}
       {show.cost && cost > 0 && <span>{formatCost(cost)}</span>}
       {show.duration && duration != null && duration > 0 && <span>{formatDuration(duration)}</span>}
       {show.turnDuration && turnDuration != null && turnDuration > 0 && (
-        <span>total {formatDuration(turnDuration)}</span>
+        <span>{t('stepFinish.totalDuration', { duration: formatDuration(turnDuration) })}</span>
       )}
     </div>
   )

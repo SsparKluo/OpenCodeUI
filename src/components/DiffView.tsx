@@ -1,4 +1,5 @@
 import { memo, useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { diffLines } from 'diff'
 import { ChevronDownIcon, MaximizeIcon } from './Icons'
 import { clsx } from 'clsx'
@@ -46,6 +47,7 @@ export const DiffView = memo(function DiffView({
   maxHeight = 300,
   language: explicitLanguage,
 }: DiffViewProps) {
+  const { t } = useTranslation(['components', 'common'])
   const [collapsed, setCollapsed] = useState(defaultCollapsed)
   const [modalOpen, setModalOpen] = useState(false)
 
@@ -100,7 +102,9 @@ export const DiffView = memo(function DiffView({
         <div className="flex items-center gap-3 tabular-nums font-medium shrink-0 whitespace-nowrap">
           {stats.additions > 0 && <span className="text-success-100">+{stats.additions}</span>}
           {stats.deletions > 0 && <span className="text-danger-100">-{stats.deletions}</span>}
-          {stats.additions === 0 && stats.deletions === 0 && <span className="text-text-400">No changes</span>}
+          {stats.additions === 0 && stats.deletions === 0 && (
+            <span className="text-text-400">{t('common:noChanges')}</span>
+          )}
 
           {/* 放大按钮 */}
           <button
@@ -109,7 +113,7 @@ export const DiffView = memo(function DiffView({
               e.stopPropagation()
               setModalOpen(true)
             }}
-            title="全屏查看"
+            title={t('diffView.fullscreenView')}
           >
             <MaximizeIcon size={14} />
           </button>

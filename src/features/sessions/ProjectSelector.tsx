@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { FolderIcon, GlobeIcon, ChevronDownIcon, PlusIcon, TrashIcon } from '../../components/Icons'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import type { ApiProject } from '../../api'
@@ -28,6 +29,7 @@ export function ProjectSelector({
   onAddProject,
   onRemoveProject,
 }: ProjectSelectorProps) {
+  const { t } = useTranslation(['commands', 'common', 'chat'])
   const [isOpen, setIsOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; projectId: string | null }>({
     isOpen: false,
@@ -58,7 +60,7 @@ export function ProjectSelector({
 
   const getDisplayName = useCallback(
     (project: ApiProject | null): string => {
-      if (!project) return isLoading ? 'Loading...' : 'No project'
+      if (!project) return isLoading ? t('common:loading') : t('sessions.noProject')
       if (project.name) return project.name
       if (project.id === 'global') return 'Global'
 
@@ -71,7 +73,7 @@ export function ProjectSelector({
 
   const getPath = useCallback((project: ApiProject | null): string => {
     if (!project) return ''
-    if (project.id === 'global') return 'All projects'
+    if (project.id === 'global') return t('chat:sidebar.allProjects')
     return project.worktree || ''
   }, [])
 
@@ -116,11 +118,11 @@ export function ProjectSelector({
         <div className="bg-bg-000 border border-border-200 rounded-xl shadow-xl overflow-hidden">
           <div className="max-h-[280px] overflow-y-auto custom-scrollbar p-1">
             <div className="px-2 py-1.5 text-[10px] font-semibold text-text-400/70 uppercase tracking-wider">
-              Switch Project
+              {t('sessions.switchProject')}
             </div>
 
             {otherProjects.length === 0 ? (
-              <div className="px-3 py-4 text-center text-xs text-text-400/60">No other projects</div>
+              <div className="px-3 py-4 text-center text-xs text-text-400/60">{t('sessions.noOtherProjects')}</div>
             ) : (
               otherProjects.map(project => (
                 <ProjectItem
@@ -154,7 +156,7 @@ export function ProjectSelector({
               className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs text-text-300 hover:text-text-100 hover:bg-bg-100 transition-colors"
             >
               <PlusIcon className="w-3.5 h-3.5" />
-              Add Project...
+              {t('sessions.addProject')}
             </button>
           </div>
         </div>
@@ -169,9 +171,9 @@ export function ProjectSelector({
           }
           setDeleteConfirm({ isOpen: false, projectId: null })
         }}
-        title="Remove Project"
-        description="Remove this project folder from the list? Files won't be deleted."
-        confirmText="Remove"
+        title={t('sessions.removeProjectTitle')}
+        description={t('sessions.removeProjectConfirm')}
+        confirmText={t('common:remove')}
         variant="danger"
       />
     </div>
@@ -191,6 +193,7 @@ interface ProjectItemProps {
 }
 
 function ProjectItem({ project, displayName, path, onSelect, onRemove }: ProjectItemProps) {
+  const { t } = useTranslation(['commands', 'common'])
   const isGlobal = project.id === 'global'
 
   return (
@@ -220,7 +223,7 @@ function ProjectItem({ project, displayName, path, onSelect, onRemove }: Project
             onRemove()
           }}
           className="p-1 rounded text-text-400 hover:text-danger-100 hover:bg-danger-100/10 md:opacity-0 md:group-hover:opacity-100 transition-all"
-          title="Remove"
+          title={t('common:remove')}
         >
           <TrashIcon className="w-3 h-3" />
         </div>

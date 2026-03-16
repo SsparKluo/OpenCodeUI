@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronDownIcon, RetryIcon } from '../../components/Icons'
 import { useDelayedRender } from '../../hooks/useDelayedRender'
 
@@ -18,6 +19,7 @@ function formatRemaining(ms: number): string {
 }
 
 export const RetryStatusInline = memo(function RetryStatusInline({ status }: { status: RetryStatusInlineData }) {
+  const { t } = useTranslation('chat')
   const [now, setNow] = useState(() => Date.now())
   const [expanded, setExpanded] = useState(false)
   const shouldRenderBody = useDelayedRender(expanded)
@@ -48,8 +50,12 @@ export const RetryStatusInline = memo(function RetryStatusInline({ status }: { s
       >
         <RetryIcon className="w-4 h-4 text-warning-100 flex-shrink-0" />
         <span className="text-sm text-warning-100 flex-1 min-w-0 truncate">
-          Retrying (attempt {status.attempt})
-          {nextLabel && <span className="text-xs text-text-400 ml-2 tabular-nums">next in {nextLabel}</span>}
+          {t('retryStatus.retrying', { attempt: status.attempt })}
+          {nextLabel && (
+            <span className="text-xs text-text-400 ml-2 tabular-nums">
+              {t('retryStatus.nextIn', { label: nextLabel })}
+            </span>
+          )}
         </span>
         {hasMessage && (
           <ChevronDownIcon

@@ -8,6 +8,7 @@
  */
 
 import { memo, useState, useMemo, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { diffLines } from 'diff'
 import { ChevronDownIcon, ChevronRightIcon, MaximizeIcon } from './Icons'
 import { CopyButton } from './ui'
@@ -71,8 +72,10 @@ export const ContentBlock = memo(function ContentBlock({
   diffStats: providedDiffStats,
   stats,
   isLoading = false,
-  loadingText = 'Loading...',
+  loadingText,
 }: ContentBlockProps) {
+  const { t } = useTranslation(['components', 'common'])
+  const resolvedLoadingText = loadingText ?? t('common:loading')
   const [collapsed, setCollapsed] = useState(defaultCollapsed)
   const [fullscreenOpen, setFullscreenOpen] = useState(false)
   const [diffViewMode, setDiffViewMode] = useState<ViewMode>('split')
@@ -173,7 +176,7 @@ export const ContentBlock = memo(function ContentBlock({
           {isLoading && (
             <div className="flex items-center gap-1.5 text-text-400 ml-1">
               <div className="w-3 h-3 border-2 border-accent-main-100/30 border-t-accent-main-100 rounded-full animate-spin" />
-              {loadingText && <span>{loadingText}</span>}
+              {resolvedLoadingText && <span>{resolvedLoadingText}</span>}
             </div>
           )}
         </div>
@@ -186,7 +189,7 @@ export const ContentBlock = memo(function ContentBlock({
               {diffStats.additions > 0 && <span className="text-success-100">+{diffStats.additions}</span>}
               {diffStats.deletions > 0 && <span className="text-danger-100">-{diffStats.deletions}</span>}
               {diffStats.additions === 0 && diffStats.deletions === 0 && (
-                <span className="text-text-500">No changes</span>
+                <span className="text-text-500">{t('common:noChanges')}</span>
               )}
             </div>
           )}
@@ -199,7 +202,7 @@ export const ContentBlock = memo(function ContentBlock({
                 e.stopPropagation()
                 setFullscreenOpen(true)
               }}
-              title="Fullscreen"
+              title={t('contentBlock.fullscreen')}
             >
               <MaximizeIcon size={13} />
             </button>
@@ -212,7 +215,7 @@ export const ContentBlock = memo(function ContentBlock({
                 stats.exit === 0 ? 'text-accent-secondary-100' : 'text-warning-100'
               }`}
             >
-              exit {stats.exit}
+              {t('contentBlock.exitCode', { code: stats.exit })}
             </span>
           )}
         </div>

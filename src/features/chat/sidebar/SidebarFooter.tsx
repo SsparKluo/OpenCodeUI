@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { ShareDialog } from '../ShareDialog'
 import { ContextDetailsDialog } from './ContextDetailsDialog'
@@ -74,6 +75,7 @@ export interface SidebarFooterProps {
 }
 
 export function SidebarFooter({ showLabels, connectionState, stats, hasMessages, onOpenSettings }: SidebarFooterProps) {
+  const { t } = useTranslation(['chat', 'common'])
   const { mode: themeMode, setThemeWithAnimation: onThemeChange, isWideMode, toggleWideMode } = useTheme()
   const [isOpen, setIsOpen] = useState(false)
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0, width: 260, fromBottom: false })
@@ -214,7 +216,7 @@ export function SidebarFooter({ showLabels, connectionState, stats, hasMessages,
           {/* Context Stats */}
           <div className="p-3 border-b border-border-200/30">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-text-200">Context Usage</span>
+              <span className="text-xs font-medium text-text-200">{t('sidebar.contextUsage')}</span>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-mono text-text-400">{Math.round(stats.contextPercent)}%</span>
                 <button
@@ -231,7 +233,7 @@ export function SidebarFooter({ showLabels, connectionState, stats, hasMessages,
                 transition-colors
               "
                 >
-                  View details
+                  {t('sidebar.viewDetails')}
                 </button>
               </div>
             </div>
@@ -251,7 +253,9 @@ export function SidebarFooter({ showLabels, connectionState, stats, hasMessages,
 
           {/* Theme Selector */}
           <div className="p-2 border-b border-border-200/30">
-            <div className="text-[10px] font-bold text-text-400 uppercase tracking-wider px-1 mb-1.5">Appearance</div>
+            <div className="text-[10px] font-bold text-text-400 uppercase tracking-wider px-1 mb-1.5">
+              {t('sidebar.appearance')}
+            </div>
             <div className="flex bg-bg-200/50 p-1 rounded-lg border border-border-200/30 relative isolate">
               <div
                 className="absolute top-1 bottom-1 left-1 w-[calc((100%-8px)/3)] bg-bg-000 rounded-md shadow-sm ring-1 ring-border-200/50 transition-transform duration-300 ease-out -z-10"
@@ -291,7 +295,7 @@ export function SidebarFooter({ showLabels, connectionState, stats, hasMessages,
                 className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-text-300 hover:text-text-100 hover:bg-bg-200/50 transition-colors text-left"
               >
                 {isWideMode ? <MinimizeIcon size={14} /> : <MaximizeIcon size={14} />}
-                <span>{isWideMode ? 'Standard Width' : 'Wide Mode'}</span>
+                <span>{isWideMode ? t('sidebar.standardWidth') : t('sidebar.wideMode')}</span>
               </button>
             )}
 
@@ -303,7 +307,7 @@ export function SidebarFooter({ showLabels, connectionState, stats, hasMessages,
               className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-text-300 hover:text-text-100 hover:bg-bg-200/50 transition-colors text-left"
             >
               <ShareIcon size={14} />
-              <span>Share Chat</span>
+              <span>{t('sidebar.shareChat')}</span>
             </button>
 
             <button
@@ -314,7 +318,7 @@ export function SidebarFooter({ showLabels, connectionState, stats, hasMessages,
               className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-text-300 hover:text-text-100 hover:bg-bg-200/50 transition-colors text-left"
             >
               <CogIcon size={14} />
-              <span>Settings</span>
+              <span>{t('sidebar.settings')}</span>
             </button>
           </div>
 

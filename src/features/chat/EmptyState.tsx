@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { MessageSquareIcon, FolderIcon, ChevronDownIcon, NewChatIcon } from '../../components/Icons'
 import { getPath, type ApiProject, type ApiPath } from '../../api'
 import { handleError } from '../../utils'
@@ -10,6 +11,7 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({ currentProject, projects, onStartChat }: EmptyStateProps) {
+  const { t } = useTranslation(['chat', 'common'])
   const [pathInfo, setPathInfo] = useState<ApiPath | null>(null)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [customPath, setCustomPath] = useState('')
@@ -83,12 +85,14 @@ export function EmptyState({ currentProject, projects, onStartChat }: EmptyState
         </div>
 
         {/* Title */}
-        <h2 className="text-xl font-semibold text-text-100 text-center mb-2">Start a new conversation</h2>
-        <p className="text-sm text-text-400 text-center mb-6">Choose a working directory for this session</p>
+        <h2 className="text-xl font-semibold text-text-100 text-center mb-2">{t('emptyState.title')}</h2>
+        <p className="text-sm text-text-400 text-center mb-6">{t('emptyState.description')}</p>
 
         {/* Directory Selector */}
         <div className="space-y-3">
-          <label className="block text-xs font-medium text-text-400 uppercase tracking-wider">Working Directory</label>
+          <label className="block text-xs font-medium text-text-400 uppercase tracking-wider">
+            {t('emptyState.workingDirectory')}
+          </label>
 
           {isCustomMode ? (
             // 自定义路径输入
@@ -105,14 +109,14 @@ export function EmptyState({ currentProject, projects, onStartChat }: EmptyState
                     setIsCustomMode(false)
                   }
                 }}
-                placeholder="Enter absolute path..."
+                placeholder={t('emptyState.enterAbsolutePath')}
                 className="w-full px-3 py-2.5 bg-bg-200 border border-border-300/30 rounded-lg text-sm text-text-100 placeholder:text-text-500 focus:outline-none focus:border-accent-main-100/50 transition-colors"
               />
               <button
                 onClick={() => setIsCustomMode(false)}
                 className="text-xs text-text-400 hover:text-text-200 transition-colors"
               >
-                ← Back to directory list
+                ← {t('emptyState.backToDirectoryList')}
               </button>
             </div>
           ) : (
@@ -124,7 +128,7 @@ export function EmptyState({ currentProject, projects, onStartChat }: EmptyState
               >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <FolderIcon className="w-4 h-4 text-text-400 flex-shrink-0" />
-                  <span className="truncate">{currentDirectory || 'Select directory...'}</span>
+                  <span className="truncate">{currentDirectory || t('emptyState.selectDirectory')}</span>
                 </div>
                 <ChevronDownIcon
                   className={`w-4 h-4 text-text-400 transition-transform flex-shrink-0 ${isDropdownOpen ? 'rotate-180' : ''}`}
@@ -142,7 +146,7 @@ export function EmptyState({ currentProject, projects, onStartChat }: EmptyState
                     >
                       <FolderIcon className="w-4 h-4 text-accent-main-100 flex-shrink-0" />
                       <span className="truncate">{currentDirectory}</span>
-                      <span className="text-xs text-text-500 flex-shrink-0">(current)</span>
+                      <span className="text-xs text-text-500 flex-shrink-0">{t('emptyState.current')}</span>
                     </button>
 
                     {/* Other project directories */}
@@ -164,7 +168,7 @@ export function EmptyState({ currentProject, projects, onStartChat }: EmptyState
                         className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-bg-200/50 transition-colors text-sm text-text-400"
                       >
                         <NewChatIcon className="w-4 h-4 flex-shrink-0" />
-                        <span>Enter custom path...</span>
+                        <span>{t('emptyState.enterCustomPath')}</span>
                       </button>
                     </div>
                   </div>
@@ -180,13 +184,11 @@ export function EmptyState({ currentProject, projects, onStartChat }: EmptyState
           disabled={isCustomMode ? !customPath.trim() : !currentDirectory}
           className="w-full mt-6 px-4 py-2.5 bg-accent-main-100 hover:bg-accent-main-200 disabled:opacity-50 disabled:cursor-not-allowed text-oncolor-100 rounded-lg text-sm font-medium transition-colors"
         >
-          Start Conversation
+          {t('emptyState.startConversation')}
         </button>
 
         {/* Hint */}
-        <p className="mt-4 text-xs text-text-500 text-center">
-          Or just type a message below to start with the current directory
-        </p>
+        <p className="mt-4 text-xs text-text-500 text-center">{t('emptyState.orJustType')}</p>
       </div>
     </div>
   )

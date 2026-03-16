@@ -5,6 +5,7 @@
 // ============================================
 
 import { memo, useCallback, useMemo, useEffect, useRef, useState, useLayoutEffect, type DragEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useFileExplorer, type FileTreeNode } from '../hooks'
 import { layoutStore, type PreviewFile } from '../store/layoutStore'
 import { ChevronRightIcon, ChevronDownIcon, RetryIcon, CloseIcon, AlertCircleIcon, DownloadIcon } from './Icons'
@@ -43,6 +44,7 @@ export const FileExplorer = memo(function FileExplorer({
   isPanelResizing = false,
   sessionId,
 }: FileExplorerProps) {
+  const { t } = useTranslation(['components', 'common'])
   const containerRef = useRef<HTMLDivElement>(null)
   const treeRef = useRef<HTMLDivElement>(null)
   const [treeHeight, setTreeHeight] = useState<number | null>(null) // null 表示自动
@@ -224,7 +226,7 @@ export const FileExplorer = memo(function FileExplorer({
             e.currentTarget.style.visibility = 'hidden'
           }}
         />
-        <span className="text-center">Select a project to browse files</span>
+        <span className="text-center">{t('fileExplorer.selectProject')}</span>
       </div>
     )
   }
@@ -245,12 +247,14 @@ export const FileExplorer = memo(function FileExplorer({
       >
         {/* Tree Header */}
         <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-100/50 shrink-0">
-          <span className="text-[10px] font-bold text-text-400 uppercase tracking-wider">Explorer</span>
+          <span className="text-[10px] font-bold text-text-400 uppercase tracking-wider">
+            {t('fileExplorer.explorer')}
+          </span>
           <button
             onClick={refresh}
             disabled={isLoading}
             className="p-1 text-text-400 hover:text-text-100 hover:bg-bg-200 rounded transition-colors disabled:opacity-50"
-            title="Refresh"
+            title={t('common:refresh')}
           >
             <RetryIcon size={12} className={isLoading ? 'animate-spin' : ''} />
           </button>
@@ -259,14 +263,16 @@ export const FileExplorer = memo(function FileExplorer({
         {/* Tree Content */}
         <div className="flex-1 overflow-auto panel-scrollbar-y">
           {isLoading && tree.length === 0 ? (
-            <div className="flex items-center justify-center h-20 text-text-400 text-xs">Loading...</div>
+            <div className="flex items-center justify-center h-20 text-text-400 text-xs">{t('common:loading')}</div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center h-20 text-danger-100 text-xs gap-1 px-4">
               <AlertCircleIcon size={16} />
               <span className="text-center">{error}</span>
             </div>
           ) : tree.length === 0 ? (
-            <div className="flex items-center justify-center h-20 text-text-400 text-xs">No files found</div>
+            <div className="flex items-center justify-center h-20 text-text-400 text-xs">
+              {t('fileExplorer.noFilesFound')}
+            </div>
           ) : (
             <div className="py-1">
               {tree.map(node => (
@@ -453,6 +459,7 @@ interface FilePreviewProps {
 }
 
 function FilePreview({ path, content, isLoading, error, onClose, isResizing = false }: FilePreviewProps) {
+  const { t } = useTranslation(['components', 'common'])
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // 获取文件名
@@ -568,7 +575,7 @@ function FilePreview({ path, content, isLoading, error, onClose, isResizing = fa
       {/* Preview Content */}
       <div ref={scrollRef} className="flex-1 overflow-auto panel-scrollbar">
         {isLoading ? (
-          <div className="flex items-center justify-center h-full text-text-400 text-xs">Loading...</div>
+          <div className="flex items-center justify-center h-full text-text-400 text-xs">{t('common:loading')}</div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center h-full text-danger-100 text-xs gap-1 px-4">
             <AlertCircleIcon size={16} />
@@ -597,7 +604,7 @@ function FilePreview({ path, content, isLoading, error, onClose, isResizing = fa
         displayContent?.type === 'text' ? (
           <CodePreview code={displayContent.text} language={language || 'text'} isResizing={isResizing} />
         ) : (
-          <div className="flex items-center justify-center h-full text-text-400 text-xs">No content</div>
+          <div className="flex items-center justify-center h-full text-text-400 text-xs">{t('common:noContent')}</div>
         )}
       </div>
     </div>
@@ -652,6 +659,7 @@ interface ImagePreviewProps {
 }
 
 function ImagePreview({ dataUrl, fileName }: ImagePreviewProps) {
+  const { t } = useTranslation(['components', 'common'])
   const containerRef = useRef<HTMLDivElement>(null)
   const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 })
   const scaleRef = useRef(1) // 同步访问，避免 stale closure
@@ -804,13 +812,13 @@ function ImagePreview({ dataUrl, fileName }: ImagePreviewProps) {
           onClick={zoomFit}
           className={`px-1.5 py-0.5 rounded transition-colors ${isFit ? 'bg-bg-200 text-text-100' : 'text-text-400 hover:bg-bg-200 hover:text-text-100'}`}
         >
-          Fit
+          {t('fileExplorer.fit')}
         </button>
         <button
           onClick={zoomActual}
           className={`px-1.5 py-0.5 rounded transition-colors ${isActual ? 'bg-bg-200 text-text-100' : 'text-text-400 hover:bg-bg-200 hover:text-text-100'}`}
         >
-          1:1
+          {t('fileExplorer.oneToOne')}
         </button>
       </div>
       {/* Image area */}
@@ -851,6 +859,7 @@ interface TextMediaPreviewProps {
 }
 
 function TextMediaPreview({ dataUrl, text, language, fileName, isResizing = false }: TextMediaPreviewProps) {
+  const { t } = useTranslation(['components', 'common'])
   const [mode, setMode] = useState<'preview' | 'code'>('preview')
 
   return (
@@ -861,13 +870,13 @@ function TextMediaPreview({ dataUrl, text, language, fileName, isResizing = fals
           onClick={() => setMode('preview')}
           className={`px-2 py-0.5 rounded transition-colors ${mode === 'preview' ? 'bg-bg-200 text-text-100' : 'text-text-400 hover:bg-bg-200 hover:text-text-100'}`}
         >
-          Preview
+          {t('common:preview')}
         </button>
         <button
           onClick={() => setMode('code')}
           className={`px-2 py-0.5 rounded transition-colors ${mode === 'code' ? 'bg-bg-200 text-text-100' : 'text-text-400 hover:bg-bg-200 hover:text-text-100'}`}
         >
-          Code
+          {t('common:code')}
         </button>
       </div>
       {/* Content */}

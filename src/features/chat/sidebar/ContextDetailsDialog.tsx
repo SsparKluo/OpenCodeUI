@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Dialog } from '../../../components/ui'
 import { CodeBlock } from '../../../components/CodeBlock'
 import { ChevronDownIcon, ChevronUpIcon, CpuIcon, DollarSignIcon, SpinnerIcon } from '../../../components/Icons'
@@ -35,6 +36,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 export function ContextDetailsDialog({ isOpen, onClose, contextLimit }: ContextDetailsDialogProps) {
+  const { t } = useTranslation(['chat', 'common'])
   const { sessionId, messages } = useMessageStore()
   const stats = useSessionStats(contextLimit)
 
@@ -93,26 +95,38 @@ export function ContextDetailsDialog({ isOpen, onClose, contextLimit }: ContextD
   )
 
   return (
-    <Dialog isOpen={isOpen} onClose={onClose} title="Context" width={900} className="w-full">
+    <Dialog isOpen={isOpen} onClose={onClose} title={t('contextDetails.context')} width={900} className="w-full">
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Stat label="Session" value={sessionId || '—'} />
-          <Stat label="Messages" value={`${counts.all} (user ${counts.user}, assistant ${counts.assistant})`} />
-          <Stat label="Provider" value={contextMsg?.info.role === 'assistant' ? contextMsg.info.providerID : '—'} />
-          <Stat label="Model" value={contextMsg?.info.role === 'assistant' ? contextMsg.info.modelID : '—'} />
-          <Stat label="Context Limit" value={formatTokens(contextLimit)} />
-          <Stat label="Total Tokens" value={contextTotal ? formatTokens(contextTotal) : '—'} />
-          <Stat label="Usage" value={contextUsagePercent === null ? '—' : `${contextUsagePercent}%`} />
-          <Stat label="Total Cost" value={formatCost(stats.totalCost)} />
+          <Stat label={t('contextDetails.session')} value={sessionId || '—'} />
+          <Stat
+            label={t('contextDetails.messages')}
+            value={`${counts.all} (user ${counts.user}, assistant ${counts.assistant})`}
+          />
+          <Stat
+            label={t('contextDetails.provider')}
+            value={contextMsg?.info.role === 'assistant' ? contextMsg.info.providerID : '—'}
+          />
+          <Stat
+            label={t('contextDetails.model')}
+            value={contextMsg?.info.role === 'assistant' ? contextMsg.info.modelID : '—'}
+          />
+          <Stat label={t('contextDetails.contextLimit')} value={formatTokens(contextLimit)} />
+          <Stat label={t('contextDetails.totalTokens')} value={contextTotal ? formatTokens(contextTotal) : '—'} />
+          <Stat
+            label={t('contextDetails.usage')}
+            value={contextUsagePercent === null ? '—' : `${contextUsagePercent}%`}
+          />
+          <Stat label={t('contextDetails.totalCost')} value={formatCost(stats.totalCost)} />
         </div>
 
         {contextTokens && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-lg border border-border-200/50 bg-bg-200/20">
-            <Stat label="Input" value={formatTokens(contextTokens.input)} />
-            <Stat label="Output" value={formatTokens(contextTokens.output)} />
-            <Stat label="Reasoning" value={formatTokens(contextTokens.reasoning)} />
+            <Stat label={t('contextDetails.inputTokens')} value={formatTokens(contextTokens.input)} />
+            <Stat label={t('contextDetails.outputTokens')} value={formatTokens(contextTokens.output)} />
+            <Stat label={t('contextDetails.reasoning')} value={formatTokens(contextTokens.reasoning)} />
             <Stat
-              label="Cache (r/w)"
+              label={t('contextDetails.cacheRW')}
               value={`${formatTokens(contextTokens.cache.read)} / ${formatTokens(contextTokens.cache.write)}`}
             />
           </div>
@@ -130,7 +144,7 @@ export function ContextDetailsDialog({ isOpen, onClose, contextLimit }: ContextD
       </div>
 
       <div className="mt-6">
-        <div className="text-[11px] font-medium text-text-400 mb-2">Raw Messages</div>
+        <div className="text-[11px] font-medium text-text-400 mb-2">{t('contextDetails.rawMessages')}</div>
         <div className="space-y-1">
           {messages.map(msg => {
             const isExpanded = expandedId === msg.info.id

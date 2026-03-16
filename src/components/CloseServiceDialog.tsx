@@ -4,6 +4,7 @@
 // ============================================
 
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Dialog } from './ui/Dialog'
 import { Button } from './ui/Button'
 import { PlugIcon, SpinnerIcon } from './Icons'
@@ -15,6 +16,7 @@ interface CloseServiceDialogProps {
 }
 
 export function CloseServiceDialog({ isOpen, onConfirm, onCancel }: CloseServiceDialogProps) {
+  const { t } = useTranslation(['components', 'common'])
   const [closing, setClosing] = useState(false)
 
   const handleConfirm = (stopService: boolean) => {
@@ -31,29 +33,27 @@ export function CloseServiceDialog({ isOpen, onConfirm, onCancel }: CloseService
         </div>
 
         {/* Title */}
-        <h3 className="text-[15px] font-semibold text-text-100 mb-2">Close OpenCode</h3>
+        <h3 className="text-[15px] font-semibold text-text-100 mb-2">{t('closeService.title')}</h3>
 
         {/* Description */}
-        <p className="text-[13px] text-text-300 leading-relaxed mb-6 max-w-[320px]">
-          The opencode service was started by this app. Do you want to stop it as well?
-        </p>
+        <p className="text-[13px] text-text-300 leading-relaxed mb-6 max-w-[320px]">{t('closeService.description')}</p>
 
         {/* Actions */}
         {closing ? (
           <div className="flex items-center gap-2 text-[13px] text-text-400">
             <SpinnerIcon size={14} className="animate-spin" />
-            Closing...
+            {t('common:closing')}
           </div>
         ) : (
           <div className="flex flex-col w-full gap-2">
             <Button onClick={() => handleConfirm(true)} className="w-full justify-center">
-              Close and stop service
+              {t('closeService.closeAndStop')}
             </Button>
             <Button variant="ghost" onClick={() => handleConfirm(false)} className="w-full justify-center">
-              Close, keep service running
+              {t('closeService.closeKeepRunning')}
             </Button>
             <Button variant="ghost" onClick={onCancel} className="w-full justify-center text-text-400">
-              Cancel
+              {t('common:cancel')}
             </Button>
           </div>
         )}

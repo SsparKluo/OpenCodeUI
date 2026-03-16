@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { CloseIcon, CopyIcon, CheckIcon, DownloadIcon, PlusIcon, MinusIcon } from '../../components/Icons'
 import { getAttachmentIcon } from './utils'
@@ -56,6 +57,7 @@ export const AttachmentDetailModal = memo(function AttachmentDetailModal({
   isOpen,
   onClose,
 }: AttachmentDetailModalProps) {
+  const { t } = useTranslation(['commands', 'common'])
   const [isVisible, setIsVisible] = useState(false)
   const shouldRender = useDelayedRender(isOpen, 200)
 
@@ -143,7 +145,9 @@ export const AttachmentDetailModal = memo(function AttachmentDetailModal({
         ) : hasContent ? (
           <TextViewer content={attachment.content!} />
         ) : (
-          <div className="flex items-center justify-center h-full text-text-400 text-sm">No preview available</div>
+          <div className="flex items-center justify-center h-full text-text-400 text-sm">
+            {t('attachment.noPreview')}
+          </div>
         )}
       </div>
     </div>,
@@ -164,6 +168,7 @@ interface ToolBarProps {
 }
 
 function ToolBar({ attachment, isImage, hasContent, hasUrl, onClose }: ToolBarProps) {
+  const { t } = useTranslation(['commands', 'common'])
   const { Icon, colorClass } = getAttachmentIcon(attachment)
 
   return (
@@ -190,7 +195,7 @@ function ToolBar({ attachment, isImage, hasContent, hasUrl, onClose }: ToolBarPr
         <button
           onClick={onClose}
           className="p-2 sm:p-1.5 rounded-md text-white/60 hover:text-white active:text-white hover:bg-white/10 active:bg-white/10 transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center"
-          title="Close (Esc)"
+          title={t('common:closeEsc')}
         >
           <CloseIcon size={16} />
         </button>
@@ -207,6 +212,7 @@ function ToolBar({ attachment, isImage, hasContent, hasUrl, onClose }: ToolBarPr
 // ============================================
 
 function ZoomableImage({ url, alt }: { url: string; alt: string }) {
+  const { t } = useTranslation(['commands', 'common'])
   const containerRef = useRef<HTMLDivElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
 
@@ -464,7 +470,11 @@ function ZoomableImage({ url, alt }: { url: string; alt: string }) {
   }, []) // 不依赖外部状态，全部通过 ref 访问
 
   if (imgError) {
-    return <div className="flex items-center justify-center h-full text-white/40 text-sm">Failed to load image</div>
+    return (
+      <div className="flex items-center justify-center h-full text-white/40 text-sm">
+        {t('attachment.failedToLoadImage')}
+      </div>
+    )
   }
 
   const scalePercent = Math.round(scale * 100)
@@ -509,19 +519,19 @@ function ZoomableImage({ url, alt }: { url: string; alt: string }) {
           className="flex items-center justify-center gap-1 py-1.5 sm:py-2 shrink-0"
           onClick={e => e.stopPropagation()}
         >
-          <ToolButton onClick={zoomOut} disabled={scale <= MIN_SCALE} title="Zoom out">
+          <ToolButton onClick={zoomOut} disabled={scale <= MIN_SCALE} title={t('attachment.zoomOut')}>
             <MinusIcon size={14} />
           </ToolButton>
 
           <button
             onClick={resetView}
             className="px-2 py-1 rounded text-xs font-mono text-white/70 hover:text-white active:text-white hover:bg-white/10 active:bg-white/10 transition-colors min-w-[52px] min-h-[44px] sm:min-h-0 flex items-center justify-center"
-            title="Reset (double-click / double-tap)"
+            title={t('attachment.zoomReset')}
           >
             {scalePercent}%
           </button>
 
-          <ToolButton onClick={zoomIn} disabled={scale >= MAX_SCALE} title="Zoom in">
+          <ToolButton onClick={zoomIn} disabled={scale >= MAX_SCALE} title={t('attachment.zoomIn')}>
             <PlusIcon size={14} />
           </ToolButton>
         </div>
@@ -595,6 +605,7 @@ function TextViewer({ content }: { content: string }) {
 // ============================================
 
 function InlineCopyButton({ text }: { text: string }) {
+  const { t } = useTranslation(['commands', 'common'])
   const [copied, setCopied] = useState(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -627,15 +638,16 @@ function InlineCopyButton({ text }: { text: string }) {
           ? 'text-green-400'
           : 'text-white/60 hover:text-white active:text-white hover:bg-white/10 active:bg-white/10'
       }`}
-      title={copied ? 'Copied!' : 'Copy content'}
+      title={copied ? t('common:copied') : t('attachment.copyContent')}
     >
       {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
-      <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
+      <span className="hidden sm:inline">{copied ? t('common:copied') : t('common:copy')}</span>
     </button>
   )
 }
 
 function InlineDownloadButton({ attachment }: { attachment: Attachment }) {
+  const { t } = useTranslation(['commands', 'common'])
   const handleDownload = useCallback(() => {
     const isImage = attachment.mime?.startsWith('image/')
     const fileName = attachment.displayName || (isImage ? 'image' : 'attachment.txt')
@@ -657,10 +669,10 @@ function InlineDownloadButton({ attachment }: { attachment: Attachment }) {
         handleDownload()
       }}
       className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-white/60 hover:text-white active:text-white hover:bg-white/10 active:bg-white/10 transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 justify-center"
-      title="Save to file"
+      title={t('attachment.saveToFile')}
     >
       <DownloadIcon size={14} />
-      <span className="hidden sm:inline">Save</span>
+      <span className="hidden sm:inline">{t('common:save')}</span>
     </button>
   )
 }

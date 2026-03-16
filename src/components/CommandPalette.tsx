@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { SearchIcon } from './Icons'
 import { formatKeybinding, parseKeybinding } from '../store/keybindingStore'
 import { useDelayedRender } from '../hooks/useDelayedRender'
@@ -66,6 +67,7 @@ function ShortcutDisplay({ shortcut }: { shortcut: string }) {
 // ============================================
 
 export function CommandPalette({ isOpen, onClose, commands }: CommandPaletteProps) {
+  const { t } = useTranslation(['components', 'common'])
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -230,7 +232,7 @@ export function CommandPalette({ isOpen, onClose, commands }: CommandPaletteProp
               setQuery(e.target.value)
               setSelectedIndex(0)
             }}
-            placeholder="Type a command..."
+            placeholder={t('commandPalette.placeholder')}
             className="flex-1 py-3.5 text-sm bg-transparent text-text-100 placeholder:text-text-400 
                        outline-none border-none"
             autoComplete="off"
@@ -244,7 +246,7 @@ export function CommandPalette({ isOpen, onClose, commands }: CommandPaletteProp
               }}
               className="text-text-400 hover:text-text-200 text-xs"
             >
-              Clear
+              {t('common:clear')}
             </button>
           )}
         </div>
@@ -252,7 +254,7 @@ export function CommandPalette({ isOpen, onClose, commands }: CommandPaletteProp
         {/* Command List */}
         <div ref={listRef} className="overflow-y-auto custom-scrollbar flex-1 py-1">
           {filteredCommands.length === 0 ? (
-            <div className="px-4 py-8 text-center text-text-400 text-sm">No commands found</div>
+            <div className="px-4 py-8 text-center text-text-400 text-sm">{t('commandPalette.noCommandsFound')}</div>
           ) : (
             filteredCommands.map((cmd, index) => (
               <button
@@ -287,13 +289,13 @@ export function CommandPalette({ isOpen, onClose, commands }: CommandPaletteProp
         <div className="px-4 py-2 border-t border-border-200/30 flex items-center gap-4 text-[11px] text-text-400">
           <span className="flex items-center gap-1">
             <Kbd>↑</Kbd>
-            <Kbd>↓</Kbd> navigate
+            <Kbd>↓</Kbd> {t('common:navigate')}
           </span>
           <span className="flex items-center gap-1">
-            <Kbd>↵</Kbd> run
+            <Kbd>↵</Kbd> {t('common:run')}
           </span>
           <span className="flex items-center gap-1">
-            <Kbd>Esc</Kbd> close
+            <Kbd>Esc</Kbd> {t('common:close')}
           </span>
         </div>
       </div>

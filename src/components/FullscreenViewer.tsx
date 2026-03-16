@@ -15,6 +15,7 @@
  */
 
 import { memo, useState, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { diffLines } from 'diff'
 import { CloseIcon } from './Icons'
 import { CopyButton } from './ui'
@@ -55,6 +56,7 @@ export type FullscreenViewerProps = CodeViewerProps | DiffViewerProps
 // ============================================
 
 export const FullscreenViewer = memo(function FullscreenViewer(props: FullscreenViewerProps) {
+  const { t } = useTranslation(['components', 'common'])
   const { isOpen, onClose, filePath, language } = props
 
   const [diffViewMode, setDiffViewMode] = useState<ViewMode>('split')
@@ -137,7 +139,9 @@ export const FullscreenViewer = memo(function FullscreenViewer(props: Fullscreen
 
           {/* Line count for code */}
           {props.mode === 'code' && (
-            <span className="text-text-500 text-[11px] font-mono shrink-0">{lineCount} lines</span>
+            <span className="text-text-500 text-[11px] font-mono shrink-0">
+              {lineCount} {t('fullscreenViewer.lines')}
+            </span>
           )}
         </div>
 
@@ -157,7 +161,7 @@ export const FullscreenViewer = memo(function FullscreenViewer(props: Fullscreen
           <button
             onClick={onClose}
             className="p-1.5 text-text-400 hover:text-text-100 hover:bg-bg-300/60 rounded-lg transition-colors"
-            title="Close (Esc)"
+            title={t('common:closeEsc')}
           >
             <CloseIcon size={16} />
           </button>
@@ -186,6 +190,8 @@ export const FullscreenViewer = memo(function FullscreenViewer(props: Fullscreen
 // ============================================
 
 export function ViewModeSwitch({ viewMode, onChange }: { viewMode: ViewMode; onChange: (mode: ViewMode) => void }) {
+  const { t } = useTranslation(['components', 'common'])
+
   return (
     <div className="flex items-center bg-bg-300/50 rounded-lg p-0.5 text-[11px]">
       <button
@@ -194,7 +200,7 @@ export function ViewModeSwitch({ viewMode, onChange }: { viewMode: ViewMode; onC
         }`}
         onClick={() => onChange('split')}
       >
-        Split
+        {t('sessionChanges.split')}
       </button>
       <button
         className={`px-2.5 py-1 rounded-md transition-all ${
@@ -202,7 +208,7 @@ export function ViewModeSwitch({ viewMode, onChange }: { viewMode: ViewMode; onC
         }`}
         onClick={() => onChange('unified')}
       >
-        Unified
+        {t('sessionChanges.unified')}
       </button>
     </div>
   )

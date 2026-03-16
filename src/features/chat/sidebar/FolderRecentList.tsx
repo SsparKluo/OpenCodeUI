@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ApiSession } from '../../../api'
 import { ArrowDownIcon, ArrowUpIcon, FolderIcon, FolderOpenIcon, SpinnerIcon } from '../../../components/Icons'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
@@ -50,6 +51,7 @@ export function FolderRecentList({
   onDeleteSession,
   onReorderProject,
 }: FolderRecentListProps) {
+  const { t } = useTranslation(['chat', 'common'])
   const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>(() =>
     getInitialExpandedProjectIds(projects, currentDirectory),
   )
@@ -85,8 +87,8 @@ export function FolderRecentList({
       <div className="h-full overflow-y-auto custom-scrollbar px-2 py-2">
         {projects.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center text-text-400 opacity-70">
-            <p className="text-xs font-medium text-text-300">No project folders yet</p>
-            <p className="mt-1 text-[11px] text-text-400/70">Add a project to browse recent chats by folder.</p>
+            <p className="text-xs font-medium text-text-300">{t('sidebar.noProjectFoldersYet')}</p>
+            <p className="mt-1 text-[11px] text-text-400/70">{t('sidebar.addProjectDesc')}</p>
           </div>
         ) : (
           <div className="space-y-0.5">
@@ -127,9 +129,9 @@ export function FolderRecentList({
           }
           setPendingDelete(null)
         }}
-        title="Delete Chat"
-        description="Are you sure you want to delete this chat? This action cannot be undone."
-        confirmText="Delete"
+        title={t('sidebar.deleteChat')}
+        description={t('sidebar.deleteChatConfirm')}
+        confirmText={t('common:delete')}
         variant="danger"
       />
     </>
@@ -165,6 +167,7 @@ function FolderRecentSection({
   onRenameSession,
   onRequestDeleteSession,
 }: FolderRecentSectionProps) {
+  const { t } = useTranslation(['chat', 'common'])
   const { ref, inView } = useInView({ rootMargin: '200px 0px', triggerOnce: true })
   const [hasActivated, setHasActivated] = useState(false)
 
@@ -230,7 +233,7 @@ function FolderRecentSection({
               }}
               disabled={!canMoveUp}
               className="rounded-md p-1 text-text-400 transition-colors hover:bg-bg-300 hover:text-text-100 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-400"
-              title="Move folder up"
+              title={t('sidebar.moveFolderUp')}
             >
               <ArrowUpIcon size={12} />
             </button>
@@ -241,7 +244,7 @@ function FolderRecentSection({
               }}
               disabled={!canMoveDown}
               className="rounded-md p-1 text-text-400 transition-colors hover:bg-bg-300 hover:text-text-100 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-400"
-              title="Move folder down"
+              title={t('sidebar.moveFolderDown')}
             >
               <ArrowDownIcon size={12} />
             </button>
@@ -256,7 +259,7 @@ function FolderRecentSection({
               <SpinnerIcon size={13} className="animate-spin" />
             </div>
           ) : sessions.length === 0 ? (
-            <div className="px-2 py-1.5 text-[12px] text-text-400/70">No chats in this folder</div>
+            <div className="px-2 py-1.5 text-[12px] text-text-400/70">{t('sidebar.noChatsInFolder')}</div>
           ) : (
             <>
               {sessions.map(session => (
@@ -279,7 +282,7 @@ function FolderRecentSection({
                   disabled={isLoadingMore}
                   className="w-full rounded-lg px-3 py-2 text-left text-[12px] font-medium text-text-400/80 transition-colors hover:bg-bg-200/35 hover:text-text-300 disabled:cursor-default disabled:hover:bg-transparent"
                 >
-                  {isLoadingMore ? 'Loading more...' : 'Show more chats'}
+                  {isLoadingMore ? t('common:loadingMore') : t('sidebar.showMoreChats')}
                 </button>
               )}
             </>

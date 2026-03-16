@@ -10,6 +10,7 @@
  */
 
 import { memo, useMemo, useRef, useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { diffLines, diffWords } from 'diff'
 import { useSyntaxHighlight, type HighlightTokens } from '../hooks/useSyntaxHighlight'
 
@@ -157,6 +158,7 @@ const SplitDiffView = memo(function SplitDiffView({
   isLargeFile: boolean
   maxHeight?: number
 }) {
+  const { t } = useTranslation(['components', 'common'])
   const containerRef = useRef<HTMLDivElement>(null)
   const leftContentRef = useRef<HTMLDivElement>(null)
   const rightContentRef = useRef<HTMLDivElement>(null)
@@ -295,7 +297,9 @@ const SplitDiffView = memo(function SplitDiffView({
   }, [])
 
   if (pairedLines.length === 0) {
-    return <div className="h-full flex items-center justify-center text-text-400 text-sm">No changes</div>
+    return (
+      <div className="h-full flex items-center justify-center text-text-400 text-sm">{t('diffViewer.noChanges')}</div>
+    )
   }
 
   // 渲染可见行 — 分别生成 gutter 和 content
@@ -455,6 +459,7 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
   isResizing: boolean
   maxHeight?: number
 }) {
+  const { t } = useTranslation(['components', 'common'])
   const containerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const scrollbarRef = useRef<HTMLDivElement>(null)
@@ -554,7 +559,9 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
   }, [])
 
   if (lines.length === 0) {
-    return <div className="h-full flex items-center justify-center text-text-400 text-sm">No changes</div>
+    return (
+      <div className="h-full flex items-center justify-center text-text-400 text-sm">{t('diffViewer.noChanges')}</div>
+    )
   }
 
   // gutter 宽度: oldLineNo(32px) + newLineNo(32px) + 标记(20px) = 84px

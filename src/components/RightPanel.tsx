@@ -1,4 +1,5 @@
 import { lazy, memo, Suspense, useCallback, useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useLayoutStore, layoutStore, type PanelTab } from '../store/layoutStore'
 import { PanelContainer } from './PanelContainer'
 import { useMessageStore } from '../store'
@@ -19,10 +20,14 @@ const SkillPanel = lazy(() => import('./SkillPanel').then(module => ({ default: 
 const WorktreePanel = lazy(() => import('./WorktreePanel').then(module => ({ default: module.WorktreePanel })))
 
 function PanelFallback() {
-  return <div className="flex items-center justify-center h-full text-text-400 text-xs">Loading panel...</div>
+  const { t } = useTranslation(['components', 'common'])
+  return (
+    <div className="flex items-center justify-center h-full text-text-400 text-xs">{t('rightPanel.loadingPanel')}</div>
+  )
 }
 
 export const RightPanel = memo(function RightPanel() {
+  const { t } = useTranslation(['components', 'common'])
   const { rightPanelOpen, rightPanelWidth, previewFile } = useLayoutStore()
   const { sessionId } = useMessageStore()
   const { currentDirectory } = useDirectory()
@@ -73,7 +78,9 @@ export const RightPanel = memo(function RightPanel() {
   const renderContent = useCallback(
     (activeTab: PanelTab | null) => {
       if (!activeTab) {
-        return <div className="flex items-center justify-center h-full text-text-400 text-xs">No content</div>
+        return (
+          <div className="flex items-center justify-center h-full text-text-400 text-xs">{t('common:noContent')}</div>
+        )
       }
 
       switch (activeTab.type) {
@@ -92,7 +99,9 @@ export const RightPanel = memo(function RightPanel() {
         case 'changes':
           if (!sessionId) {
             return (
-              <div className="flex items-center justify-center h-full text-text-400 text-xs">No active session</div>
+              <div className="flex items-center justify-center h-full text-text-400 text-xs">
+                {t('rightPanel.noActiveSession')}
+              </div>
             )
           }
           return (

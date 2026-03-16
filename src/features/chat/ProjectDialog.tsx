@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { FolderIcon, ArrowUpIcon, SpinnerIcon, PlusIcon } from '../../components/Icons'
 import { listDirectory, getPath } from '../../api'
 import { fileErrorHandler } from '../../utils'
@@ -58,6 +59,7 @@ function getFilterText(path: string): string {
 // ============================================
 
 export function ProjectDialog({ isOpen, onClose, onSelect, initialPath = '' }: ProjectDialogProps) {
+  const { t } = useTranslation(['chat', 'common'])
   // State
   const [inputValue, setInputValue] = useState('')
   const [items, setItems] = useState<FileItem[]>([])
@@ -320,7 +322,7 @@ export function ProjectDialog({ isOpen, onClose, onSelect, initialPath = '' }: P
               setSelectedIndex(0)
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Type path..."
+            placeholder={t('projectDialog.typePath')}
             className="flex-1 bg-transparent border-none outline-none text-sm text-text-100 placeholder:text-text-400 font-mono"
             autoComplete="off"
             spellCheck={false}
@@ -342,7 +344,7 @@ export function ProjectDialog({ isOpen, onClose, onSelect, initialPath = '' }: P
               <ListItem
                 id="project-item-up"
                 icon={<ArrowUpIcon className="w-3.5 h-3.5" />}
-                label=".. (Parent)"
+                label={t('projectDialog.parent')}
                 isSelected={selectedIndex === -1}
                 onClick={() => {
                   handleGoBack()
@@ -356,7 +358,7 @@ export function ProjectDialog({ isOpen, onClose, onSelect, initialPath = '' }: P
             {filteredItems.length === 0 && !isLoading && (
               <div className="flex flex-col items-center justify-center h-28 text-text-400/60 text-xs gap-2">
                 <FolderIcon className="w-6 h-6 opacity-30" />
-                <span>{filterText ? 'No matching folders' : 'Empty folder'}</span>
+                <span>{filterText ? t('projectDialog.noMatchingFolders') : t('common:emptyFolder')}</span>
               </div>
             )}
 
@@ -380,7 +382,7 @@ export function ProjectDialog({ isOpen, onClose, onSelect, initialPath = '' }: P
                       className="flex items-center gap-1 text-[10px] bg-accent-main-100 hover:bg-accent-main-200 px-2 py-0.5 rounded text-oncolor-100 font-medium transition-colors"
                     >
                       <PlusIcon className="w-2.5 h-2.5" />
-                      Add
+                      {t('common:add')}
                     </button>
                   )
                 }
@@ -400,7 +402,7 @@ export function ProjectDialog({ isOpen, onClose, onSelect, initialPath = '' }: P
           className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-000 hover:bg-accent-main-100/10 border border-border-200 hover:border-accent-main-100/30 text-text-200 hover:text-accent-main-100 rounded-lg transition-colors text-xs font-medium shrink-0 whitespace-nowrap"
         >
           <PlusIcon className="w-3 h-3" />
-          Add current
+          {t('projectDialog.addCurrent')}
         </button>
       </div>
     </Dialog>

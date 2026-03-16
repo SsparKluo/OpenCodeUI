@@ -1,4 +1,5 @@
 import { memo, useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { MessageError } from '../../../types/message'
 import { AlertCircleIcon, ChevronDownIcon } from '../../../components/Icons'
 import { useDelayedRender } from '../../../hooks/useDelayedRender'
@@ -13,7 +14,8 @@ interface MessageErrorViewProps {
  * 用于 AssistantMessage 的 error 字段
  */
 export const MessageErrorView = memo(function MessageErrorView({ error }: MessageErrorViewProps) {
-  const { title, description, details, severity } = getErrorInfo(error)
+  const { t } = useTranslation('message')
+  const { title, description, details, severity } = getErrorInfo(error, t)
   const hasDetails = !!(details || description)
   const [expanded, setExpanded] = useState(false)
   const shouldRenderBody = useDelayedRender(expanded)
@@ -78,7 +80,10 @@ export const MessageErrorView = memo(function MessageErrorView({ error }: Messag
 /**
  * 解析错误信息
  */
-function getErrorInfo(error: MessageError): {
+function getErrorInfo(
+  error: MessageError,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): {
   title: string
   description: string
   details?: string
@@ -87,28 +92,30 @@ function getErrorInfo(error: MessageError): {
   switch (error.name) {
     case 'ProviderAuthError':
       return {
-        title: 'Authentication Error',
-        description: `Failed to authenticate with ${error.data.providerID}: ${error.data.message}`,
+        title: t('errors.authError'),
+        description: t('errors.authErrorDesc', { provider: error.data.providerID, message: error.data.message }),
         severity: 'error',
       }
 
     case 'MessageOutputLengthError':
       return {
-        title: 'Output Too Long',
-        description: 'The response exceeded the maximum output length and was truncated.',
+        title: t('errors.outputTooLong'),
+        description: t('errors.outputTooLongDesc'),
         severity: 'warning',
       }
 
     case 'MessageAbortedError':
       return {
-        title: 'Message Aborted',
-        description: error.data.message || 'The message generation was interrupted.',
+        title: t('errors.messageAborted'),
+        description: error.data.message || t('errors.messageAbortedDesc'),
         severity: 'warning',
       }
 
     case 'APIError':
       return {
-        title: `API Error${error.data.statusCode ? ` (${error.data.statusCode})` : ''}`,
+        title: error.data.statusCode
+          ? t('errors.apiErrorWithCode', { code: error.data.statusCode })
+          : t('errors.apiError'),
         description: error.data.message,
         details: error.data.responseBody,
         severity: error.data.isRetryable ? 'warning' : 'error',
@@ -117,8 +124,8 @@ function getErrorInfo(error: MessageError): {
     case 'UnknownError':
     default:
       return {
-        title: 'Error',
-        description: error.data?.message || 'An unknown error occurred.',
+        title: t('errors.unknownError'),
+        description: error.data?.message || t('errors.unknownErrorDesc'),
         severity: 'error',
       }
   }

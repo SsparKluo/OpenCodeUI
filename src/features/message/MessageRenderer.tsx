@@ -1,4 +1,5 @@
-import { memo, useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react'
+import { memo, useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { animate } from 'motion/mini'
 import { ChevronDownIcon, ChevronRightIcon, UndoIcon } from '../../components/Icons'
 import { CopyButton, SmoothHeight } from '../../components/ui'
@@ -98,6 +99,7 @@ const CollapsibleUserText = memo(function CollapsibleUserText({
   collapseEnabled: boolean
   messageId: string
 }) {
+  const { t } = useTranslation('message')
   const contentRef = useRef<HTMLParagraphElement>(null)
   const [expanded, setExpanded] = useState(() => expandedMessages.has(messageId))
   const [isOverflow, setIsOverflow] = useState(() => overflowStateCache.get(messageId) ?? false)
@@ -161,7 +163,7 @@ const CollapsibleUserText = memo(function CollapsibleUserText({
           className="mt-1 text-xs text-text-400 hover:text-text-200 transition-colors"
           aria-expanded={expanded}
         >
-          {expanded ? 'Show less' : 'Show more'}
+          {expanded ? t('showLess') : t('showMore')}
         </button>
       )}
     </div>
@@ -179,6 +181,7 @@ interface UserMessageViewProps {
 }
 
 const UserMessageView = memo(function UserMessageView({ message, onUndo, canUndo }: UserMessageViewProps) {
+  const { t } = useTranslation('message')
   const { parts, info } = message
   const [showSystemContext, setShowSystemContext] = useState(false)
   const shouldRenderSystemContext = useDelayedRender(showSystemContext)
@@ -223,7 +226,7 @@ const UserMessageView = memo(function UserMessageView({ message, onUndo, canUndo
               className="flex items-center gap-1 text-xs text-text-400 hover:text-text-300 transition-colors py-1 px-2 rounded hover:bg-bg-200"
             >
               <span>
-                {showSystemContext ? 'Hide' : 'Show'} system context ({syntheticParts.length})
+                {showSystemContext ? t('hideSystemContext') : t('showSystemContext', { count: syntheticParts.length })}
               </span>
               <span className={`transition-transform duration-300 ${showSystemContext ? 'rotate-180' : ''}`}>
                 <ChevronDownIcon size={10} />
@@ -255,7 +258,7 @@ const UserMessageView = memo(function UserMessageView({ message, onUndo, canUndo
             <button
               onClick={() => onUndo(info.id)}
               className="p-1.5 rounded-md transition-colors duration-150 text-text-400 hover:text-text-200"
-              title="Undo from here"
+              title={t('undoFromHere')}
             >
               <UndoIcon />
             </button>
@@ -428,6 +431,7 @@ interface ToolGroupProps {
 }
 
 const ToolGroup = memo(function ToolGroup({ parts, stepFinish, duration, turnDuration, isStreaming }: ToolGroupProps) {
+  const { t } = useTranslation('message')
   const [expanded, setExpanded] = useState(true)
   const shouldRenderBody = useDelayedRender(expanded)
 
@@ -456,10 +460,12 @@ const ToolGroup = memo(function ToolGroup({ parts, stepFinish, duration, turnDur
             </span>
             <span className="inline-flex items-baseline gap-2 whitespace-nowrap">
               <span className="text-[13px] font-medium leading-tight">
-                {isAllDone ? `${totalCount} steps` : `${doneCount}/${totalCount} steps`}
+                {isAllDone
+                  ? t('stepsCount', { done: totalCount, total: totalCount })
+                  : t('stepsCount', { done: doneCount, total: totalCount })}
               </span>
               {!expanded && stepFinish && (
-                <span className="text-xs text-text-500 font-mono opacity-70">{formatTokens(stepFinish.tokens)}</span>
+                <span className="text-xs text-text-500 font-mono opacity-70">{formatTokens(stepFinish.tokens, t)}</span>
               )}
             </span>
           </button>
@@ -500,12 +506,15 @@ const ToolGroup = memo(function ToolGroup({ parts, stepFinish, duration, turnDur
 // Helpers
 // ============================================
 
-function formatTokens(tokens: StepFinishPart['tokens']): string {
+function formatTokens(
+  tokens: StepFinishPart['tokens'],
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
   const total = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
   if (total >= 1000) {
-    return `${(total / 1000).toFixed(1)}k tokens`
+    return t('tokensK', { count: (total / 1000).toFixed(1) })
   }
-  return `${total} tokens`
+  return `${total} ${t('tokens')}`
 }
 
 // ============================================

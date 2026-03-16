@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '../../../components/ui/Button'
-import { SunIcon, MoonIcon, SystemIcon, MaximizeIcon, MinimizeIcon, CheckIcon } from '../../../components/Icons'
+import {
+  SunIcon,
+  MoonIcon,
+  SystemIcon,
+  MaximizeIcon,
+  MinimizeIcon,
+  CheckIcon,
+  GlobeIcon,
+} from '../../../components/Icons'
 import { Toggle, SegmentedControl, SettingRow, SettingsCard } from './SettingsUI'
 import { useTheme } from '../../../hooks'
 
@@ -68,7 +77,15 @@ function PresetCard({
 // Custom CSS Editor
 // ============================================
 
-function CustomCSSEditor({ value, onChange }: { value: string; onChange: (css: string) => void }) {
+function CustomCSSEditor({
+  value,
+  onChange,
+  t,
+}: {
+  value: string
+  onChange: (css: string) => void
+  t: (key: string) => string
+}) {
   const [localValue, setLocalValue] = useState(value)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -261,7 +278,7 @@ function CustomCSSEditor({ value, onChange }: { value: string; onChange: (css: s
             onClick={() => handleChange(template)}
             className="text-[10px] text-accent-main-100 hover:text-accent-main-200 transition-colors px-1.5 py-0.5 rounded hover:bg-bg-200/50 shrink-0"
           >
-            Load Template
+            {t('appearance.loadTemplate')}
           </button>
         )}
       </div>
@@ -284,7 +301,7 @@ function CustomCSSEditor({ value, onChange }: { value: string; onChange: (css: s
               onChange('')
             }}
           >
-            Clear
+            {t('common:clear')}
           </Button>
         </div>
       )}
@@ -297,6 +314,7 @@ function CustomCSSEditor({ value, onChange }: { value: string; onChange: (css: s
 // ============================================
 
 export function AppearanceSettings() {
+  const { t, i18n } = useTranslation(['settings', 'common'])
   const {
     mode: themeMode,
     setThemeWithAnimation,
@@ -312,7 +330,7 @@ export function AppearanceSettings() {
   return (
     <div className="space-y-4">
       {availablePresets.length > 0 && (
-        <SettingsCard title="Theme Presets" description="Choose a base visual style for the app">
+        <SettingsCard title={t('appearance.themePresets')} description={t('appearance.themePresetsDesc')}>
           <div className="grid gap-2 sm:grid-cols-2">
             {availablePresets.map(p => (
               <PresetCard
@@ -328,23 +346,22 @@ export function AppearanceSettings() {
         </SettingsCard>
       )}
 
-      <SettingsCard
-        title="Custom CSS"
-        description="Override fonts, colors, and any CSS variables. Works with all themes."
-      >
-        <CustomCSSEditor value={customCSS} onChange={setCustomCSS} />
+      <SettingsCard title={t('appearance.customCss')} description={t('appearance.customCssDesc')}>
+        <CustomCSSEditor value={customCSS} onChange={setCustomCSS} t={t} />
       </SettingsCard>
 
-      <SettingsCard title="Display" description="Control color mode and layout">
+      <SettingsCard title={t('appearance.display')} description={t('appearance.displayDesc')}>
         <div className="space-y-4">
           <div>
-            <div className="text-[11px] font-medium text-text-400 uppercase tracking-wider mb-1.5">Color Mode</div>
+            <div className="text-[11px] font-medium text-text-400 uppercase tracking-wider mb-1.5">
+              {t('appearance.colorMode')}
+            </div>
             <SegmentedControl
               value={themeMode}
               options={[
-                { value: 'system', label: 'Auto', icon: <SystemIcon size={14} /> },
-                { value: 'light', label: 'Light', icon: <SunIcon size={14} /> },
-                { value: 'dark', label: 'Dark', icon: <MoonIcon size={14} /> },
+                { value: 'system', label: t('appearance.modeAuto'), icon: <SystemIcon size={14} /> },
+                { value: 'light', label: t('appearance.modeLight'), icon: <SunIcon size={14} /> },
+                { value: 'dark', label: t('appearance.modeDark'), icon: <MoonIcon size={14} /> },
               ]}
               onChange={(v, e) => setThemeWithAnimation(v, e)}
             />
@@ -352,12 +369,29 @@ export function AppearanceSettings() {
 
           <div className="pt-3 border-t border-border-100/55">
             <SettingRow
-              label="Wide Mode"
-              description="Expand chat area for long outputs"
+              label={t('appearance.wideMode')}
+              description={t('appearance.wideModeDesc')}
               icon={isWideMode ? <MinimizeIcon size={14} /> : <MaximizeIcon size={14} />}
               onClick={toggleWideMode}
             >
               <Toggle enabled={isWideMode} onChange={toggleWideMode} />
+            </SettingRow>
+          </div>
+
+          <div className="pt-3 border-t border-border-100/55">
+            <SettingRow
+              label={t('appearance.language')}
+              description={t('appearance.languageDesc')}
+              icon={<GlobeIcon size={14} />}
+            >
+              <select
+                value={i18n.language}
+                onChange={e => i18n.changeLanguage(e.target.value)}
+                className="px-2 py-1 text-[12px] bg-bg-200/50 border border-border-200 rounded-md text-text-100 focus:outline-none focus:border-accent-main-100/50 cursor-pointer"
+              >
+                <option value="en">{t('appearance.languages.en')}</option>
+                <option value="zh-CN">{t('appearance.languages.zh-CN')}</option>
+              </select>
             </SettingRow>
           </div>
         </div>

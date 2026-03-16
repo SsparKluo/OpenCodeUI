@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import type { ActiveSessionEntry } from '../../../store/activeSessionStore'
 import type { ApiSession } from '../../../api'
 
@@ -10,6 +11,7 @@ interface ActiveSessionItemProps {
 }
 
 export function ActiveSessionItem({ entry, resolvedSession, isSelected, onSelect }: ActiveSessionItemProps) {
+  const { t } = useTranslation(['chat', 'common'])
   const isRetry = entry.status.type === 'retry'
   const pending = entry.pendingAction
   // 标题优先从 resolvedSession 取，然后 fallback 到 entry.title（sessionMeta），最后截取 ID
@@ -20,12 +22,17 @@ export function ActiveSessionItem({ entry, resolvedSession, isSelected, onSelect
   // 状态显示：permission > question > retry > working
   const statusConfig =
     pending?.type === 'permission'
-      ? { label: 'Awaiting Permission', color: 'text-warning-100', dotColor: 'bg-warning-100', pulse: false }
+      ? {
+          label: t('activeSession.awaitingPermission'),
+          color: 'text-warning-100',
+          dotColor: 'bg-warning-100',
+          pulse: false,
+        }
       : pending?.type === 'question'
-        ? { label: 'Awaiting Answer', color: 'text-info-100', dotColor: 'bg-info-100', pulse: false }
+        ? { label: t('activeSession.awaitingAnswer'), color: 'text-info-100', dotColor: 'bg-info-100', pulse: false }
         : isRetry
-          ? { label: 'Retrying', color: 'text-warning-100', dotColor: 'bg-warning-100', pulse: false }
-          : { label: 'Working', color: 'text-success-100', dotColor: 'bg-success-100', pulse: true }
+          ? { label: t('activeSession.retrying'), color: 'text-warning-100', dotColor: 'bg-warning-100', pulse: false }
+          : { label: t('activeSession.working'), color: 'text-success-100', dotColor: 'bg-success-100', pulse: true }
 
   const handleClick = () => {
     if (resolvedSession) {
@@ -72,7 +79,7 @@ export function ActiveSessionItem({ entry, resolvedSession, isSelected, onSelect
             <>
               <span className="opacity-30 shrink-0">·</span>
               <span className="text-text-400 opacity-60 shrink-0 whitespace-nowrap">
-                attempt {entry.status.attempt}
+                {t('activeSession.attempt', { count: entry.status.attempt })}
               </span>
             </>
           )}

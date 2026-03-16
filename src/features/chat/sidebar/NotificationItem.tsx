@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { CheckIcon, AlertCircleIcon, CloseIcon, HandIcon, QuestionIcon } from '../../../components/Icons'
 import { notificationStore } from '../../../store/notificationStore'
 import { formatNotificationTime } from './sidebarUtils'
@@ -5,10 +6,20 @@ import type { NotificationEntry } from '../../../store/notificationStore'
 import type { ApiSession } from '../../../api'
 
 const notifTypeConfig = {
-  completed: { icon: CheckIcon, color: 'text-success-100', bgAccent: 'bg-success-bg', label: 'Completed' },
-  error: { icon: AlertCircleIcon, color: 'text-danger-100', bgAccent: 'bg-danger-bg', label: 'Error' },
-  permission: { icon: HandIcon, color: 'text-warning-100', bgAccent: 'bg-warning-bg', label: 'Permission' },
-  question: { icon: QuestionIcon, color: 'text-info-100', bgAccent: 'bg-info-bg', label: 'Question' },
+  completed: {
+    icon: CheckIcon,
+    color: 'text-success-100',
+    bgAccent: 'bg-success-bg',
+    labelKey: 'notification.completed',
+  },
+  error: { icon: AlertCircleIcon, color: 'text-danger-100', bgAccent: 'bg-danger-bg', labelKey: 'notification.error' },
+  permission: {
+    icon: HandIcon,
+    color: 'text-warning-100',
+    bgAccent: 'bg-warning-bg',
+    labelKey: 'notification.permission',
+  },
+  question: { icon: QuestionIcon, color: 'text-info-100', bgAccent: 'bg-info-bg', labelKey: 'notification.question' },
 } as const
 
 interface NotificationItemProps {
@@ -18,6 +29,7 @@ interface NotificationItemProps {
 }
 
 export function NotificationItem({ entry, resolvedSession, onSelect }: NotificationItemProps) {
+  const { t } = useTranslation(['chat', 'common'])
   const displayTitle = resolvedSession?.title || entry.title || entry.sessionId.slice(0, 12) + '...'
   const directory = resolvedSession?.directory || entry.directory
 
@@ -55,7 +67,7 @@ export function NotificationItem({ entry, resolvedSession, onSelect }: Notificat
           {displayTitle}
         </p>
         <div className="flex items-center mt-0.5 min-w-0 overflow-hidden text-[10px] text-text-400 gap-1">
-          <span className={`shrink-0 ${config.color}`}>{config.label}</span>
+          <span className={`shrink-0 ${config.color}`}>{t(config.labelKey)}</span>
           {entry.body && (
             <>
               <span className="opacity-30 shrink-0">·</span>
@@ -81,7 +93,7 @@ export function NotificationItem({ entry, resolvedSession, onSelect }: Notificat
         <button
           className="p-0.5 rounded-md text-text-400 opacity-0 group-hover:opacity-100 hover:text-text-200 hover:bg-bg-200 transition-all duration-150 active:scale-90"
           onClick={handleDismiss}
-          aria-label="Dismiss"
+          aria-label={t('common:dismiss')}
         >
           <CloseIcon size={10} />
         </button>

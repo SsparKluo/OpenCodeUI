@@ -1,0 +1,125 @@
+{
+  "commandPalette": {
+    "placeholder": "Type a command...",
+    "noCommandsFound": "No commands found"
+  },
+  "fileExplorer": {
+    "selectProject": "Select a project to browse files",
+    "explorer": "Explorer",
+    "noFilesFound": "No files found",
+    "binaryFile": "Binary file — preview not available",
+    "fit": "Fit",
+    "oneToOne": "1:1"
+  },
+  "terminal": {
+    "terminal": "Terminal",
+    "newTerminal": "New Terminal",
+    "hidePanel": "Hide Panel",
+    "restoringSessions": "Restoring sessions...",
+    "noTerminals": "No terminals",
+    "createTerminal": "Create Terminal",
+    "closeTerminal": "Close terminal"
+  },
+  "diffViewer": {
+    "noChanges": "No changes"
+  },
+  "rightPanel": {
+    "loadingPanel": "Loading panel...",
+    "noActiveSession": "No active session"
+  },
+  "bottomPanel": {
+    "loadingPanel": "Loading panel..."
+  },
+  "panelContainer": {
+    "files": "Files",
+    "changes": "Changes",
+    "mcp": "MCP",
+    "skills": "Skills",
+    "worktrees": "Worktrees",
+    "tab": "Tab",
+    "addTab": "Add Tab",
+    "moveToRight": "Move to Right Panel",
+    "moveToBottom": "Move to Bottom Panel",
+    "mcpServers": "MCP Servers"
+  },
+  "sessionChanges": {
+    "loadingChanges": "Loading changes...",
+    "failedToLoad": "Failed to load changes",
+    "noChanges": "No changes in this session",
+    "list": "List",
+    "tree": "Tree",
+    "unified": "Unified",
+    "split": "Split"
+  },
+  "mcpPanel": {
+    "title": "MCP Servers",
+    "addServer": "Add Server",
+    "loadingServers": "Loading servers...",
+    "failedToLoad": "Failed to load MCP servers",
+    "noServers": "No MCP servers configured",
+    "addMcpServer": "Add MCP Server",
+    "local": "Local",
+    "remote": "Remote",
+    "serverName": "Server name",
+    "commandPlaceholder": "Command (e.g., npx -y @modelcontextprotocol/server-github)",
+    "urlPlaceholder": "Server URL (e.g., https://mcp.example.com)",
+    "nameRequired": "Server name is required",
+    "commandRequired": "Command is required",
+    "urlRequired": "URL is required",
+    "failedToAdd": "Failed to add server",
+    "connected": "Connected",
+    "disabled": "Disabled",
+    "needsAuth": "Needs Auth",
+    "needsRegistration": "Needs Registration",
+    "disconnect": "Disconnect",
+    "connect": "Connect",
+    "authenticate": "Authenticate"
+  },
+  "skillPanel": {
+    "title": "Skills",
+    "filterPlaceholder": "Filter skills...",
+    "loadingSkills": "Loading skills...",
+    "failedToLoad": "Failed to load skills",
+    "noSkills": "No skills found"
+  },
+  "worktreePanel": {
+    "selectProject": "Select a project to manage worktrees",
+    "git": "Git",
+    "worktrees": "Worktrees",
+    "createWorktree": "Create Worktree",
+    "loadingWorktrees": "Loading worktrees...",
+    "noWorktrees": "No worktrees found",
+    "removeWorktree": "Remove Worktree",
+    "resetWorktree": "Reset Worktree",
+    "newWorktree": "New Worktree",
+    "worktreeNamePlaceholder": "Worktree name (e.g. feature-xyz)",
+    "openSessionAfter": "Open session after creation",
+    "openSession": "Open session in this worktree",
+    "resetWorktreeAction": "Reset worktree",
+    "removeWorktreeAction": "Remove worktree"
+  },
+  "toast": {
+    "clearAll": "Clear all"
+  },
+  "fullscreenViewer": {
+    "lines": "lines"
+  },
+  "multiFileDiff": {
+    "sessionChanges": "Session Changes",
+    "noChangesFound": "No changes found",
+    "selectFile": "Select a file to view changes"
+  },
+  "closeService": {
+    "title": "Close OpenCode",
+    "description": "The opencode service was started by this app. Do you want to stop it as well?",
+    "closeAndStop": "Close and stop service",
+    "closeKeepRunning": "Close, keep service running"
+  },
+  "contentBlock": {
+    "fullscreen": "Fullscreen",
+    "exitCode": "exit {{code}}"
+  },
+  "diffView": {
+    "fullscreenView": "Fullscreen"
+  }
+}

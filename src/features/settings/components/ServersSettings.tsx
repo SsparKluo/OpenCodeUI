@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '../../../components/ui/Button'
 import { GlobeIcon, PlusIcon, TrashIcon, WifiIcon, WifiOffIcon, SpinnerIcon, KeyIcon } from '../../../components/Icons'
 import { useServerStore, useRouter } from '../../../hooks'
@@ -25,6 +26,7 @@ function ServerItem({
   onDelete: () => void
   onCheckHealth: () => void
 }) {
+  const { t } = useTranslation(['settings', 'common'])
   const statusIcon = () => {
     if (!health || health.status === 'checking') return <SpinnerIcon size={12} className="animate-spin text-text-400" />
     if (health.status === 'online') return <WifiIcon size={12} className="text-success-100" />
@@ -33,20 +35,20 @@ function ServerItem({
   }
 
   const statusTitle = () => {
-    if (!health) return 'Check health'
+    if (!health) return t('servers.checkHealth')
     switch (health.status) {
       case 'checking':
-        return 'Checking...'
+        return t('servers.checking')
       case 'online':
-        return `Online (${health.latency}ms)${health.version ? ` · OpenCode v${health.version}` : ''}`
+        return `${t('servers.onlineLatency', { latency: health.latency })}${health.version ? ` · OpenCode v${health.version}` : ''}`
       case 'unauthorized':
-        return 'Invalid credentials'
+        return t('servers.invalidCredentials')
       case 'offline':
-        return health.error || 'Offline'
+        return health.error || t('common:offline')
       case 'error':
-        return health.error || 'Error'
+        return health.error || t('common:error')
       default:
-        return 'Unknown'
+        return t('common:unknown')
     }
   }
 
@@ -71,7 +73,7 @@ function ServerItem({
           <span className="text-[13px] font-medium text-text-100 truncate">{server.name}</span>
           {isActive && (
             <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium text-accent-main-100 bg-accent-main-100/10 shrink-0">
-              Current
+              {t('servers.current')}
             </span>
           )}
         </div>
@@ -98,7 +100,7 @@ function ServerItem({
             e.stopPropagation()
             onDelete()
           }}
-          title="Remove"
+          title={t('common:remove')}
         >
           <TrashIcon size={12} />
         </button>
@@ -118,6 +120,7 @@ function AddServerForm({
   onAdd: (name: string, url: string, username?: string, password?: string) => void
   onCancel: () => void
 }) {
+  const { t } = useTranslation(['settings', 'common'])
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [username, setUsername] = useState('')
@@ -128,17 +131,17 @@ function AddServerForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) {
-      setError('Name required')
+      setError(t('servers.nameRequired'))
       return
     }
     if (!url.trim()) {
-      setError('URL required')
+      setError(t('servers.urlRequired'))
       return
     }
     try {
       new URL(url)
     } catch {
-      setError('Invalid URL')
+      setError(t('servers.invalidUrl'))
       return
     }
 
@@ -166,7 +169,7 @@ function AddServerForm({
   return (
     <form onSubmit={handleSubmit} className="p-3 rounded-lg border border-border-200 bg-bg-050 space-y-2.5">
       <div>
-        <label className="block text-[11px] font-medium text-text-300 mb-1">Name</label>
+        <label className="block text-[11px] font-medium text-text-300 mb-1">{t('servers.name')}</label>
         <input
           type="text"
           value={name}
@@ -174,13 +177,13 @@ function AddServerForm({
             setName(e.target.value)
             setError('')
           }}
-          placeholder="My Server"
+          placeholder={t('servers.namePlaceholder')}
           className={inputCls}
           autoFocus
         />
       </div>
       <div>
-        <label className="block text-[11px] font-medium text-text-300 mb-1">URL</label>
+        <label className="block text-[11px] font-medium text-text-300 mb-1">{t('servers.url')}</label>
         <input
           type="text"
           value={url}
@@ -188,7 +191,7 @@ function AddServerForm({
             setUrl(e.target.value)
             setError('')
           }}
-          placeholder="http://192.168.1.100:4096"
+          placeholder={t('servers.urlPlaceholder')}
           className={`${inputCls} font-mono`}
         />
       </div>
@@ -199,13 +202,13 @@ function AddServerForm({
         className="flex items-center gap-1.5 text-[11px] text-accent-main-100 hover:text-accent-main-200 transition-colors"
       >
         <KeyIcon size={10} />
-        {showAuth ? 'Hide authentication' : 'Add authentication'}
+        {showAuth ? t('servers.hideAuth') : t('servers.addAuth')}
       </button>
 
       {showAuth && (
         <>
           <div>
-            <label className="block text-[11px] font-medium text-text-300 mb-1">Username</label>
+            <label className="block text-[11px] font-medium text-text-300 mb-1">{t('servers.username')}</label>
             <input
               type="text"
               value={username}
@@ -213,12 +216,12 @@ function AddServerForm({
                 setUsername(e.target.value)
                 setError('')
               }}
-              placeholder="opencode (default)"
+              placeholder={t('servers.usernamePlaceholder')}
               className={inputCls}
             />
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-text-300 mb-1">Password</label>
+            <label className="block text-[11px] font-medium text-text-300 mb-1">{t('servers.password')}</label>
             <input
               type="password"
               value={password}
@@ -226,14 +229,14 @@ function AddServerForm({
                 setPassword(e.target.value)
                 setError('')
               }}
-              placeholder="OPENCODE_SERVER_PASSWORD"
+              placeholder={t('servers.passwordPlaceholder')}
               className={inputCls}
             />
           </div>
 
           {isCrossOrigin && password.trim() && (
             <div className="text-[11px] text-warning-100 bg-warning-bg border border-warning-100/20 rounded-md px-2.5 py-2 leading-relaxed">
-              Cross-origin + password may not work due to a backend CORS limitation (
+              {t('servers.crossOriginWarning')}{' '}
               <a
                 href="https://github.com/anomalyco/opencode/issues/10047"
                 target="_blank"
@@ -242,24 +245,20 @@ function AddServerForm({
               >
                 #10047
               </a>
-              ). Consider deploying the UI on the same origin or starting the server without a password.
             </div>
           )}
 
-          <div className="text-[11px] text-text-400 leading-relaxed">
-            Credentials are stored in localStorage. For same-origin setups, the browser can handle auth natively without
-            entering credentials here.
-          </div>
+          <div className="text-[11px] text-text-400 leading-relaxed">{t('servers.credentialsStorage')}</div>
         </>
       )}
 
       {error && <p className="text-[11px] text-danger-100">{error}</p>}
       <div className="flex justify-end gap-2 pt-1">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-          Cancel
+          {t('common:cancel')}
         </Button>
         <Button type="submit" size="sm">
-          Add
+          {t('common:add')}
         </Button>
       </div>
     </form>
@@ -271,6 +270,7 @@ function AddServerForm({
 // ============================================
 
 export function ServersSettings() {
+  const { t } = useTranslation(['settings', 'common'])
   const [addingServer, setAddingServer] = useState(false)
   const { servers, activeServer, addServer, removeServer, setActiveServer, checkHealth, checkAllHealth, getHealth } =
     useServerStore()
@@ -305,22 +305,22 @@ export function ServersSettings() {
   return (
     <div className="space-y-4">
       <SettingsCard
-        title="Connections"
-        description="Manage backend endpoints and choose which server this session uses"
+        title={t('servers.connections')}
+        description={t('servers.connectionsDesc')}
         actions={
           <div className="flex items-center gap-2">
             <button
               onClick={checkAllHealth}
               className="text-[11px] px-2 py-1 rounded-md border border-border-200/60 text-text-300 hover:text-text-100 hover:border-border-300/70 hover:bg-bg-100/60 transition-colors"
             >
-              Refresh
+              {t('common:refresh')}
             </button>
             {!addingServer && (
               <button
                 onClick={() => setAddingServer(true)}
                 className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border border-accent-main-100/40 text-accent-main-100 hover:text-accent-main-200 hover:border-accent-main-100/60 hover:bg-accent-main-100/5 transition-colors"
               >
-                <PlusIcon size={10} /> Add
+                <PlusIcon size={10} /> {t('common:add')}
               </button>
             )}
           </div>
@@ -352,7 +352,7 @@ export function ServersSettings() {
           )}
 
           {servers.length === 0 && !addingServer && (
-            <div className="text-[13px] text-text-400 text-center py-8">No servers configured</div>
+            <div className="text-[13px] text-text-400 text-center py-8">{t('servers.noServersConfigured')}</div>
           )}
         </div>
       </SettingsCard>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Dialog, Button, IconButton } from '../../components/ui'
 import { LinkIcon, CopyIcon, GlobeIcon, SpinnerIcon, CheckIcon } from '../../components/Icons'
 import { shareSession, unshareSession } from '../../api'
@@ -11,6 +12,7 @@ interface ShareDialogProps {
 }
 
 export function ShareDialog({ isOpen, onClose }: ShareDialogProps) {
+  const { t } = useTranslation(['chat', 'common'])
   const { sessionId, shareUrl, sessionDirectory } = useMessageStore()
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -31,7 +33,7 @@ export function ShareDialog({ isOpen, onClose }: ShareDialogProps) {
       const updatedSession = await shareSession(sessionId, sessionDirectory)
       messageStore.setShareUrl(sessionId, updatedSession.share?.url)
     } catch (e) {
-      setError('Failed to create share link')
+      setError(t('shareDialog.failedCreate'))
       apiErrorHandler('share session', e)
     } finally {
       setLoading(false)
@@ -46,7 +48,7 @@ export function ShareDialog({ isOpen, onClose }: ShareDialogProps) {
       await unshareSession(sessionId, sessionDirectory)
       messageStore.setShareUrl(sessionId, undefined)
     } catch (e) {
-      setError('Failed to remove share link')
+      setError(t('shareDialog.failedRemove'))
       apiErrorHandler('unshare session', e)
     } finally {
       setLoading(false)
@@ -68,15 +70,15 @@ export function ShareDialog({ isOpen, onClose }: ShareDialogProps) {
   if (!sessionId) return null
 
   return (
-    <Dialog isOpen={isOpen} onClose={onClose} title="Share Chat" className="w-full max-w-md">
+    <Dialog isOpen={isOpen} onClose={onClose} title={t('shareDialog.title')} className="w-full max-w-md">
       <div className="flex flex-col gap-4">
         <div className="flex items-start gap-3 p-3 bg-bg-200/30 rounded-lg border border-border-200">
           <div className="p-2 bg-bg-200 rounded-full text-text-400">
             <GlobeIcon size={20} />
           </div>
           <div>
-            <h3 className="font-medium text-text-100">Public Link</h3>
-            <p className="text-sm text-text-400 mt-1">Anyone with this link can view this chat session.</p>
+            <h3 className="font-medium text-text-100">{t('shareDialog.publicLink')}</h3>
+            <p className="text-sm text-text-400 mt-1">{t('shareDialog.publicLinkDesc')}</p>
           </div>
         </div>
 
@@ -88,8 +90,8 @@ export function ShareDialog({ isOpen, onClose }: ShareDialogProps) {
               <div className="flex-1 truncate text-sm font-mono text-text-200 select-all">{shareUrl}</div>
               <IconButton
                 onClick={handleCopy}
-                title="Copy link"
-                aria-label="Copy link"
+                title={t('shareDialog.copyLink')}
+                aria-label={t('shareDialog.copyLink')}
                 className={copied ? 'text-success-100' : 'text-text-400 hover:text-text-100'}
               >
                 {copied ? <CheckIcon size={16} /> : <CopyIcon size={16} />}
@@ -103,9 +105,9 @@ export function ShareDialog({ isOpen, onClose }: ShareDialogProps) {
                 onClick={handleUnshare}
                 disabled={loading}
               >
-                {loading ? 'Processing...' : 'Stop sharing'}
+                {loading ? t('common:processing') : t('shareDialog.stopSharing')}
               </Button>
-              <Button onClick={onClose}>Done</Button>
+              <Button onClick={onClose}>{t('common:done')}</Button>
             </div>
           </div>
         ) : (
@@ -114,12 +116,12 @@ export function ShareDialog({ isOpen, onClose }: ShareDialogProps) {
               {loading ? (
                 <>
                   <SpinnerIcon className="animate-spin mr-2" />
-                  Creating link...
+                  {t('shareDialog.creatingLink')}
                 </>
               ) : (
                 <>
                   <LinkIcon className="mr-2" size={16} />
-                  Create public link
+                  {t('shareDialog.createPublicLink')}
                 </>
               )}
             </Button>

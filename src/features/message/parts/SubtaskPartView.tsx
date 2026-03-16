@@ -1,4 +1,5 @@
 import { memo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { SubtaskPart } from '../../../types/message'
 import { useChildSessions, type ChildSessionInfo } from '../../../store'
 import { useRouter } from '../../../hooks/useRouter'
@@ -17,6 +18,7 @@ interface SubtaskPartViewProps {
  * 2. 点击进入子 session 全屏视图
  */
 export const SubtaskPartView = memo(function SubtaskPartView({ part }: SubtaskPartViewProps) {
+  const { t } = useTranslation('message')
   const [expanded, setExpanded] = useState(false)
   const shouldRenderBody = useDelayedRender(expanded)
   const { navigateToSession } = useRouter()
@@ -61,13 +63,19 @@ export const SubtaskPartView = memo(function SubtaskPartView({ part }: SubtaskPa
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-text-200 truncate">{part.agent}</span>
               {isRunning && (
-                <span className="text-[10px] text-info-100 bg-info-100/10 px-1.5 py-0.5 rounded">Running</span>
+                <span className="text-[10px] text-info-100 bg-info-100/10 px-1.5 py-0.5 rounded">
+                  {t('subtask.running')}
+                </span>
               )}
               {status === 'idle' && (
-                <span className="text-[10px] text-success-100 bg-success-100/10 px-1.5 py-0.5 rounded">Done</span>
+                <span className="text-[10px] text-success-100 bg-success-100/10 px-1.5 py-0.5 rounded">
+                  {t('subtask.done')}
+                </span>
               )}
               {status === 'error' && (
-                <span className="text-[10px] text-danger-100 bg-danger-100/10 px-1.5 py-0.5 rounded">Error</span>
+                <span className="text-[10px] text-danger-100 bg-danger-100/10 px-1.5 py-0.5 rounded">
+                  {t('subtask.error')}
+                </span>
               )}
             </div>
             <p className="text-xs text-text-400 truncate mt-0.5">{part.description}</p>
@@ -84,7 +92,7 @@ export const SubtaskPartView = memo(function SubtaskPartView({ part }: SubtaskPa
               }}
               className="px-2.5 py-1 text-xs font-medium text-text-300 hover:text-text-100 hover:bg-bg-200 rounded-lg transition-colors"
             >
-              Enter
+              {t('subtask.enter')}
             </button>
           )}
           <ChevronDownIcon
@@ -104,7 +112,7 @@ export const SubtaskPartView = memo(function SubtaskPartView({ part }: SubtaskPa
             <div className="px-4 py-3 border-t border-border-200/40 space-y-3">
               {/* Prompt preview */}
               <div>
-                <p className="text-[10px] text-text-500 uppercase tracking-wider mb-1">Task</p>
+                <p className="text-[10px] text-text-500 uppercase tracking-wider mb-1">{t('subtask.task')}</p>
                 <p className="text-xs text-text-300 whitespace-pre-wrap line-clamp-4">{part.prompt}</p>
               </div>
 
@@ -134,7 +142,7 @@ export const SubtaskPartView = memo(function SubtaskPartView({ part }: SubtaskPa
                     className="w-full flex items-center justify-center gap-2 py-2 text-xs font-medium text-accent-main-100 hover:bg-accent-main-100/10 rounded-lg transition-colors"
                   >
                     <ReturnIcon size={14} />
-                    View full session
+                    {t('subtask.viewFullSession')}
                   </button>
                 </div>
               )}

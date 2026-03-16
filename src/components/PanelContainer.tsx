@@ -4,6 +4,7 @@
 // ============================================
 
 import { memo, useState, useCallback, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import {
   CloseIcon,
@@ -40,23 +41,23 @@ const TAB_ICONS: Record<PanelTabType, React.ReactNode> = {
 }
 
 // Tab 显示名称
-function getTabLabel(tab: PanelTab): string {
+function getTabLabel(tab: PanelTab, t: (key: string) => string): string {
   if (tab.type === 'terminal') {
-    return tab.title ?? 'Terminal'
+    return tab.title ?? t('terminal.terminal')
   }
   switch (tab.type) {
     case 'files':
-      return 'Files'
+      return t('panelContainer.files')
     case 'changes':
-      return 'Changes'
+      return t('panelContainer.changes')
     case 'mcp':
-      return 'MCP'
+      return t('panelContainer.mcp')
     case 'skill':
-      return 'Skills'
+      return t('panelContainer.skills')
     case 'worktree':
-      return 'Worktrees'
+      return t('panelContainer.worktrees')
     default:
-      return 'Tab'
+      return t('panelContainer.tab')
   }
 }
 
@@ -70,6 +71,7 @@ export const PanelContainer = memo(function PanelContainer({
   onNewTerminal,
   onCloseTerminal,
 }: PanelContainerProps) {
+  const { t } = useTranslation(['components', 'common'])
   const layout = useLayoutStore()
 
   const isOpen = position === 'bottom' ? layout.bottomPanelOpen : layout.rightPanelOpen
@@ -203,7 +205,7 @@ export const PanelContainer = memo(function PanelContainer({
     return null
   }
 
-  const otherPanelName = position === 'bottom' ? 'Right Panel' : 'Bottom Panel'
+  const otherPanelLabel = position === 'bottom' ? t('panelContainer.moveToRight') : t('panelContainer.moveToBottom')
 
   return (
     <>
@@ -255,7 +257,7 @@ export const PanelContainer = memo(function PanelContainer({
                 p-2 ml-1 rounded-md transition-colors shrink-0
                 ${addMenuPos ? 'bg-bg-200 text-text-100' : 'text-text-400 hover:text-text-100 hover:bg-bg-200/50'}
               `}
-              title="Add Tab"
+              title={t('panelContainer.addTab')}
             >
               <span className="text-lg leading-none">+</span>
             </button>
@@ -267,7 +269,7 @@ export const PanelContainer = memo(function PanelContainer({
           <button
             onClick={handleCollapse}
             className="p-2 text-text-400 hover:text-text-100 hover:bg-bg-200/50 rounded-md transition-colors"
-            title="Hide Panel"
+            title={t('terminal.hidePanel')}
           >
             {position === 'bottom' ? <ChevronDownIcon size={16} /> : <ChevronRightIcon size={16} />}
           </button>
@@ -291,7 +293,7 @@ export const PanelContainer = memo(function PanelContainer({
               onClick={handleMoveToOtherPanel}
               className="w-full px-3 py-1.5 text-left text-xs text-text-200 hover:bg-bg-200 hover:text-text-100 transition-colors"
             >
-              Move to {otherPanelName}
+              {otherPanelLabel}
             </button>
           </div>,
           document.body,
@@ -319,7 +321,7 @@ export const PanelContainer = memo(function PanelContainer({
               <span className="opacity-60 shrink-0">
                 <TerminalIcon size={12} />
               </span>
-              Terminal
+              {t('terminal.terminal')}
             </button>
             <button
               onClick={() => {
@@ -331,7 +333,7 @@ export const PanelContainer = memo(function PanelContainer({
               <span className="opacity-60 shrink-0">
                 <FolderIcon size={12} />
               </span>
-              Files
+              {t('panelContainer.files')}
             </button>
             <button
               onClick={() => {
@@ -343,7 +345,7 @@ export const PanelContainer = memo(function PanelContainer({
               <span className="opacity-60 shrink-0">
                 <GitCommitIcon size={12} />
               </span>
-              Changes
+              {t('panelContainer.changes')}
             </button>
             <button
               onClick={() => {
@@ -355,7 +357,7 @@ export const PanelContainer = memo(function PanelContainer({
               <span className="opacity-60 shrink-0">
                 <PlugIcon size={12} />
               </span>
-              MCP Servers
+              {t('panelContainer.mcpServers')}
             </button>
             <button
               onClick={() => {
@@ -367,7 +369,7 @@ export const PanelContainer = memo(function PanelContainer({
               <span className="opacity-60 shrink-0">
                 <TeachIcon size={12} />
               </span>
-              Skills
+              {t('panelContainer.skills')}
             </button>
             <button
               onClick={() => {
@@ -379,7 +381,7 @@ export const PanelContainer = memo(function PanelContainer({
               <span className="opacity-60 shrink-0">
                 <GitWorktreeIcon size={12} />
               </span>
-              Worktrees
+              {t('panelContainer.worktrees')}
             </button>
           </div>,
           document.body,
@@ -417,6 +419,7 @@ const PanelTabButton = memo(function PanelTabButton({
   onDragOver,
   onDragEnd,
 }: PanelTabButtonProps) {
+  const { t } = useTranslation(['components', 'common'])
   // Terminal 状态颜色
   const statusColor =
     tab.type === 'terminal' && tab.status
@@ -525,7 +528,7 @@ const PanelTabButton = memo(function PanelTabButton({
       <span className="opacity-60 shrink-0">{TAB_ICONS[tab.type]}</span>
 
       {/* Label */}
-      <span className="truncate max-w-[100px]">{getTabLabel(tab)}</span>
+      <span className="truncate max-w-[100px]">{getTabLabel(tab, t)}</span>
 
       {/* Close Button (only for closeable tabs like terminal) */}
       {onClose && (
@@ -545,7 +548,7 @@ const PanelTabButton = memo(function PanelTabButton({
             hover:bg-danger-100/20 text-text-400 hover:text-danger-100
             ${isActive ? '' : 'opacity-0 group-hover:opacity-100'}
           `}
-          title="Close"
+          title={t('common:close')}
         >
           <CloseIcon size={12} />
         </button>

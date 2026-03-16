@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { CloseIcon, ChevronDownIcon, CopyIcon, CheckIcon, DownloadIcon, ExpandIcon } from '../../components/Icons'
 import { getAttachmentIcon, hasExpandableContent } from './utils'
 import { getMaterialIconUrl } from '../../utils/materialIcons'
@@ -23,6 +24,7 @@ function AttachmentItemComponent({
   expandable = false,
   className,
 }: AttachmentItemProps) {
+  const { t } = useTranslation(['commands', 'common'])
   const [isExpanded, setIsExpanded] = useState(false)
   const [imageError, setImageError] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -98,7 +100,7 @@ function AttachmentItemComponent({
               onRemove(attachment.id)
             }}
             className="ml-1 text-text-400 hover:text-text-100 transition-colors"
-            aria-label="Remove attachment"
+            aria-label={t('attachment.removeAttachment')}
           >
             <CloseIcon />
           </button>
@@ -161,6 +163,7 @@ function MetaRow({
 }
 
 function ExpandedContent({ attachment, imageError, onImageError, onOpenDetail }: ExpandedContentProps) {
+  const { t } = useTranslation(['commands', 'common'])
   const { type, url, content, relativePath, mime, agentName, agentDescription } = attachment
   const isImage = mime?.startsWith('image/')
   const hasContent = !!content
@@ -185,7 +188,7 @@ function ExpandedContent({ attachment, imageError, onImageError, onOpenDetail }:
     contentNode = (
       <div className="max-h-64 overflow-auto custom-scrollbar">
         <pre className="p-2 text-xs font-mono text-text-300 whitespace-pre-wrap break-all">
-          {content.length > 5000 ? content.slice(0, 5000) + '\n\n... (truncated)' : content}
+          {content.length > 5000 ? content.slice(0, 5000) + '\n\n' + t('common:truncated') : content}
         </pre>
       </div>
     )
@@ -206,11 +209,11 @@ function ExpandedContent({ attachment, imageError, onImageError, onOpenDetail }:
 
       {/* 元信息 */}
       <div className="p-2 text-xs space-y-1 text-text-300 bg-bg-100/50 border-t border-border-300">
-        {type === 'text' && <MetaRow label="Category" value="Context" />}
+        {type === 'text' && <MetaRow label={t('attachment.category')} value={t('attachment.context')} />}
 
         {/* Full Path / URL */}
         <MetaRow
-          label="Source"
+          label={t('attachment.source')}
           value={
             url && !(url.startsWith('data:') && isImage && !imageError)
               ? url.startsWith('file:///')
@@ -222,17 +225,17 @@ function ExpandedContent({ attachment, imageError, onImageError, onOpenDetail }:
           className={url?.startsWith('data:') ? 'line-clamp-4' : ''}
         />
 
-        <MetaRow label="Ref Path" value={relativePath} />
-        <MetaRow label="Type" value={type === 'folder' ? 'Directory' : mime} />
+        <MetaRow label={t('attachment.refPath')} value={relativePath} />
+        <MetaRow label={t('attachment.type')} value={type === 'folder' ? t('attachment.directory') : mime} />
 
         {attachment.originalSource && typeof attachment.originalSource === 'object' && (
           <>
             {attachment.originalSource.type === 'symbol' && (
               <>
-                <MetaRow label="Symbol" value={attachment.originalSource.name} />
-                <MetaRow label="Kind" value={String(attachment.originalSource.kind)} />
+                <MetaRow label={t('attachment.symbol')} value={attachment.originalSource.name} />
+                <MetaRow label={t('attachment.kind')} value={String(attachment.originalSource.kind)} />
                 <MetaRow
-                  label="Range"
+                  label={t('attachment.range')}
                   value={
                     attachment.originalSource.range
                       ? `L${attachment.originalSource.range.start.line}:${attachment.originalSource.range.start.character}`
@@ -243,22 +246,22 @@ function ExpandedContent({ attachment, imageError, onImageError, onOpenDetail }:
             )}
             {attachment.originalSource.type === 'resource' && (
               <>
-                <MetaRow label="Resource" value={attachment.originalSource.uri} copyable />
-                <MetaRow label="Client" value={attachment.originalSource.clientName} />
+                <MetaRow label={t('attachment.resource')} value={attachment.originalSource.uri} copyable />
+                <MetaRow label={t('attachment.client')} value={attachment.originalSource.clientName} />
               </>
             )}
             {(attachment.originalSource.value ||
               (attachment.originalSource.text && attachment.originalSource.text?.value)) && (
               <MetaRow
-                label="Mention"
+                label={t('attachment.mentionLabel')}
                 value={attachment.originalSource.value || attachment.originalSource.text?.value}
               />
             )}
           </>
         )}
 
-        <MetaRow label="Agent" value={agentName} />
-        <MetaRow label="Desc" value={agentDescription} className="line-clamp-2" />
+        <MetaRow label={t('attachment.agentLabel')} value={agentName} />
+        <MetaRow label={t('attachment.desc')} value={agentDescription} className="line-clamp-2" />
       </div>
     </div>
   )
@@ -277,6 +280,7 @@ interface ActionBarProps {
 }
 
 function ActionBar({ attachment, hasContent, hasDownloadable, onOpenDetail, showBorderTop }: ActionBarProps) {
+  const { t } = useTranslation(['commands', 'common'])
   const [copied, setCopied] = useState(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -340,20 +344,20 @@ function ActionBar({ attachment, hasContent, hasDownloadable, onOpenDetail, show
       <button
         onClick={handleOpenDetail}
         className={`${btnBase} text-text-400 hover:text-text-200 hover:bg-bg-300/50`}
-        title="View detail"
+        title={t('attachment.viewDetail')}
       >
         <ExpandIcon size={11} />
-        <span>Detail</span>
+        <span>{t('common:detail')}</span>
       </button>
 
       {hasContent && (
         <button
           onClick={handleCopy}
           className={`${btnBase} ${copied ? 'text-success-100' : 'text-text-400 hover:text-text-200 hover:bg-bg-300/50'}`}
-          title={copied ? 'Copied!' : 'Copy content'}
+          title={copied ? t('common:copied') : t('attachment.copyContent')}
         >
           {copied ? <CheckIcon size={11} /> : <CopyIcon size={11} />}
-          <span>{copied ? 'Copied' : 'Copy'}</span>
+          <span>{copied ? t('common:copied') : t('common:copy')}</span>
         </button>
       )}
 
@@ -361,10 +365,10 @@ function ActionBar({ attachment, hasContent, hasDownloadable, onOpenDetail, show
         <button
           onClick={handleDownload}
           className={`${btnBase} text-text-400 hover:text-text-200 hover:bg-bg-300/50`}
-          title="Save to file"
+          title={t('attachment.saveToFile')}
         >
           <DownloadIcon size={11} />
-          <span>Save</span>
+          <span>{t('common:save')}</span>
         </button>
       )}
     </div>

@@ -5,6 +5,7 @@
  */
 
 import { useState, useRef, useEffect, useMemo, useCallback, memo, forwardRef, useImperativeHandle } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronDownIcon, SearchIcon, ThinkingIcon, EyeIcon, CheckIcon, PinIcon } from '../../components/Icons'
 import { DropdownMenu } from '../../components/ui'
 import type { ModelInfo } from '../../api'
@@ -39,6 +40,7 @@ export const ModelSelector = memo(
     { models, selectedModelKey, onSelect, isLoading = false, disabled = false },
     ref,
   ) {
+    const { t } = useTranslation('chat')
     const [isOpen, setIsOpen] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
     const [highlightedIndex, setHighlightedIndex] = useState(0)
@@ -84,7 +86,7 @@ export const ModelSelector = memo(
 
       // Pinned 分组优先
       if (pinned.length > 0) {
-        flat.push({ type: 'header', data: { name: 'Pinned' }, key: 'header-pinned' })
+        flat.push({ type: 'header', data: { name: t('modelSelector.pinned') }, key: 'header-pinned' })
         pinned.forEach(m => {
           const key = getModelKey(m)
           flat.push({ type: 'item', data: m, key: `pinned-${key}` })
@@ -96,7 +98,7 @@ export const ModelSelector = memo(
         // 排除已置顶的
         const recentFiltered = recent.filter(m => !addedKeys.has(getModelKey(m)))
         if (recentFiltered.length > 0) {
-          flat.push({ type: 'header', data: { name: 'Recent' }, key: 'header-recent' })
+          flat.push({ type: 'header', data: { name: t('modelSelector.recent') }, key: 'header-recent' })
           recentFiltered.forEach(m => {
             const key = getModelKey(m)
             flat.push({ type: 'item', data: m, key: `recent-${key}` })
@@ -114,7 +116,7 @@ export const ModelSelector = memo(
       })
 
       return { flatList: flat }
-    }, [filteredModels, models, searchQuery, refreshTrigger])
+    }, [filteredModels, models, searchQuery, refreshTrigger, t])
 
     // 仅计算可交互项的索引映射
     const itemIndices = useMemo(() => {
@@ -126,7 +128,8 @@ export const ModelSelector = memo(
       return models.find(m => getModelKey(m) === selectedModelKey) ?? null
     }, [models, selectedModelKey])
 
-    const displayName = selectedModel?.name || (isLoading ? 'Loading...' : 'Select model')
+    const displayName =
+      selectedModel?.name || (isLoading ? t('modelSelector.selectModel') : t('modelSelector.selectModel'))
 
     const openMenu = useCallback(() => {
       if (disabled || isLoading) return
@@ -314,7 +317,7 @@ export const ModelSelector = memo(
                   setHighlightedIndex(0)
                 }}
                 onKeyDown={handleKeyDown}
-                placeholder="Search models..."
+                placeholder={t('modelSelector.searchModels')}
                 className="flex-1 py-2 bg-transparent border-none outline-none text-sm text-text-100 placeholder:text-text-400"
               />
             </div>
@@ -323,8 +326,8 @@ export const ModelSelector = memo(
             <div ref={listRef} className="overflow-y-auto custom-scrollbar flex-1 relative max-h-[min(500px,60vh)]">
               {flatList.length === 0 ? (
                 <div className="px-4 py-10 text-center">
-                  <div className="text-sm text-text-400">No models found</div>
-                  <div className="text-xs text-text-500 mt-1">Try a different keyword</div>
+                  <div className="text-sm text-text-400">{t('modelSelector.noModelsFound')}</div>
+                  <div className="text-xs text-text-500 mt-1">{t('modelSelector.tryDifferentKeyword')}</div>
                 </div>
               ) : (
                 <div className="px-1 pb-1">
@@ -379,12 +382,18 @@ export const ModelSelector = memo(
                               className={`flex items-center gap-1.5 transition-opacity flex-shrink-0 h-4 ${isCurrentlyHighlighted || isSelected ? 'opacity-70' : 'opacity-35'}`}
                             >
                               {model.supportsReasoning && (
-                                <div className="flex items-center justify-center w-3.5" title="Thinking">
+                                <div
+                                  className="flex items-center justify-center w-3.5"
+                                  title={t('modelSelector.thinking')}
+                                >
                                   <ThinkingIcon size={13} />
                                 </div>
                               )}
                               {model.supportsImages && (
-                                <div className="flex items-center justify-center w-3.5" title="Vision">
+                                <div
+                                  className="flex items-center justify-center w-3.5"
+                                  title={t('modelSelector.vision')}
+                                >
                                   <EyeIcon size={14} />
                                 </div>
                               )}
@@ -401,7 +410,7 @@ export const ModelSelector = memo(
                             </span>
                             <button
                               onClick={e => handleTogglePin(e, model)}
-                              title={pinned ? 'Unpin' : 'Pin to top'}
+                              title={pinned ? t('modelSelector.unpin') : t('modelSelector.pinToTop')}
                               className={`flex-shrink-0 p-0.5 rounded transition-all duration-150 ${
                                 pinned
                                   ? 'text-accent-main-100 opacity-80 hover:opacity-100'
@@ -461,6 +470,7 @@ export const InputToolbarModelSelector = memo(function InputToolbarModelSelector
   disabled = false,
   constrainToRef,
 }: InputToolbarModelSelectorProps) {
+  const { t } = useTranslation('chat')
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState(0)
@@ -499,7 +509,7 @@ export const InputToolbarModelSelector = memo(function InputToolbarModelSelector
 
     // Pinned 分组优先
     if (pinned.length > 0) {
-      flat.push({ type: 'header', data: { name: 'Pinned' }, key: 'header-pinned' })
+      flat.push({ type: 'header', data: { name: t('modelSelector.pinned') }, key: 'header-pinned' })
       pinned.forEach(m => {
         const key = getModelKey(m)
         flat.push({ type: 'item', data: m, key: `pinned-${key}` })
@@ -510,7 +520,7 @@ export const InputToolbarModelSelector = memo(function InputToolbarModelSelector
     if (recent.length > 0) {
       const recentFiltered = recent.filter(m => !addedKeys.has(getModelKey(m)))
       if (recentFiltered.length > 0) {
-        flat.push({ type: 'header', data: { name: 'Recent' }, key: 'header-recent' })
+        flat.push({ type: 'header', data: { name: t('modelSelector.recent') }, key: 'header-recent' })
         recentFiltered.forEach(m => {
           const key = getModelKey(m)
           flat.push({ type: 'item', data: m, key: `recent-${key}` })
@@ -528,7 +538,7 @@ export const InputToolbarModelSelector = memo(function InputToolbarModelSelector
     })
 
     return { flatList: flat }
-  }, [filteredModels, models, searchQuery, refreshTrigger])
+  }, [filteredModels, models, searchQuery, refreshTrigger, t])
 
   const itemIndices = useMemo(() => {
     return flatList.map((item, index) => (item.type === 'item' ? index : -1)).filter(i => i !== -1)
@@ -539,7 +549,7 @@ export const InputToolbarModelSelector = memo(function InputToolbarModelSelector
     return models.find(m => getModelKey(m) === selectedModelKey) ?? null
   }, [models, selectedModelKey])
 
-  const displayName = selectedModel?.name || (isLoading ? '...' : 'Model')
+  const displayName = selectedModel?.name || (isLoading ? '...' : t('modelSelector.model'))
 
   const openMenu = useCallback(() => {
     if (disabled || isLoading) return
@@ -700,7 +710,7 @@ export const InputToolbarModelSelector = memo(function InputToolbarModelSelector
         onClick={() => (isOpen ? closeMenu() : openMenu())}
         disabled={disabled || isLoading}
         className="flex items-center gap-1.5 px-2 py-1.5 text-sm rounded-lg transition-all duration-150 hover:bg-bg-200 active:scale-95 cursor-pointer min-w-0 overflow-hidden w-full"
-        title={selectedModel?.name || 'Select model'}
+        title={selectedModel?.name || t('modelSelector.selectModel')}
       >
         <span className="text-xs text-text-300 truncate">{displayName}</span>
         <span className="text-text-400 hidden md:inline shrink-0">
@@ -734,7 +744,7 @@ export const InputToolbarModelSelector = memo(function InputToolbarModelSelector
                 setHighlightedIndex(0)
               }}
               onKeyDown={handleKeyDown}
-              placeholder="Search models..."
+              placeholder={t('modelSelector.searchModels')}
               className="flex-1 py-2 bg-transparent border-none outline-none text-sm text-text-100 placeholder:text-text-400"
             />
           </div>
@@ -743,8 +753,8 @@ export const InputToolbarModelSelector = memo(function InputToolbarModelSelector
           <div className="overflow-y-auto custom-scrollbar flex-1 relative max-h-[min(320px,40vh)] scroll-pb-3">
             {flatList.length === 0 ? (
               <div className="px-4 py-10 text-center">
-                <div className="text-sm text-text-400">No models found</div>
-                <div className="text-xs text-text-500 mt-1">Try a different keyword</div>
+                <div className="text-sm text-text-400">{t('modelSelector.noModelsFound')}</div>
+                <div className="text-xs text-text-500 mt-1">{t('modelSelector.tryDifferentKeyword')}</div>
               </div>
             ) : (
               <div className="px-1 pb-3">

@@ -1,4 +1,5 @@
 import { memo, useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronDownIcon, LightbulbIcon, SpinnerIcon } from '../../../components/Icons'
 import { ScrollArea } from '../../../components/ui'
 import { useDelayedRender } from '../../../hooks'
@@ -14,6 +15,7 @@ interface ReasoningPartViewProps {
 }
 
 export const ReasoningPartView = memo(function ReasoningPartView({ part, isStreaming }: ReasoningPartViewProps) {
+  const { t } = useTranslation('message')
   const { reasoningDisplayMode } = useTheme()
   const rawText = part.text || ''
 
@@ -37,7 +39,7 @@ export const ReasoningPartView = memo(function ReasoningPartView({ part, isStrea
     if (durationMs < 10000) return `${(durationMs / 1000).toFixed(1)}s`
     return `${Math.round(durationMs / 1000)}s`
   }, [part.time?.start, part.time?.end])
-  const summaryText = collapsedPreview || (isPartStreaming ? 'Thinking...' : '')
+  const summaryText = collapsedPreview || (isPartStreaming ? t('reasoning.thinking') : '')
   const hasLineBreak = /[\r\n]/.test(rawText)
 
   const measureSummaryOverflow = useCallback(() => {
@@ -101,10 +103,10 @@ export const ReasoningPartView = memo(function ReasoningPartView({ part, isStrea
   if (reasoningDisplayMode === 'italic') {
     const shouldUseToggle = isPartStreaming || hasLineBreak || summaryOverflow
     const expandedMetaText = isPartStreaming
-      ? 'Thinking...'
+      ? t('reasoning.thinking')
       : thoughtDurationLabel
-        ? `Thought for ${thoughtDurationLabel}`
-        : 'Thought process'
+        ? t('reasoning.thoughtFor', { duration: thoughtDurationLabel })
+        : t('reasoning.thoughtProcess')
     const summaryClassName = expanded
       ? isPartStreaming
         ? 'text-[12px] leading-5 text-text-200'
@@ -216,7 +218,7 @@ export const ReasoningPartView = memo(function ReasoningPartView({ part, isStrea
           )}
         </span>
         <span className="text-xs font-medium leading-5 whitespace-nowrap text-left">
-          {isPartStreaming ? 'Thinking...' : 'Thinking'}
+          {isPartStreaming ? t('reasoning.thinking') : t('reasoning.thinkingLabel')}
         </span>
         <span
           className={`inline-flex h-5 w-3 items-center justify-center shrink-0 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`}

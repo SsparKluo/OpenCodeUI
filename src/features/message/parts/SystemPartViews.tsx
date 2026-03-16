@@ -1,4 +1,5 @@
 import { memo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { RetryIcon, CompactIcon, PatchIcon, ChevronDownIcon, FileIcon } from '../../../components/Icons'
 import { useDelayedRender } from '../../../hooks/useDelayedRender'
 import type { RetryPart, CompactionPart, PatchPart } from '../../../types/message'
@@ -12,6 +13,7 @@ interface RetryPartViewProps {
 }
 
 export const RetryPartView = memo(function RetryPartView({ part }: RetryPartViewProps) {
+  const { t } = useTranslation('message')
   const [expanded, setExpanded] = useState(false)
   const shouldRenderBody = useDelayedRender(expanded)
   const { attempt, error, time } = part
@@ -24,11 +26,13 @@ export const RetryPartView = memo(function RetryPartView({ part }: RetryPartView
       <div className="flex items-center gap-2 cursor-pointer" onClick={() => setExpanded(!expanded)}>
         <RetryIcon className="w-4 h-4 text-warning-100 flex-shrink-0" />
         <div className="flex-1 min-w-0">
-          <span className="text-sm text-warning-100">Retry attempt {attempt}</span>
+          <span className="text-sm text-warning-100">{t('system.retryAttempt', { attempt })}</span>
           <span className="text-xs text-text-500 ml-2">{timeStr}</span>
         </div>
         {isRetryable && (
-          <span className="text-[10px] text-warning-100/70 bg-warning-100/10 px-1.5 py-0.5 rounded">Retryable</span>
+          <span className="text-[10px] text-warning-100/70 bg-warning-100/10 px-1.5 py-0.5 rounded">
+            {t('system.retryable')}
+          </span>
         )}
         <ChevronDownIcon
           className={`w-4 h-4 text-text-400 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`}
@@ -47,7 +51,9 @@ export const RetryPartView = memo(function RetryPartView({ part }: RetryPartView
                 {error.data.message}
               </p>
               {error.data.statusCode && (
-                <p className="text-[10px] text-text-500 mt-1">Status: {error.data.statusCode}</p>
+                <p className="text-[10px] text-text-500 mt-1">
+                  {t('system.statusCode', { code: error.data.statusCode })}
+                </p>
               )}
             </div>
           )}
@@ -66,13 +72,14 @@ interface CompactionPartViewProps {
 }
 
 export const CompactionPartView = memo(function CompactionPartView({ part }: CompactionPartViewProps) {
+  const { t } = useTranslation('message')
   const isAuto = part.auto
 
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-text-500">
       <div className="flex-1 h-px bg-border-200" />
       <CompactIcon className="w-3.5 h-3.5" />
-      <span>Context {isAuto ? 'auto-' : ''}compacted</span>
+      <span>{t('system.contextCompacted', { auto: isAuto ? t('system.autoPrefix') : '' })}</span>
       <div className="flex-1 h-px bg-border-200" />
     </div>
   )
@@ -87,6 +94,7 @@ interface PatchPartViewProps {
 }
 
 export const PatchPartView = memo(function PatchPartView({ part }: PatchPartViewProps) {
+  const { t } = useTranslation('message')
   const [expanded, setExpanded] = useState(false)
   const shouldRenderBody = useDelayedRender(expanded)
   const { hash, files } = part
@@ -100,9 +108,7 @@ export const PatchPartView = memo(function PatchPartView({ part }: PatchPartView
       >
         <PatchIcon className="w-4 h-4 text-text-400 flex-shrink-0" />
         <div className="flex-1 min-w-0">
-          <span className="text-sm text-text-200">
-            {fileCount} file{fileCount !== 1 ? 's' : ''} changed
-          </span>
+          <span className="text-sm text-text-200">{t('system.filesChanged', { count: fileCount })}</span>
           <span className="text-xs text-text-500 ml-2 font-mono">{hash.slice(0, 7)}</span>
         </div>
         <ChevronDownIcon

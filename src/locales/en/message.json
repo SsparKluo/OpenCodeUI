@@ -1,0 +1,82 @@
+{
+  "showLess": "Show less",
+  "showMore": "Show more",
+  "hideSystemContext": "Hide",
+  "showSystemContext": "Show system context ({{count}})",
+  "undoFromHere": "Undo from here",
+  "stepsCount": "{{done}}/{{total}} steps",
+  "tokens": "tokens",
+  "tokensK": "{{count}}k tokens",
+  "defaultRenderer": {
+    "input": "Input",
+    "error": "Error",
+    "output": "Output",
+    "diagnostics": "Diagnostics",
+    "errorsCount": "{{count}} error",
+    "errorsCount_other": "{{count}} errors",
+    "warningsCount": "{{count}} warning",
+    "warningsCount_other": "{{count}} warnings",
+    "result": "Result",
+    "nameResult": "{{name}} Result"
+  },
+  "reasoning": {
+    "thinking": "Thinking...",
+    "thinkingLabel": "Thinking",
+    "thoughtFor": "Thought for {{duration}}",
+    "thoughtProcess": "Thought process"
+  },
+  "toolPart": {
+    "running": "Running",
+    "failed": "Failed"
+  },
+  "todo": {
+    "tasks": "Tasks",
+    "completedCount": "{{completed}}/{{total}}"
+  },
+  "task": {
+    "subtask": "Subtask",
+    "result": "Result",
+    "error": "Error",
+    "stop": "Stop",
+    "openSession": "Open session",
+    "waitingForResponse": "Waiting for response..."
+  },
+  "system": {
+    "retryAttempt": "Retry attempt {{attempt}}",
+    "retryable": "Retryable",
+    "statusCode": "Status: {{code}}",
+    "contextCompacted": "Context {{auto}}compacted",
+    "autoPrefix": "auto-",
+    "filesChanged": "{{count}} file changed",
+    "filesChanged_other": "{{count}} files changed"
+  },
+  "subtask": {
+    "running": "Running",
+    "done": "Done",
+    "error": "Error",
+    "enter": "Enter",
+    "task": "Task",
+    "viewFullSession": "View full session"
+  },
+  "stepFinish": {
+    "inputTokens": "Input: {{input}}",
+    "outputTokens": "Output: {{output}}",
+    "reasoningTokens": "Reasoning: {{reasoning}}",
+    "cacheRead": "Cache read: {{read}}",
+    "cacheWrite": "Cache write: {{write}}",
+    "cached": "{{count}} cached",
+    "totalDuration": "total {{duration}}"
+  },
+  "errors": {
+    "authError": "Authentication Error",
+    "authErrorDesc": "Failed to authenticate with {{provider}}: {{message}}",
+    "outputTooLong": "Output Too Long",
+    "outputTooLongDesc": "The response exceeded the maximum output length and was truncated.",
+    "messageAborted": "Message Aborted",
+    "messageAbortedDesc": "The message generation was interrupted.",
+    "apiError": "API Error",
+    "apiErrorWithCode": "API Error ({{code}})",
+    "unknownError": "Error",
+    "unknownErrorDesc": "An unknown error occurred."
+  }
+}

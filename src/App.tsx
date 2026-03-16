@@ -1,4 +1,5 @@
 import { lazy, Suspense, useRef, useEffect, useState, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Header,
   InputBox,
@@ -40,6 +41,8 @@ const CloseServiceDialog = lazy(() =>
 )
 
 function App() {
+  const { t } = useTranslation(['commands', 'chat', 'common', 'components'])
+
   // ============================================
   // Refs
   // ============================================
@@ -113,10 +116,10 @@ function App() {
       if (fullAutoHintTimerRef.current) clearTimeout(fullAutoHintTimerRef.current)
       const label =
         mode === 'global'
-          ? 'Auto-approve: all sessions'
+          ? t('chat:hints.autoApproveAll')
           : mode === 'session'
-            ? 'Auto-approve: this session'
-            : 'Auto-approve: off'
+            ? t('chat:hints.autoApproveSession')
+            : t('chat:hints.autoApproveOffHint')
       setFullAutoHint(label)
       fullAutoHintTimerRef.current = setTimeout(() => setFullAutoHint(null), 2000)
     })
@@ -310,7 +313,7 @@ function App() {
       const pty = await createPtySession({ cwd: effectiveDirectory }, effectiveDirectory)
       const tab: TerminalTab = {
         id: pty.id,
-        title: pty.title || 'Terminal',
+        title: pty.title || t('components:terminal.terminal'),
         status: 'connecting',
       }
       layoutStore.addTerminalTab(tab, true)
@@ -389,25 +392,25 @@ function App() {
       // General
       {
         id: 'openSettings',
-        label: 'Open Settings',
-        description: 'Open settings dialog',
-        category: 'General',
+        label: t('commands:openSettings'),
+        description: t('commands:openSettingsDesc'),
+        category: t('commands:categories.general'),
         shortcut: getShortcut('openSettings'),
         action: openSettings,
       },
       {
         id: 'openProject',
-        label: 'Open Project',
-        description: 'Open project selector',
-        category: 'General',
+        label: t('commands:openProject'),
+        description: t('commands:openProjectDesc'),
+        category: t('commands:categories.general'),
         shortcut: getShortcut('openProject'),
         action: openProject,
       },
       {
         id: 'openSettingsShortcuts',
-        label: 'Open Shortcuts Settings',
-        description: 'Open settings to shortcuts tab',
-        category: 'General',
+        label: t('commands:openShortcutsSettings'),
+        description: t('commands:openShortcutsSettingsDesc'),
+        category: t('commands:categories.general'),
         action: () => {
           setSettingsInitialTab('keybindings')
           setSettingsDialogOpen(true)
@@ -415,25 +418,25 @@ function App() {
       },
       {
         id: 'toggleSidebar',
-        label: 'Toggle Sidebar',
-        description: 'Show or hide sidebar',
-        category: 'General',
+        label: t('commands:toggleSidebar'),
+        description: t('commands:toggleSidebarDesc'),
+        category: t('commands:categories.general'),
         shortcut: getShortcut('toggleSidebar'),
         action: () => setSidebarExpanded(!sidebarExpanded),
       },
       {
         id: 'toggleRightPanel',
-        label: 'Toggle Right Panel',
-        description: 'Show or hide right panel',
-        category: 'General',
+        label: t('commands:toggleRightPanel'),
+        description: t('commands:toggleRightPanelDesc'),
+        category: t('commands:categories.general'),
         shortcut: getShortcut('toggleRightPanel'),
         action: () => layoutStore.toggleRightPanel(),
       },
       {
         id: 'focusInput',
-        label: 'Focus Input',
-        description: 'Focus message input',
-        category: 'General',
+        label: t('commands:focusInput'),
+        description: t('commands:focusInputDesc'),
+        category: t('commands:categories.general'),
         shortcut: getShortcut('focusInput'),
         action: () => {
           const input = document.querySelector<HTMLTextAreaElement>('[data-input-box] textarea')
@@ -444,33 +447,33 @@ function App() {
       // Session
       {
         id: 'newSession',
-        label: 'New Session',
-        description: 'Create new chat session',
-        category: 'Session',
+        label: t('commands:newSession'),
+        description: t('commands:newSessionDesc'),
+        category: t('commands:categories.session'),
         shortcut: getShortcut('newSession'),
         action: handleNewSession,
       },
       {
         id: 'archiveSession',
-        label: 'Archive Session',
-        description: 'Archive current session',
-        category: 'Session',
+        label: t('commands:archiveSession'),
+        description: t('commands:archiveSessionDesc'),
+        category: t('commands:categories.session'),
         shortcut: getShortcut('archiveSession'),
         action: handleArchiveSession,
       },
       {
         id: 'previousSession',
-        label: 'Previous Session',
-        description: 'Switch to previous session',
-        category: 'Session',
+        label: t('commands:previousSession'),
+        description: t('commands:previousSessionDesc'),
+        category: t('commands:categories.session'),
         shortcut: getShortcut('previousSession'),
         action: handlePreviousSession,
       },
       {
         id: 'nextSession',
-        label: 'Next Session',
-        description: 'Switch to next session',
-        category: 'Session',
+        label: t('commands:nextSession'),
+        description: t('commands:nextSessionDesc'),
+        category: t('commands:categories.session'),
         shortcut: getShortcut('nextSession'),
         action: handleNextSession,
       },
@@ -478,17 +481,17 @@ function App() {
       // Terminal
       {
         id: 'toggleTerminal',
-        label: 'Toggle Terminal',
-        description: 'Show or hide terminal panel',
-        category: 'Terminal',
+        label: t('commands:toggleTerminal'),
+        description: t('commands:toggleTerminalDesc'),
+        category: t('commands:categories.terminal'),
         shortcut: getShortcut('toggleTerminal'),
         action: () => layoutStore.toggleBottomPanel(),
       },
       {
         id: 'newTerminal',
-        label: 'New Terminal',
-        description: 'Open new terminal tab',
-        category: 'Terminal',
+        label: t('commands:newTerminal'),
+        description: t('commands:newTerminalDesc'),
+        category: t('commands:categories.terminal'),
         shortcut: getShortcut('newTerminal'),
         action: handleNewTerminal,
       },
@@ -496,17 +499,17 @@ function App() {
       // Model
       {
         id: 'selectModel',
-        label: 'Select Model',
-        description: 'Open model selector',
-        category: 'Model',
+        label: t('commands:selectModel'),
+        description: t('commands:selectModelDesc'),
+        category: t('commands:categories.model'),
         shortcut: getShortcut('selectModel'),
         action: () => modelSelectorRef.current?.openMenu(),
       },
       {
         id: 'toggleAgent',
-        label: 'Toggle Agent',
-        description: 'Switch agent mode',
-        category: 'Model',
+        label: t('commands:toggleAgent'),
+        description: t('commands:toggleAgentDesc'),
+        category: t('commands:categories.model'),
         shortcut: getShortcut('toggleAgent'),
         action: handleToggleAgentWithSync,
       },
@@ -514,17 +517,17 @@ function App() {
       // Message
       {
         id: 'copyLastResponse',
-        label: 'Copy Last Response',
-        description: 'Copy last AI response to clipboard',
-        category: 'Message',
+        label: t('commands:copyLastResponse'),
+        description: t('commands:copyLastResponseDesc'),
+        category: t('commands:categories.message'),
         shortcut: getShortcut('copyLastResponse'),
         action: handleCopyLastResponse,
       },
       {
         id: 'cancelMessage',
-        label: 'Cancel Message',
-        description: 'Cancel current response',
-        category: 'Message',
+        label: t('commands:cancelMessage'),
+        description: t('commands:cancelMessageDesc'),
+        category: t('commands:categories.message'),
         shortcut: getShortcut('cancelMessage'),
         action: () => {
           if (isStreaming) handleAbort()
@@ -533,6 +536,7 @@ function App() {
       },
     ]
   }, [
+    t,
     openSettings,
     openProject,
     sidebarExpanded,
@@ -707,7 +711,9 @@ function App() {
                 collapsedPermission={
                   pendingPermissionRequests.length > 0 && permissionCollapsed
                     ? {
-                        label: `Permission: ${pendingPermissionRequests[0].permission}`,
+                        label: t('chat:permissionDialog.permission', {
+                          permission: pendingPermissionRequests[0].permission,
+                        }),
                         queueLength: pendingPermissionRequests.length,
                         onExpand: () => setPermissionCollapsed(false),
                       }
@@ -716,7 +722,7 @@ function App() {
                 collapsedQuestion={
                   pendingPermissionRequests.length === 0 && pendingQuestionRequests.length > 0 && questionCollapsed
                     ? {
-                        label: 'Question',
+                        label: t('chat:questionDialog.title'),
                         queueLength: pendingQuestionRequests.length,
                         onExpand: () => setQuestionCollapsed(false),
                       }

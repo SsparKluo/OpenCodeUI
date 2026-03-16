@@ -5,6 +5,7 @@
  */
 
 import { memo, useState, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { diffLines } from 'diff'
 import { CloseIcon } from './Icons'
 import { detectLanguage } from '../utils/languageUtils'
@@ -38,6 +39,7 @@ export const DiffModal = memo(function DiffModal({
   language,
   diffStats: providedStats,
 }: DiffModalProps) {
+  const { t } = useTranslation(['components', 'common'])
   const [viewMode, setViewMode] = useState<ViewMode>('split')
 
   useEffect(() => {
@@ -92,7 +94,7 @@ export const DiffModal = memo(function DiffModal({
           <button
             onClick={onClose}
             className="p-1 text-text-400 hover:text-text-100 hover:bg-bg-200/60 rounded-md transition-colors"
-            title="Close (Esc)"
+            title={t('common:closeEsc')}
           >
             <CloseIcon size={16} />
           </button>

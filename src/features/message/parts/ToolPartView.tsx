@@ -1,4 +1,5 @@
 import { memo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronDownIcon, ChevronRightIcon } from '../../../components/Icons'
 import type { ToolPart } from '../../../types/message'
 import { useDelayedRender } from '../../../hooks'
@@ -32,6 +33,7 @@ export const ToolPartView = memo(function ToolPartView({
   isLast = false,
   compact = false,
 }: ToolPartViewProps) {
+  const { t } = useTranslation('message')
   const [expanded, setExpanded] = useState(() => {
     return part.state.status === 'running' || part.state.status === 'pending'
   })
@@ -104,14 +106,14 @@ export const ToolPartView = memo(function ToolPartView({
                   isActive ? 'opacity-100 text-accent-main-100' : 'opacity-0 w-0 overflow-hidden'
                 }`}
               >
-                Running
+                {t('toolPart.running')}
               </span>
               <span
                 className={`text-[10px] font-medium transition-all duration-300 ${
                   isError ? 'opacity-100 text-danger-100' : 'opacity-0 w-0 overflow-hidden'
                 }`}
               >
-                Failed
+                {t('toolPart.failed')}
               </span>
               <span className="text-text-500">
                 {expanded ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
@@ -189,14 +191,14 @@ export const ToolPartView = memo(function ToolPartView({
                 isActive ? 'opacity-100 text-accent-main-100' : 'opacity-0 w-0 overflow-hidden'
               }`}
             >
-              Running
+              {t('toolPart.running')}
             </span>
             <span
               className={`text-[10px] font-medium transition-all duration-300 ${
                 isError ? 'opacity-100 text-danger-100' : 'opacity-0 w-0 overflow-hidden'
               }`}
             >
-              Failed
+              {t('toolPart.failed')}
             </span>
             <span className="text-text-500">
               {expanded ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}

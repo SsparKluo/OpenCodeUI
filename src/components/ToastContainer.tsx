@@ -9,6 +9,7 @@
 // 点击：跳转到对应 session + 标记通知已读
 
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   useNotificationStore,
   notificationStore,
@@ -40,6 +41,7 @@ const typeConfig: Record<
 // ============================================
 
 function Toast({ item, onDismiss, onClick }: { item: ToastItem; onDismiss: () => void; onClick: () => void }) {
+  const { t } = useTranslation(['components', 'common'])
   const { notification, exiting } = item
   const config = typeConfig[notification.type]
   const Icon = config.icon
@@ -97,7 +99,7 @@ function Toast({ item, onDismiss, onClick }: { item: ToastItem; onDismiss: () =>
           e.stopPropagation()
           onDismiss()
         }}
-        aria-label="Dismiss"
+        aria-label={t('common:dismiss')}
       >
         <CloseIcon size={12} />
       </button>
@@ -114,6 +116,7 @@ function Toast({ item, onDismiss, onClick }: { item: ToastItem; onDismiss: () =>
 // 2+ 条时右对齐显示 clear all 文字按钮。
 
 export function ToastContainer() {
+  const { t } = useTranslation(['components', 'common'])
   const { toasts } = useNotificationStore()
 
   if (toasts.length === 0) return null
@@ -146,7 +149,7 @@ export function ToastContainer() {
             className="text-[11px] text-text-300 hover:text-text-100 px-2 py-1 rounded-md hover:bg-bg-200/60 transition-all duration-150 active:scale-95"
             onClick={() => notificationStore.dismissAllToasts()}
           >
-            Clear all
+            {t('toast.clearAll')}
           </button>
         </div>
       )}

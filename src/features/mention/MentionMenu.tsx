@@ -13,6 +13,7 @@ import {
   forwardRef,
   useMemo,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import { searchFiles, listDirectory, type ApiAgent } from '../../api/client'
 import { fileErrorHandler } from '../../utils'
 import type { MentionType, MentionItem } from './types'
@@ -52,6 +53,7 @@ export const MentionMenu = forwardRef<MentionMenuHandle, MentionMenuProps>(funct
   { isOpen, query, agents, rootPath = '', excludeValues, onSelect, onNavigate, onClose },
   ref,
 ) {
+  const { t } = useTranslation(['commands', 'common'])
   const [items, setItems] = useState<MentionItem[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -349,7 +351,7 @@ export const MentionMenu = forwardRef<MentionMenuHandle, MentionMenuProps>(funct
                 onNavigate(parentPath)
               }
             }}
-            title="Go back"
+            title={t('mention.goBack')}
           >
             <span>←</span>
           </button>
@@ -360,11 +362,13 @@ export const MentionMenu = forwardRef<MentionMenuHandle, MentionMenuProps>(funct
 
       {/* Items List */}
       <div ref={listRef} className="flex-1 overflow-y-auto custom-scrollbar">
-        {loading && items.length === 0 && <div className="px-3 py-4 text-center text-sm text-text-400">Loading...</div>}
+        {loading && items.length === 0 && (
+          <div className="px-3 py-4 text-center text-sm text-text-400">{t('common:loading')}</div>
+        )}
 
         {!loading && items.length === 0 && (
           <div className="px-3 py-4 text-center text-sm text-text-400">
-            {query ? 'No results found' : 'Empty folder'}
+            {query ? t('common:noResults') : t('common:emptyFolder')}
           </div>
         )}
 
@@ -401,9 +405,9 @@ export const MentionMenu = forwardRef<MentionMenuHandle, MentionMenuProps>(funct
 
       {/* Footer Hints - 只在桌面端显示 */}
       <div className="hidden md:flex px-3 py-1.5 border-t border-border-200 text-xs text-text-500 gap-3">
-        <span>↑↓ select</span>
-        <span>↵ confirm</span>
-        <span>esc cancel</span>
+        <span>{t('common:upDownSelect')}</span>
+        <span>{t('common:enterConfirmShort')}</span>
+        <span>{t('common:escCancel')}</span>
       </div>
     </div>
   )
@@ -414,6 +418,7 @@ export const MentionMenu = forwardRef<MentionMenuHandle, MentionMenuProps>(funct
 // ============================================
 
 function TypeBadge({ type }: { type: MentionType }) {
+  const { t } = useTranslation(['commands'])
   const colors = {
     agent: 'text-accent-main-100',
     file: 'text-info-100',
@@ -421,9 +426,9 @@ function TypeBadge({ type }: { type: MentionType }) {
   }
 
   const labels = {
-    agent: 'Agent',
-    file: 'File',
-    folder: 'Folder',
+    agent: t('mention.agent'),
+    file: t('mention.file'),
+    folder: t('mention.folder'),
   }
 
   return <span className={`text-xs font-medium ${colors[type]}`}>{labels[type]}:</span>

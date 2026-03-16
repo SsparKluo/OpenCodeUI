@@ -5,6 +5,7 @@
 // ============================================
 
 import { memo, useState, useEffect, useCallback, useRef, useLayoutEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { CloseIcon, RetryIcon, ChevronRightIcon } from './Icons'
 import { getMaterialIconUrl } from '../utils/materialIcons'
 import { DiffViewer, type ViewMode } from './DiffViewer'
@@ -26,6 +27,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
   sessionId,
   isResizing: isPanelResizing = false,
 }: SessionChangesPanelProps) {
+  const { t } = useTranslation(['components', 'common'])
   const containerRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -79,7 +81,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
         .catch(err => {
           if (cancelled || requestId !== requestIdRef.current) return
           sessionErrorHandler('load session diff', err)
-          setError('Failed to load changes')
+          setError(t('sessionChanges.failedToLoad'))
         })
         .finally(() => {
           if (!cancelled && requestId === requestIdRef.current) {
@@ -110,7 +112,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
         })
         .catch(err => {
           sessionErrorHandler('load session diff', err)
-          setError('Failed to load changes')
+          setError(t('sessionChanges.failedToLoad'))
         })
         .finally(() => setLoading(false))
     }
@@ -229,7 +231,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
   const showPreview = selectedDiff !== null
 
   if (loading) {
-    return <div className="p-4 text-center text-text-400 text-xs">Loading changes...</div>
+    return <div className="p-4 text-center text-text-400 text-xs">{t('sessionChanges.loadingChanges')}</div>
   }
 
   if (error) {
@@ -237,7 +239,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
   }
 
   if (diffs.length === 0) {
-    return <div className="p-4 text-center text-text-400 text-xs">No changes in this session</div>
+    return <div className="p-4 text-center text-text-400 text-xs">{t('sessionChanges.noChanges')}</div>
   }
 
   // 总统计
@@ -285,7 +287,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
                 }`}
                 title="Flat list"
               >
-                List
+                {t('sessionChanges.list')}
               </button>
               <button
                 onClick={() => setListMode('tree')}
@@ -294,7 +296,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
                 }`}
                 title="Tree view"
               >
-                Tree
+                {t('sessionChanges.tree')}
               </button>
             </div>
 
@@ -306,7 +308,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
                   viewMode === 'unified' ? 'bg-bg-000 text-text-100 shadow-sm' : 'text-text-400 hover:text-text-200'
                 }`}
               >
-                Unified
+                {t('sessionChanges.unified')}
               </button>
               <button
                 onClick={() => setViewMode('split')}
@@ -314,7 +316,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
                   viewMode === 'split' ? 'bg-bg-000 text-text-100 shadow-sm' : 'text-text-400 hover:text-text-200'
                 }`}
               >
-                Split
+                {t('sessionChanges.split')}
               </button>
             </div>
 
@@ -323,7 +325,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
               onClick={handleRefresh}
               disabled={loading}
               className="p-1 text-text-400 hover:text-text-100 hover:bg-bg-200 rounded transition-colors disabled:opacity-50"
-              title="Refresh"
+              title={t('common:refresh')}
             >
               <RetryIcon size={12} className={loading ? 'animate-spin' : ''} />
             </button>

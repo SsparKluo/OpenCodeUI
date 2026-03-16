@@ -1,4 +1,5 @@
 import { useRef, useEffect, useCallback, useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { SearchIcon, PencilIcon, TrashIcon, ComposeIcon } from '../../components/Icons'
 import { formatRelativeTime } from '../../utils/dateUtils'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -49,6 +50,7 @@ export function SessionList({
   showStats = true,
   showDirectory = false,
 }: SessionListProps) {
+  const { t } = useTranslation(['commands', 'common', 'chat'])
   const listRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -127,13 +129,13 @@ export function SessionList({
                 type="text"
                 value={search}
                 onChange={e => onSearchChange(e.target.value)}
-                placeholder="Search chats..."
+                placeholder={t('sessions.searchChats')}
                 className="w-full bg-bg-200/40 hover:bg-bg-200/80 focus:bg-bg-000 border border-transparent focus:border-border-200 rounded-lg py-2 pl-9 pr-3 text-xs text-text-100 placeholder:text-text-400/70 focus:outline-none focus:shadow-sm transition-all duration-200"
               />
             </div>
             <button
               onClick={onNewChat}
-              title="New Chat"
+              title={t('sessions.newChat')}
               className="p-2 rounded-lg bg-bg-200/40 hover:bg-bg-200/80 text-text-400 hover:text-text-100 transition-all duration-200"
             >
               <ComposeIcon size={16} />
@@ -153,7 +155,7 @@ export function SessionList({
           </div>
         ) : sessions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-text-400 opacity-60">
-            <p className="text-xs">{search ? 'No matches found' : 'No chats yet'}</p>
+            <p className="text-xs">{search ? t('common:noMatchesFound') : t('sessions.noChatsYet')}</p>
           </div>
         ) : showGroups ? (
           // Grouped View
@@ -217,9 +219,9 @@ export function SessionList({
           }
           setDeleteConfirm({ isOpen: false, sessionId: null })
         }}
-        title="Delete Chat"
-        description="Are you sure you want to delete this chat? This action cannot be undone."
-        confirmText="Delete"
+        title={t('chat:sidebar.deleteChat')}
+        description={t('chat:sidebar.deleteChatConfirm')}
+        confirmText={t('common:delete')}
         variant="danger"
       />
     </div>
@@ -251,6 +253,7 @@ export function SessionListItem({
   showStats = true,
   showDirectory = false,
 }: SessionListItemProps) {
+  const { t } = useTranslation(['commands', 'common', 'chat'])
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(session.title || '')
   const [showActions, setShowActions] = useState(false)
@@ -262,12 +265,12 @@ export function SessionListItem({
   const activeEntry = useSessionActiveEntry(session.id)
   const activeStatus = activeEntry
     ? activeEntry.pendingAction?.type === 'permission'
-      ? { dot: 'bg-warning-100', label: 'Awaiting Permission', pulse: false }
+      ? { dot: 'bg-warning-100', label: t('chat:activeSession.awaitingPermission'), pulse: false }
       : activeEntry.pendingAction?.type === 'question'
-        ? { dot: 'bg-info-100', label: 'Awaiting Answer', pulse: false }
+        ? { dot: 'bg-info-100', label: t('chat:activeSession.awaitingAnswer'), pulse: false }
         : activeEntry.status.type === 'retry'
-          ? { dot: 'bg-warning-100', label: 'Retrying', pulse: false }
-          : { dot: 'bg-success-100', label: 'Working', pulse: true }
+          ? { dot: 'bg-warning-100', label: t('chat:activeSession.retrying'), pulse: false }
+          : { dot: 'bg-success-100', label: t('chat:activeSession.working'), pulse: true }
     : null
   const itemRef = useRef<HTMLDivElement>(null)
   const isMobile = useIsMobile()
@@ -409,9 +412,9 @@ export function SessionListItem({
         {/* Row 1: Title */}
         <p
           className={`${isCompact ? 'text-[13px]' : 'text-sm'} truncate font-medium ${isSelected ? 'text-text-100' : 'text-text-200 group-hover:text-text-100'}`}
-          title={session.title || 'Untitled Chat'}
+          title={session.title || t('sessions.untitledChat')}
         >
-          {session.title || 'Untitled Chat'}
+          {session.title || t('sessions.untitledChat')}
         </p>
 
         {/* Row 2: Meta line — 始终存在，保持高度一致 */}
@@ -470,14 +473,14 @@ export function SessionListItem({
         <button
           onClick={handleStartEdit}
           className="p-1.5 rounded-md hover:bg-bg-300 active:bg-bg-300 text-text-400 hover:text-text-100 transition-colors focus:outline-none"
-          title="Rename"
+          title={t('sessions.rename')}
         >
           <PencilIcon className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={handleDelete}
           className="p-1.5 rounded-md hover:bg-danger-bg active:bg-danger-bg text-text-400 hover:text-danger-100 active:text-danger-100 transition-colors focus:outline-none"
-          title="Delete"
+          title={t('common:delete')}
         >
           <TrashIcon className="w-3.5 h-3.5" />
         </button>

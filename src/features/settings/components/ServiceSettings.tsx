@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '../../../components/ui/Button'
 import { TrashIcon, WifiIcon, WifiOffIcon, SpinnerIcon, PlugIcon, StopIcon } from '../../../components/Icons'
 import { useServerStore, useIsMobile } from '../../../hooks'
@@ -8,6 +9,7 @@ import { apiErrorHandler } from '../../../utils'
 import { Toggle, SettingRow, SettingsCard } from './SettingsUI'
 
 export function ServiceSettings() {
+  const { t } = useTranslation(['settings', 'common'])
   const isMobile = useIsMobile()
   const {
     autoStart: autoStartService,
@@ -101,38 +103,32 @@ export function ServiceSettings() {
 
   if (!isTauriDesktop) {
     return (
-      <SettingsCard title="Local Service" description="This section is available on desktop app only">
-        <div className="text-[12px] text-text-400 leading-relaxed">
-          OpenCode web mode connects to external servers and does not manage a local background service
-        </div>
+      <SettingsCard title={t('service.localService')} description="This section is available on desktop app only">
+        <div className="text-[12px] text-text-400 leading-relaxed">{t('service.webModeDesc')}</div>
       </SettingsCard>
     )
   }
 
   return (
-    <SettingsCard title="Local Service" description="Manage embedded opencode serve startup, status, and environment">
+    <SettingsCard title={t('service.localService')} description={t('service.localServiceDesc')}>
       <div className="space-y-3">
         <div>
-          <div className="text-[11px] font-medium text-text-300 mb-1">Binary Path</div>
+          <div className="text-[11px] font-medium text-text-300 mb-1">{t('service.binaryPath')}</div>
           <input
             type="text"
             value={localBinaryPath}
             onChange={e => handleBinaryPathChange(e.target.value)}
-            placeholder="opencode (default, uses PATH)"
+            placeholder={t('service.binaryPathPlaceholder')}
             className="w-full h-8 px-3 text-[13px] font-mono bg-bg-200/50 border border-border-200 rounded-md
               focus:outline-none focus:border-accent-main-100/50 text-text-100 placeholder:text-text-400"
           />
-          <div className="text-[11px] text-text-400 mt-1">
-            Leave empty to use <code className="text-[10px] px-1 py-0.5 bg-bg-200 rounded font-mono">opencode</code>{' '}
-            from PATH. Or enter full path, e.g.{' '}
-            <code className="text-[10px] px-1 py-0.5 bg-bg-200 rounded font-mono">/usr/local/bin/opencode</code>
-          </div>
+          <div className="text-[11px] text-text-400 mt-1">{t('service.binaryPathHelp')}</div>
         </div>
 
         <div className="grid gap-2 md:grid-cols-2">
           <SettingRow
-            label="Auto-start Service"
-            description="Run opencode serve automatically when app launches"
+            label={t('service.autoStart')}
+            description={t('service.autoStartDesc')}
             icon={<PlugIcon size={14} />}
             onClick={handleAutoStartToggle}
             className="bg-bg-100/35 border-border-200/45"
@@ -141,15 +137,15 @@ export function ServiceSettings() {
           </SettingRow>
 
           <SettingRow
-            label="Service Status"
+            label={t('service.serviceStatus')}
             description={
               serviceStarting
-                ? 'Starting opencode serve...'
+                ? t('service.starting')
                 : serviceRunning
                   ? startedByUs
-                    ? 'Running (started by app)'
-                    : 'Running (external)'
-                  : 'Not running'
+                    ? t('service.runningStartedByApp')
+                    : t('service.runningExternal')
+                  : t('service.notRunning')
             }
             icon={
               serviceStarting ? (
@@ -165,17 +161,17 @@ export function ServiceSettings() {
             <div className="flex items-center gap-2">
               {!serviceStarting && !serviceRunning && (
                 <Button size="sm" variant="ghost" onClick={handleStartService}>
-                  Start
+                  {t('common:start')}
                 </Button>
               )}
               {!serviceStarting && serviceRunning && startedByUs && (
                 <Button size="sm" variant="ghost" onClick={handleStopService}>
                   <StopIcon size={12} className="mr-1" />
-                  Stop
+                  {t('common:stop')}
                 </Button>
               )}
               <Button size="sm" variant="ghost" onClick={handleCheckService} disabled={serviceStarting}>
-                Refresh
+                {t('common:refresh')}
               </Button>
             </div>
           </SettingRow>
@@ -183,17 +179,15 @@ export function ServiceSettings() {
 
         <div>
           <div className="flex items-center justify-between mb-1">
-            <div className="text-[11px] font-medium text-text-300">Environment Variables</div>
+            <div className="text-[11px] font-medium text-text-300">{t('service.envVars')}</div>
             <button
               className="text-[11px] text-accent-main-100 hover:text-accent-main-100/80 transition-colors"
               onClick={() => serviceStore.setEnvVars([...envVars, { key: '', value: '' }])}
             >
-              + Add
+              + {t('common:add')}
             </button>
           </div>
-          <div className="text-[11px] text-text-400 mb-2">
-            Passed to the opencode serve process (e.g. HTTPS_PROXY, API keys)
-          </div>
+          <div className="text-[11px] text-text-400 mb-2">{t('service.envVarsDesc')}</div>
           {envVars.length > 0 && (
             <div className="flex flex-col gap-1.5">
               {envVars.map((env, idx) => (
@@ -206,7 +200,7 @@ export function ServiceSettings() {
                       updated[idx] = { ...updated[idx], key: e.target.value }
                       serviceStore.setEnvVars(updated)
                     }}
-                    placeholder="KEY"
+                    placeholder={t('service.keyPlaceholder')}
                     className="w-[120px] shrink-0 h-7 px-2 text-[11px] font-mono bg-bg-200/50 border border-border-200 rounded
                       focus:outline-none focus:border-accent-main-100/50 text-text-100 placeholder:text-text-500"
                   />
@@ -219,7 +213,7 @@ export function ServiceSettings() {
                       updated[idx] = { ...updated[idx], value: e.target.value }
                       serviceStore.setEnvVars(updated)
                     }}
-                    placeholder="value"
+                    placeholder={t('service.valuePlaceholder')}
                     className="flex-1 min-w-0 h-7 px-2 text-[11px] font-mono bg-bg-200/50 border border-border-200 rounded
                       focus:outline-none focus:border-accent-main-100/50 text-text-100 placeholder:text-text-500"
                   />
@@ -230,7 +224,7 @@ export function ServiceSettings() {
                       const updated = envVars.filter((_, i) => i !== idx)
                       serviceStore.setEnvVars(updated)
                     }}
-                    title="Remove"
+                    title={t('common:remove')}
                   >
                     <TrashIcon size={12} />
                   </button>

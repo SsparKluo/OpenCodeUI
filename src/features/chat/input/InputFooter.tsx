@@ -1,4 +1,5 @@
 import { memo, useState, useRef, useEffect, useLayoutEffect, useSyncExternalStore } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { RefObject } from 'react'
 import { CheckIcon, ClockIcon, CircleIcon, CloseIcon, FastForwardIcon } from '../../../components/Icons'
 import { CircularProgress } from '../../../components/CircularProgress'
@@ -29,6 +30,7 @@ interface InputFooterProps {
 }
 
 export const InputFooter = memo(function InputFooter({ sessionId, onNewChat, inputContainerRef }: InputFooterProps) {
+  const { t } = useTranslation(['chat', 'common'])
   const todos = useTodos(sessionId ?? null)
   const stats = useTodoStats(sessionId ?? null)
   const currentTask = useCurrentTask(sessionId ?? null)
@@ -70,8 +72,8 @@ export const InputFooter = memo(function InputFooter({ sessionId, onNewChat, inp
   const taskLabel = currentTask
     ? currentTask.content
     : isAllDone
-      ? 'All tasks done'
-      : `${stats.total - stats.completed} remaining`
+      ? t('inputFooter.allTasksDone')
+      : t('inputFooter.remaining', { count: stats.total - stats.completed })
 
   return (
     <div
@@ -92,10 +94,10 @@ export const InputFooter = memo(function InputFooter({ sessionId, onNewChat, inp
         className="shrink-0 flex items-center justify-center hover:text-text-300 transition-colors"
         title={
           fullAutoMode === 'off'
-            ? 'Auto-approve: off'
+            ? t('inputFooter.autoApproveOff')
             : fullAutoMode === 'session'
-              ? 'Auto-approve: this session · click for all sessions'
-              : 'Auto-approve: all sessions · click to disable'
+              ? t('inputFooter.autoApproveSession')
+              : t('inputFooter.autoApproveGlobal')
         }
       >
         <FastForwardIcon
@@ -115,7 +117,7 @@ export const InputFooter = memo(function InputFooter({ sessionId, onNewChat, inp
       {/* disclaimer / todos */}
       {!hasTodos ? (
         <button onClick={onNewChat} className="hover:text-text-300 transition-colors">
-          Please verify AI responses.
+          {t('inputFooter.pleaseVerify')}
         </button>
       ) : (
         <>
@@ -136,7 +138,7 @@ export const InputFooter = memo(function InputFooter({ sessionId, onNewChat, inp
           <span className="text-text-500/30 shrink-0">·</span>
 
           <button onClick={onNewChat} className="hover:text-text-300 transition-colors shrink-0">
-            New Chat
+            {t('sidebar.newChat')}
           </button>
         </>
       )}
@@ -165,14 +167,16 @@ export const InputFooter = memo(function InputFooter({ sessionId, onNewChat, inp
               </div>
               <div className="flex-1">
                 <div className="text-sm font-medium text-text-100">
-                  {isAllDone ? 'All Done' : `${stats.completed} of ${stats.total} tasks`}
+                  {isAllDone
+                    ? t('inputFooter.allDone')
+                    : t('inputFooter.tasksCount', { done: stats.completed, total: stats.total })}
                 </div>
                 <div className="text-xs text-text-500 mt-0.5">
                   {isAllDone
-                    ? 'Great work!'
+                    ? t('inputFooter.greatWork')
                     : stats.inProgress > 0
-                      ? `${stats.inProgress} in progress`
-                      : `${stats.total - stats.completed} remaining`}
+                      ? t('inputFooter.inProgress', { count: stats.inProgress })
+                      : t('inputFooter.remaining', { count: stats.total - stats.completed })}
                 </div>
               </div>
             </div>

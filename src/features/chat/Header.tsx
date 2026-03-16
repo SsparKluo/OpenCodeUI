@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { PanelRightIcon, PanelBottomIcon, ChevronDownIcon, SidebarIcon } from '../../components/Icons'
 import { IconButton } from '../../components/ui'
 import { ModelSelector, type ModelSelectorHandle } from './ModelSelector'
@@ -27,6 +28,7 @@ export function Header({
   onOpenSidebar,
   modelSelectorRef,
 }: HeaderProps) {
+  const { t } = useTranslation('chat')
   const { sessionId } = useMessageStore()
   const { rightPanelOpen, bottomPanelOpen } = useLayoutStore()
   const { sessions, refresh } = useSessionContext()
@@ -39,7 +41,7 @@ export function Header({
 
   // Session Data
   const currentSession = useMemo(() => sessions.find(s => s.id === sessionId), [sessions, sessionId])
-  const sessionTitle = currentSession?.title || 'New Chat'
+  const sessionTitle = currentSession?.title || t('header.newChat')
 
   // 同步 document.title - 有 session 标题时显示 "标题 - OpenCode"，否则只显示 "OpenCode"
   useEffect(() => {
@@ -93,7 +95,7 @@ export function Header({
         {/* Mobile Sidebar Toggle - 只在移动端显示 */}
         {onOpenSidebar && (
           <IconButton
-            aria-label="Open sidebar"
+            aria-label={t('header.openSidebar')}
             onClick={onOpenSidebar}
             className="md:hidden hover:bg-bg-200/50 text-text-400 hover:text-text-100 -ml-2"
           >
@@ -132,7 +134,7 @@ export function Header({
               <button
                 onClick={handleStartEdit}
                 className="px-2 py-1.5 text-sm font-medium text-text-200 hover:text-text-100 transition-colors truncate max-w-[200px] cursor-text select-none"
-                title="Click to rename"
+                title={t('header.clickToRename')}
               >
                 {sessionTitle}
               </button>
@@ -142,7 +144,7 @@ export function Header({
                 <div className="w-[1.5px] h-3 bg-border-200/50 mx-0.5 shrink-0" />
                 <button
                   className="p-1 text-text-400 hover:text-text-100 transition-colors rounded-md hover:bg-bg-300/50 shrink-0"
-                  title="Share session"
+                  title={t('header.shareSession')}
                   onClick={() => setShareDialogOpen(true)}
                 >
                   <ChevronDownIcon size={12} />
@@ -175,7 +177,7 @@ export function Header({
             <button
               onClick={handleStartEdit}
               className="px-3 py-1.5 text-sm font-medium text-text-200 hover:text-text-100 transition-colors truncate max-w-[300px] cursor-text select-none text-center"
-              title="Click to rename"
+              title={t('header.clickToRename')}
             >
               {sessionTitle}
             </button>
@@ -186,7 +188,7 @@ export function Header({
               <div className="w-[1.5px] h-3 bg-border-200/50 mx-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
               <button
                 className="p-1 text-text-400 hover:text-text-100 transition-colors rounded-md hover:bg-bg-300/50 opacity-0 group-hover:opacity-100 shrink-0"
-                title="Share session"
+                title={t('header.shareSession')}
                 onClick={() => setShareDialogOpen(true)}
               >
                 <ChevronDownIcon size={12} />
@@ -201,7 +203,7 @@ export function Header({
         {/* Panel Toggles Group */}
         <div className="flex items-center gap-0.5">
           <IconButton
-            aria-label={bottomPanelOpen ? 'Close bottom panel' : 'Open bottom panel'}
+            aria-label={bottomPanelOpen ? t('header.closeBottomPanel') : t('header.openBottomPanel')}
             onClick={() => layoutStore.toggleBottomPanel()}
             className={`transition-colors ${bottomPanelOpen ? 'text-accent-main-100 bg-bg-200/50' : 'text-text-400 hover:text-text-100 hover:bg-bg-200/50'}`}
           >
@@ -209,7 +211,7 @@ export function Header({
           </IconButton>
 
           <IconButton
-            aria-label={rightPanelOpen ? 'Close panel' : 'Open panel'}
+            aria-label={rightPanelOpen ? t('header.closePanel') : t('header.openPanel')}
             onClick={() => layoutStore.toggleRightPanel()}
             className={`transition-colors ${rightPanelOpen ? 'text-accent-main-100 bg-bg-200/50' : 'text-text-400 hover:text-text-100 hover:bg-bg-200/50'}`}
           >

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AttachmentPreview, type Attachment } from '../attachment'
 import {
   MentionMenu,
@@ -120,6 +121,7 @@ function InputBoxComponent({
   collapsedPermission,
   collapsedQuestion,
 }: InputBoxProps) {
+  const { t } = useTranslation('chat')
   // 合并文件能力：优先用 fileCapabilities，回退到 supportsImages
   const fileCaps: FileCapabilities = useMemo(
     () =>
@@ -943,7 +945,7 @@ function InputBoxComponent({
                 {/* Drop overlay */}
                 {isDragging && (
                   <div className="absolute inset-0 z-50 rounded-2xl bg-accent-main-100/5 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
-                    <span className="text-sm text-accent-main-100 font-medium">Drop files here</span>
+                    <span className="text-sm text-accent-main-100 font-medium">{t('inputBox.dropFilesHere')}</span>
                   </div>
                 )}
                 {/* @ Mention Menu */}
@@ -1019,9 +1021,7 @@ function InputBoxComponent({
                         onFocus={handleFocus}
                         onBlur={handleBlur}
                         disabled={inputDisabled}
-                        placeholder={
-                          isMobile ? 'Reply to Agent...' : 'Reply to Agent (type @ to mention, / for commands)'
-                        }
+                        placeholder={isMobile ? t('inputBox.replyToAgentMobile') : t('inputBox.replyToAgent')}
                         className="w-full resize-none focus:outline-none focus:ring-0 bg-transparent text-text-100 placeholder:text-text-400 custom-scrollbar"
                         style={{
                           ...TEXT_STYLE,

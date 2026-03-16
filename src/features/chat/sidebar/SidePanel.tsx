@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { SessionList } from '../../sessions'
 import { FolderRecentList } from './FolderRecentList'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
@@ -70,6 +71,7 @@ export function SidePanel({
   contextLimit = 200000,
   onOpenSettings,
 }: SidePanelProps) {
+  const { t } = useTranslation(['chat', 'common'])
   const {
     currentDirectory,
     savedDirectories,
@@ -167,8 +169,8 @@ export function SidePanel({
     const list: ProjectItem[] = [
       {
         id: 'global',
-        worktree: 'All projects',
-        name: 'Global',
+        worktree: t('sidebar.allProjects'),
+        name: t('sidebar.global'),
       },
     ]
     // 按最近使用时间排序，最近使用的排最前
@@ -350,7 +352,7 @@ export function SidePanel({
           }}
         >
           <a href="/" className="flex items-center whitespace-nowrap">
-            <span className="text-base font-semibold text-text-100 tracking-tight">OpenCode</span>
+            <span className="text-base font-semibold text-text-100 tracking-tight">{t('header.openCode')}</span>
           </a>
         </div>
 
@@ -361,7 +363,7 @@ export function SidePanel({
         >
           <button
             onClick={onToggleSidebar}
-            aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            aria-label={isExpanded ? t('sidebar.collapseSidebar') : t('sidebar.expandSidebar')}
             className="h-8 w-8 flex items-center justify-center rounded-lg text-text-400 hover:text-text-100 hover:bg-bg-200 active:scale-[0.98] transition-all duration-200"
           >
             <SidebarIcon size={18} />
@@ -380,7 +382,7 @@ export function SidePanel({
             paddingLeft: 6,
             paddingRight: 6,
           }}
-          title="New chat"
+          title={t('sidebar.newChat')}
         >
           <span className="size-5 flex items-center justify-center shrink-0">
             <PlusIcon size={16} />
@@ -389,7 +391,7 @@ export function SidePanel({
             className="ml-2 text-sm whitespace-nowrap transition-opacity duration-300"
             style={{ opacity: showLabels ? 1 : 0 }}
           >
-            New chat
+            {t('sidebar.newChat')}
           </span>
           <span
             className="ml-auto text-[10px] text-text-500 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap"
@@ -407,7 +409,7 @@ export function SidePanel({
               projectsExpanded ? 'bg-bg-200 text-text-100' : 'text-text-300 hover:text-text-100 hover:bg-bg-200'
             }`}
             style={{ paddingLeft: 6, paddingRight: 6 }}
-            title={currentProject?.name || 'Global'}
+            title={currentProject?.name || t('sidebar.global')}
           >
             <span className="size-5 flex items-center justify-center shrink-0">
               {currentProject?.id === 'global' ? (
@@ -416,7 +418,7 @@ export function SidePanel({
                 <FolderIcon size={16} />
               )}
             </span>
-            <span className="ml-2 text-sm truncate">{currentProject?.name || 'Global'}</span>
+            <span className="ml-2 text-sm truncate">{currentProject?.name || t('sidebar.global')}</span>
             <ChevronDownIcon
               size={14}
               className={`ml-auto text-text-400 transition-transform duration-200 shrink-0 ${projectsExpanded ? '' : '-rotate-90'}`}
@@ -473,7 +475,7 @@ export function SidePanel({
                           setProjectDeleteConfirm({ isOpen: true, projectId: project.id })
                         }}
                         className="p-1 rounded text-text-400 hover:text-danger-100 hover:bg-danger-100/10 md:opacity-0 md:group-hover:opacity-100 transition-all"
-                        title="Remove"
+                        title={t('common:remove')}
                       >
                         <TrashIcon size={12} />
                       </button>
@@ -488,7 +490,7 @@ export function SidePanel({
                 className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-text-400 hover:text-text-100 hover:bg-bg-200/50 transition-colors"
               >
                 <PlusIcon size={14} />
-                Add project...
+                {t('sidebar.addProject')}
               </button>
             </div>
           </div>
@@ -511,14 +513,14 @@ export function SidePanel({
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search chats..."
+              placeholder={t('sidebar.searchChats')}
               className="w-full bg-bg-200/40 hover:bg-bg-200/60 focus:bg-bg-000 border border-transparent focus:border-border-200 rounded-lg py-1.5 pl-8 pr-8 text-xs text-text-100 placeholder:text-text-400/70 focus:outline-none transition-all"
             />
             {search && (
               <button
                 onClick={() => setSearch('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-text-400 hover:text-text-100 text-sm"
-                aria-label="Clear search"
+                aria-label={t('sidebar.clearSearch')}
               >
                 ×
               </button>
@@ -535,7 +537,7 @@ export function SidePanel({
                 sidebarTab === 'recents' ? 'text-text-100' : 'text-text-500 hover:text-text-300'
               }`}
             >
-              Recents
+              {t('sidebar.recents')}
             </button>
             <button
               onClick={() => setSidebarTab('active')}
@@ -543,7 +545,7 @@ export function SidePanel({
                 sidebarTab === 'active' ? 'text-text-100' : 'text-text-500 hover:text-text-300'
               }`}
             >
-              Active
+              {t('sidebar.active')}
               {attentionCount > 0 && (
                 <span
                   className={`inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[10px] font-bold rounded-full ${
@@ -600,7 +602,7 @@ export function SidePanel({
             <div className="flex-1 overflow-y-auto custom-scrollbar px-2 py-2">
               {busySessions.length === 0 && notifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-text-400 opacity-60">
-                  <p className="text-xs">No active sessions</p>
+                  <p className="text-xs">{t('sidebar.noActiveSessions')}</p>
                 </div>
               ) : (
                 <div className="space-y-0.5">
@@ -624,7 +626,7 @@ export function SidePanel({
                       className={`flex items-center justify-between gap-2 ${busySessions.length > 0 ? 'mt-2 pt-2 border-t border-border-200/30' : ''}`}
                     >
                       <span className="text-[10px] font-medium text-text-400 uppercase tracking-wider pl-1">
-                        Notifications
+                        {t('sidebar.notifications')}
                       </span>
                       <div className="flex items-center gap-0.5">
                         {notifications.some((n: NotificationEntry) => !n.read) && (
@@ -632,14 +634,14 @@ export function SidePanel({
                             className="text-[10px] text-text-400 hover:text-text-200 px-1.5 py-0.5 rounded-md hover:bg-bg-200 transition-all duration-150 active:scale-95"
                             onClick={() => notificationStore.markAllRead()}
                           >
-                            Read all
+                            {t('sidebar.readAll')}
                           </button>
                         )}
                         <button
                           className="text-[10px] text-text-400 hover:text-text-200 px-1.5 py-0.5 rounded-md hover:bg-bg-200 transition-all duration-150 active:scale-95"
                           onClick={() => notificationStore.clearAll()}
                         >
-                          Clear
+                          {t('common:clear')}
                         </button>
                       </div>
                     </div>
@@ -686,9 +688,9 @@ export function SidePanel({
           }
           setProjectDeleteConfirm({ isOpen: false, projectId: null })
         }}
-        title="Remove Project"
-        description="Remove this project folder from the list? Files won't be deleted."
-        confirmText="Remove"
+        title={t('sidebar.removeProject')}
+        description={t('sidebar.removeProjectConfirm')}
+        confirmText={t('common:remove')}
         variant="danger"
       />
     </div>

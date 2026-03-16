@@ -1,0 +1,82 @@
+{
+  "showLess": "收起",
+  "showMore": "展开",
+  "hideSystemContext": "隐藏",
+  "showSystemContext": "显示系统上下文 ({{count}})",
+  "undoFromHere": "从此处撤销",
+  "stepsCount": "{{done}}/{{total}} 步",
+  "tokens": "token",
+  "tokensK": "{{count}}k token",
+  "defaultRenderer": {
+    "input": "输入",
+    "error": "错误",
+    "output": "输出",
+    "diagnostics": "诊断",
+    "errorsCount": "{{count}} 个错误",
+    "errorsCount_other": "{{count}} 个错误",
+    "warningsCount": "{{count}} 个警告",
+    "warningsCount_other": "{{count}} 个警告",
+    "result": "结果",
+    "nameResult": "{{name}} 结果"
+  },
+  "reasoning": {
+    "thinking": "思考中...",
+    "thinkingLabel": "思考",
+    "thoughtFor": "思考了 {{duration}}",
+    "thoughtProcess": "思考过程"
+  },
+  "toolPart": {
+    "running": "运行中",
+    "failed": "失败"
+  },
+  "todo": {
+    "tasks": "任务",
+    "completedCount": "{{completed}}/{{total}}"
+  },
+  "task": {
+    "subtask": "子任务",
+    "result": "结果",
+    "error": "错误",
+    "stop": "停止",
+    "openSession": "打开会话",
+    "waitingForResponse": "等待响应..."
+  },
+  "system": {
+    "retryAttempt": "重试第 {{attempt}} 次",
+    "retryable": "可重试",
+    "statusCode": "状态码：{{code}}",
+    "contextCompacted": "上下文{{auto}}已压缩",
+    "autoPrefix": "自动",
+    "filesChanged": "{{count}} 个文件已更改",
+    "filesChanged_other": "{{count}} 个文件已更改"
+  },
+  "subtask": {
+    "running": "运行中",
+    "done": "完成",
+    "error": "错误",
+    "enter": "进入",
+    "task": "任务",
+    "viewFullSession": "查看完整会话"
+  },
+  "stepFinish": {
+    "inputTokens": "输入：{{input}}",
+    "outputTokens": "输出：{{output}}",
+    "reasoningTokens": "推理：{{reasoning}}",
+    "cacheRead": "缓存读取：{{read}}",
+    "cacheWrite": "缓存写入：{{write}}",
+    "cached": "{{count}} 已缓存",
+    "totalDuration": "总计 {{duration}}"
+  },
+  "errors": {
+    "authError": "认证错误",
+    "authErrorDesc": "与 {{provider}} 认证失败：{{message}}",
+    "outputTooLong": "输出过长",
+    "outputTooLongDesc": "响应超过最大输出长度，已被截断。",
+    "messageAborted": "消息已中止",
+    "messageAbortedDesc": "消息生成已被中断。",
+    "apiError": "API 错误",
+    "apiErrorWithCode": "API 错误 ({{code}})",
+    "unknownError": "错误",
+    "unknownErrorDesc": "发生未知错误。"
+  }
+}
