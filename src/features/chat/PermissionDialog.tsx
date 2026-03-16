@@ -73,7 +73,7 @@ export function PermissionDialog({
                 <div className="flex items-center justify-center text-text-100 w-5 h-5">
                   <PermissionListIcon size={20} />
                 </div>
-                <h3 className="text-sm font-medium text-text-100">
+                <h3 className="text-sm leading-none font-medium text-text-100">
                   {t('permissionDialog.permission', { permission: request.permission })}
                 </h3>
                 {queueLength > 1 && (

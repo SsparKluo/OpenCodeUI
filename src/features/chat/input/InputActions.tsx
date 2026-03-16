@@ -81,7 +81,7 @@ export const FloatingActions = memo(function FloatingActions({
           <button
             type="button"
             onClick={collapsedPermission.onExpand}
-            className="flex items-center gap-1.5 px-3 h-[32px] rounded-full bg-accent-main-100/10 backdrop-blur-md border border-accent-main-100/20 text-[11px] text-accent-main-000 hover:bg-accent-main-100/20 transition-colors"
+            className="flex items-center gap-1.5 px-3 h-[32px] rounded-full bg-accent-main-100/10 backdrop-blur-md border border-accent-main-100/20 text-[12px] leading-[14px] text-accent-main-000 hover:bg-accent-main-100/20 transition-colors"
           >
             <PermissionListIcon size={14} />
             <span className="whitespace-nowrap">{collapsedPermission.label}</span>
@@ -98,7 +98,7 @@ export const FloatingActions = memo(function FloatingActions({
           <button
             type="button"
             onClick={collapsedQuestion.onExpand}
-            className="flex items-center gap-1.5 px-3 h-[32px] rounded-full bg-accent-main-100/10 backdrop-blur-md border border-accent-main-100/20 text-[11px] text-accent-main-000 hover:bg-accent-main-100/20 transition-colors"
+            className="flex items-center gap-1.5 px-3 h-[32px] rounded-full bg-accent-main-100/10 backdrop-blur-md border border-accent-main-100/20 text-[12px] leading-[14px] text-accent-main-000 hover:bg-accent-main-100/20 transition-colors"
           >
             <QuestionIcon size={14} />
             <span className="whitespace-nowrap">{collapsedQuestion.label}</span>

@@ -169,7 +169,7 @@ export function QuestionDialog({
                 <div className="flex items-center justify-center text-text-100 w-5 h-5">
                   <QuestionIcon />
                 </div>
-                <h3 className="text-sm font-medium text-text-100">{t('questionDialog.title')}</h3>
+                <h3 className="text-sm leading-none font-medium text-text-100">{t('questionDialog.title')}</h3>
                 {queueLength > 1 && (
                   <span className="text-xs text-text-400 bg-bg-200 px-1.5 py-0.5 rounded">
                     {t('questionDialog.moreCount', { count: queueLength - 1 })}
