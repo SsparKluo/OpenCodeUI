@@ -6,7 +6,8 @@ on:
     paths:
       - 'docker/Dockerfile.gateway'
       - 'docker/Caddyfile.gateway'
-      - 'docker/router/**'
+      - 'docker/entrypoint-gateway.sh'
+      - 'src-router/**'
   workflow_dispatch:
 
 env:

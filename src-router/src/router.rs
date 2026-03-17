@@ -14,7 +14,7 @@ use axum::{
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use rand::{Rng, distr::Alphanumeric, rng};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{Map, Value, json};
 use tokio::{
     sync::RwLock,
     time::{MissedTickBehavior, interval},
@@ -32,6 +32,9 @@ const HTML_TEMPLATE: &str = include_str!("router.html");
 #[derive(Clone)]
 pub struct AppState {
     config: Arc<Config>,
+    /// In-memory cache of the full state map (routes + preview port).
+    /// All reads/writes go through this lock; disk is only for persistence.
+    state_map: Arc<RwLock<Map<String, Value>>>,
     preview_port: Arc<RwLock<Option<u16>>>,
 }
 
@@ -66,6 +69,7 @@ impl AppState {
     pub fn new(config: Arc<Config>) -> Self {
         Self {
             config,
+            state_map: Arc::new(RwLock::new(Map::new())),
             preview_port: Arc::new(RwLock::new(None)),
         }
     }
@@ -74,6 +78,10 @@ impl AppState {
         let state_map = state::load_state_map(self.config.router_state_file()).await;
         let preview_port = state::load_preview_port(&state_map);
 
+        {
+            let mut cached = self.state_map.write().await;
+            *cached = state_map;
+        }
         {
             let mut current = self.preview_port.write().await;
             *current = preview_port;
@@ -124,7 +132,7 @@ impl AppState {
             }
         };
 
-        let mut state_map = state::load_state_map(self.config.router_state_file()).await;
+        let mut state_map = self.state_map.write().await;
         let mut routes = state::extract_routes(&state_map);
         let existing_ports: HashSet<u16> = routes.values().map(|info| info.port).collect();
         let mut changed = false;
@@ -181,7 +189,7 @@ impl AppState {
             *current = port;
         }
 
-        let mut state_map = state::load_state_map(self.config.router_state_file()).await;
+        let mut state_map = self.state_map.write().await;
         state::set_preview_port_value(&mut state_map, port);
         state::save_state_map(self.config.router_state_file(), &state_map).await
     }
@@ -201,7 +209,7 @@ impl AppState {
     }
 
     async fn build_routes_payload(&self) -> RoutesPayload {
-        let state_map = state::load_state_map(self.config.router_state_file()).await;
+        let state_map = self.state_map.read().await;
         let routes = state::extract_routes(&state_map)
             .into_iter()
             .map(|(token, info)| RoutePayloadItem {
@@ -327,12 +335,11 @@ fn check_basic_auth(headers: &HeaderMap, config: &Config) -> bool {
         return false;
     };
 
-    let Some(raw) = auth_header
-        .strip_prefix("Basic ")
-        .or_else(|| auth_header.strip_prefix("basic "))
-    else {
+    let lower = auth_header.to_ascii_lowercase();
+    if !lower.starts_with("basic ") {
         return false;
     };
+    let raw = &auth_header["basic ".len()..];
 
     let Ok(decoded) = STANDARD.decode(raw.trim()) else {
         return false;

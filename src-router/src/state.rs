@@ -7,7 +7,6 @@ use tokio::fs;
 const PREVIEW_STATE_KEY: &str = "__preview_port__";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub(crate) struct RouteInfo {
     pub(crate) port: u16,
     pub(crate) created_at: u64,
