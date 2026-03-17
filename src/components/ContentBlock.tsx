@@ -65,7 +65,7 @@ export const ContentBlock = memo(function ContentBlock({
   language,
   variant = 'default',
   defaultCollapsed = false,
-  maxHeight = 400,
+  maxHeight: maxHeightProp,
   collapsible = true,
   content,
   diff,
@@ -80,6 +80,16 @@ export const ContentBlock = memo(function ContentBlock({
   const [fullscreenOpen, setFullscreenOpen] = useState(false)
   const [diffViewMode, setDiffViewMode] = useState<ViewMode>('split')
   const contentRef = useRef<HTMLDivElement>(null)
+
+  // 响应式 maxHeight：限制在视口高度的 40% 以内，最小 160px，最大 400px
+  // 外部传入的值优先
+  const [viewportHeight, setViewportHeight] = useState(typeof window !== 'undefined' ? window.innerHeight : 800)
+  useEffect(() => {
+    const onResize = () => setViewportHeight(window.innerHeight)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const maxHeight = maxHeightProp ?? Math.max(120, Math.min(300, Math.floor(viewportHeight * 0.3)))
 
   const isError = variant === 'error'
   const isDiff = !!diff
