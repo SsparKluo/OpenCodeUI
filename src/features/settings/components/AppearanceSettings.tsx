@@ -9,9 +9,11 @@ import {
   MinimizeIcon,
   CheckIcon,
   GlobeIcon,
+  TrashIcon,
 } from '../../../components/Icons'
 import { Toggle, SegmentedControl, SettingRow, SettingsCard } from './SettingsUI'
 import { useTheme } from '../../../hooks'
+import type { CustomCSSTemplate } from '../../../store/themeStore'
 
 // ============================================
 // Theme Preset Card
@@ -80,14 +82,17 @@ function PresetCard({
 function CustomCSSEditor({
   value,
   onChange,
+  onImportFile,
   t,
 }: {
   value: string
   onChange: (css: string) => void
+  onImportFile: (css: string) => void
   t: (key: string) => string
 }) {
   const [localValue, setLocalValue] = useState(value)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setLocalValue(value)
@@ -97,6 +102,19 @@ function CustomCSSEditor({
     setLocalValue(newVal)
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => onChange(newVal), 400)
+  }
+
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = event => {
+      const css = event.target?.result as string
+      setLocalValue(css)
+      onImportFile(css)
+    }
+    reader.readAsText(file)
+    e.target.value = ''
   }
 
   const template = `/* ====== One Dark Inspired Theme Template ====== */
@@ -273,14 +291,23 @@ function CustomCSSEditor({
           <code className="text-[10px] px-1 py-0.5 bg-bg-200 rounded font-mono">:root:root</code> for higher
           specificity.
         </div>
-        {!localValue.trim() && (
+        <div className="flex items-center gap-1.5">
+          <input ref={fileInputRef} type="file" accept=".css" onChange={handleFileImport} className="hidden" />
           <button
-            onClick={() => handleChange(template)}
+            onClick={() => fileInputRef.current?.click()}
             className="text-[10px] text-accent-main-100 hover:text-accent-main-200 transition-colors px-1.5 py-0.5 rounded hover:bg-bg-200/50 shrink-0"
           >
-            {t('appearance.loadTemplate')}
+            {t('appearance.importCss')}
           </button>
-        )}
+          {!localValue.trim() && (
+            <button
+              onClick={() => handleChange(template)}
+              className="text-[10px] text-accent-main-100 hover:text-accent-main-200 transition-colors px-1.5 py-0.5 rounded hover:bg-bg-200/50 shrink-0"
+            >
+              {t('appearance.loadTemplate')}
+            </button>
+          )}
+        </div>
       </div>
       <textarea
         value={localValue}
@@ -310,6 +337,59 @@ function CustomCSSEditor({
 }
 
 // ============================================
+// CSS Template List
+// ============================================
+
+function CSSTemplateList({
+  templates,
+  activeTemplateId,
+  onActivate,
+  onDelete,
+  t,
+}: {
+  templates: CustomCSSTemplate[]
+  activeTemplateId: string | null
+  onActivate: (id: string | null) => void
+  onDelete: (id: string) => void
+  t: (key: string) => string
+}) {
+  if (templates.length === 0) {
+    return <div className="text-[11px] text-text-500 py-2">{t('appearance.noTemplates')}</div>
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {templates.map(template => (
+        <div
+          key={template.id}
+          className={`flex items-center gap-2 p-2 rounded-lg border transition-all ${
+            activeTemplateId === template.id
+              ? 'border-accent-main-100/60 bg-accent-main-100/5'
+              : 'border-border-200/50 hover:border-border-300 hover:bg-bg-100/50'
+          }`}
+        >
+          <button
+            onClick={() => onActivate(activeTemplateId === template.id ? null : template.id)}
+            className="flex-1 text-left min-w-0"
+          >
+            <div className="text-[12px] font-medium text-text-100 truncate">{template.name}</div>
+            <div className="text-[10px] text-text-500 truncate">{template.css.slice(0, 50)}...</div>
+          </button>
+          {activeTemplateId === template.id && <CheckIcon size={14} className="text-accent-main-100 shrink-0" />}
+          <button
+            onClick={() => onDelete(template.id)}
+            className="p-1 text-text-400 hover:text-danger-100 hover:bg-danger-bg rounded transition-colors shrink-0"
+            title={t('common:delete')}
+          >
+            <TrashIcon size={14} />
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ============================================
 // Tab: Appearance
 // ============================================
 
@@ -325,7 +405,22 @@ export function AppearanceSettings() {
     availablePresets,
     customCSS,
     setCustomCSS,
+    customCSSTemplates,
+    activeTemplateId,
+    saveCustomCSSTemplate,
+    deleteCustomCSSTemplate,
+    activateTemplate,
   } = useTheme()
+
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+
+  const handleSaveTemplate = () => {
+    if (!templateName.trim() || !customCSS.trim()) return
+    saveCustomCSSTemplate(templateName.trim(), customCSS)
+    setTemplateName('')
+    setShowSaveDialog(false)
+  }
 
   return (
     <div className="space-y-4">
@@ -347,8 +442,56 @@ export function AppearanceSettings() {
       )}
 
       <SettingsCard title={t('appearance.customCss')} description={t('appearance.customCssDesc')}>
-        <CustomCSSEditor value={customCSS} onChange={setCustomCSS} t={t} />
+        <CustomCSSEditor value={customCSS} onChange={setCustomCSS} onImportFile={setCustomCSS} t={t} />
+        {customCSS.trim() && (
+          <div className="pt-3 border-t border-border-100/55 mt-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[11px] font-medium text-text-400">{t('appearance.savedTemplates')}</div>
+              <button
+                onClick={() => setShowSaveDialog(true)}
+                className="text-[10px] text-accent-main-100 hover:text-accent-main-200 transition-colors px-1.5 py-0.5 rounded hover:bg-bg-200/50"
+              >
+                {t('appearance.saveAsTemplate')}
+              </button>
+            </div>
+            <CSSTemplateList
+              templates={customCSSTemplates}
+              activeTemplateId={activeTemplateId}
+              onActivate={activateTemplate}
+              onDelete={deleteCustomCSSTemplate}
+              t={t}
+            />
+          </div>
+        )}
       </SettingsCard>
+
+      {showSaveDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-bg-100 border border-border-200 rounded-xl p-4 w-80 max-w-[90vw]">
+            <div className="text-[13px] font-medium text-text-100 mb-3">{t('appearance.saveTemplate')}</div>
+            <input
+              type="text"
+              value={templateName}
+              onChange={e => setTemplateName(e.target.value)}
+              placeholder={t('appearance.templateName')}
+              className="w-full px-3 py-2 text-[12px] bg-bg-200/50 border border-border-200 rounded-lg text-text-100 placeholder:text-text-500 focus:outline-none focus:border-accent-main-100/50 mb-3"
+              autoFocus
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleSaveTemplate()
+                if (e.key === 'Escape') setShowSaveDialog(false)
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowSaveDialog(false)}>
+                {t('common:cancel')}
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleSaveTemplate}>
+                {t('common:save')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <SettingsCard title={t('appearance.display')} description={t('appearance.displayDesc')}>
         <div className="space-y-4">
