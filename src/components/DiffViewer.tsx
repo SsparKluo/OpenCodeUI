@@ -2,17 +2,19 @@
  * DiffViewer - 核心 Diff 渲染组件
  *
  * 两列架构（和 CodePreview 一致）：
- * - Gutter 列：行号 + 增删标记，固定不水平滚动
+ * - Gutter 列：change bar（3px 竖条，增绿删红）+ 行号，固定不水平滚动
  * - Content 列：代码内容，独立水平滚动
  *
  * 始终使用虚拟滚动，填满父容器（h-full）
  * 大文件跳过词级别diff和语法高亮
  */
 
-import { memo, useMemo, useRef, useState, useEffect, useCallback } from 'react'
+import { memo, useMemo, useRef, useState, useEffect, useCallback, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { diffLines, diffWords } from 'diff'
 import { useSyntaxHighlight, type HighlightTokens } from '../hooks/useSyntaxHighlight'
+import { themeStore } from '../store/themeStore'
+import type { DiffStyle } from '../store/themeStore'
 
 // ============================================
 // 常量
@@ -90,6 +92,24 @@ function getGutterBgClass(type: LineType): string {
   }
 }
 
+/** Change bar 样式 — 行号左侧的 3px 竖条，add 实心 / delete 虚线 */
+function getChangeBarProps(type: LineType): { className: string; style?: React.CSSProperties } {
+  switch (type) {
+    case 'add':
+      return { className: 'w-[3px] shrink-0 bg-success-100' }
+    case 'delete':
+      return {
+        className: 'w-[3px] shrink-0',
+        style: {
+          background:
+            'repeating-linear-gradient(to bottom, var(--color-danger-100) 0px, var(--color-danger-100) 2px, transparent 2px, transparent 4px)',
+        },
+      }
+    default:
+      return { className: 'w-[3px] shrink-0' }
+  }
+}
+
 function escapeHtml(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
@@ -106,6 +126,9 @@ export const DiffViewer = memo(function DiffViewer({
   maxHeight,
   isResizing = false,
 }: DiffViewerProps) {
+  // 读取全局 diff 行标记风格
+  const { diffStyle } = useSyncExternalStore(themeStore.subscribe, themeStore.getSnapshot)
+
   // 检测大文件
   const totalLines = before.split('\n').length + after.split('\n').length
   const isLargeFile = totalLines > LARGE_FILE_LINES || before.length + after.length > LARGE_FILE_CHARS
@@ -119,11 +142,19 @@ export const DiffViewer = memo(function DiffViewer({
         isResizing={isResizing}
         isLargeFile={isLargeFile}
         maxHeight={maxHeight}
+        diffStyle={diffStyle}
       />
     )
   }
   return (
-    <UnifiedDiffView before={before} after={after} language={language} isResizing={isResizing} maxHeight={maxHeight} />
+    <UnifiedDiffView
+      before={before}
+      after={after}
+      language={language}
+      isResizing={isResizing}
+      maxHeight={maxHeight}
+      diffStyle={diffStyle}
+    />
   )
 })
 
@@ -150,6 +181,7 @@ const SplitDiffView = memo(function SplitDiffView({
   isResizing,
   isLargeFile,
   maxHeight,
+  diffStyle,
 }: {
   before: string
   after: string
@@ -157,6 +189,7 @@ const SplitDiffView = memo(function SplitDiffView({
   isResizing: boolean
   isLargeFile: boolean
   maxHeight?: number
+  diffStyle: DiffStyle
 }) {
   const { t } = useTranslation(['components', 'common'])
   const containerRef = useRef<HTMLDivElement>(null)
@@ -303,6 +336,10 @@ const SplitDiffView = memo(function SplitDiffView({
   }
 
   // 渲染可见行 — 分别生成 gutter 和 content
+  const useChangeBars = diffStyle === 'changeBars'
+  // markers: 行号(32) + 符号(20) = 52px;  changeBars: bar(3) + 行号(32) = 35px
+  const gutterWidth = useChangeBars ? 35 : 52
+
   const leftGutterRows: React.ReactNode[] = []
   const leftContentRows: React.ReactNode[] = []
   const rightGutterRows: React.ReactNode[] = []
@@ -311,16 +348,29 @@ const SplitDiffView = memo(function SplitDiffView({
   for (let i = startIndex; i < endIndex; i++) {
     const pair = pairedLines[i]
 
-    // Left gutter: 行号 + 删除标记
+    // Left gutter
     leftGutterRows.push(
-      <div key={i} className={`flex ${getGutterBgClass(pair.left.type)}`} style={{ height: LINE_HEIGHT }}>
-        <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[11px] leading-5 select-none opacity-60">
-          {pair.left.lineNo}
+      useChangeBars ? (
+        <div
+          key={i}
+          className={`flex items-stretch ${getGutterBgClass(pair.left.type)}`}
+          style={{ height: LINE_HEIGHT }}
+        >
+          <div {...getChangeBarProps(pair.left.type)} />
+          <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[11px] leading-5 select-none opacity-60">
+            {pair.left.lineNo}
+          </div>
         </div>
-        <div className="w-5 shrink-0 text-center text-[11px] leading-5 select-none">
-          {pair.left.type === 'delete' && <span className="text-danger-100">−</span>}
+      ) : (
+        <div key={i} className={`flex ${getGutterBgClass(pair.left.type)}`} style={{ height: LINE_HEIGHT }}>
+          <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[11px] leading-5 select-none opacity-60">
+            {pair.left.lineNo}
+          </div>
+          <div className="w-5 shrink-0 text-center text-[11px] leading-5 select-none">
+            {pair.left.type === 'delete' && <span className="text-danger-100">−</span>}
+          </div>
         </div>
-      </div>,
+      ),
     )
 
     // Left content: 代码
@@ -336,14 +386,27 @@ const SplitDiffView = memo(function SplitDiffView({
 
     // Right gutter
     rightGutterRows.push(
-      <div key={i} className={`flex ${getGutterBgClass(pair.right.type)}`} style={{ height: LINE_HEIGHT }}>
-        <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[11px] leading-5 select-none opacity-60">
-          {pair.right.lineNo}
+      useChangeBars ? (
+        <div
+          key={i}
+          className={`flex items-stretch ${getGutterBgClass(pair.right.type)}`}
+          style={{ height: LINE_HEIGHT }}
+        >
+          <div {...getChangeBarProps(pair.right.type)} />
+          <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[11px] leading-5 select-none opacity-60">
+            {pair.right.lineNo}
+          </div>
         </div>
-        <div className="w-5 shrink-0 text-center text-[11px] leading-5 select-none">
-          {pair.right.type === 'add' && <span className="text-success-100">+</span>}
+      ) : (
+        <div key={i} className={`flex ${getGutterBgClass(pair.right.type)}`} style={{ height: LINE_HEIGHT }}>
+          <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[11px] leading-5 select-none opacity-60">
+            {pair.right.lineNo}
+          </div>
+          <div className="w-5 shrink-0 text-center text-[11px] leading-5 select-none">
+            {pair.right.type === 'add' && <span className="text-success-100">+</span>}
+          </div>
         </div>
-      </div>,
+      ),
     )
 
     // Right content
@@ -370,7 +433,7 @@ const SplitDiffView = memo(function SplitDiffView({
           {/* 左面板 */}
           <div className="flex-1 flex min-w-0 border-r border-border-100/30">
             {/* 左 gutter */}
-            <div className="shrink-0 overflow-hidden" style={{ width: 52 /* 32+20 */ }}>
+            <div className="shrink-0 overflow-hidden" style={{ width: gutterWidth }}>
               {leftGutterRows}
             </div>
             {/* 左 content — 隐藏自身滚动条，由 proxy 控制 */}
@@ -386,7 +449,7 @@ const SplitDiffView = memo(function SplitDiffView({
           {/* 右面板 */}
           <div className="flex-1 flex min-w-0">
             {/* 右 gutter */}
-            <div className="shrink-0 overflow-hidden" style={{ width: 52 }}>
+            <div className="shrink-0 overflow-hidden" style={{ width: gutterWidth }}>
               {rightGutterRows}
             </div>
             {/* 右 content */}
@@ -406,7 +469,7 @@ const SplitDiffView = memo(function SplitDiffView({
         <div className="sticky bottom-0 z-10 flex">
           {/* 左面板: gutter 占位 + scrollbar */}
           <div className="flex-1 flex min-w-0 border-r border-border-100/30">
-            <div className="shrink-0" style={{ width: 52 }} />
+            <div className="shrink-0" style={{ width: gutterWidth }} />
             <div
               ref={leftScrollbarRef}
               className="flex-1 min-w-0 overflow-x-auto code-scrollbar"
@@ -417,7 +480,7 @@ const SplitDiffView = memo(function SplitDiffView({
           </div>
           {/* 右面板: gutter 占位 + scrollbar */}
           <div className="flex-1 flex min-w-0">
-            <div className="shrink-0" style={{ width: 52 }} />
+            <div className="shrink-0" style={{ width: gutterWidth }} />
             <div
               ref={rightScrollbarRef}
               className="flex-1 min-w-0 overflow-x-auto code-scrollbar"
@@ -440,7 +503,9 @@ const SplitDiffView = memo(function SplitDiffView({
 //     高度占位 (height: totalHeight, relative) — 虚拟滚动
 //       absolute div (translateY: offsetY) — 可见行
 //         flex row
-//           gutter (shrink-0, overflow: hidden): oldLineNo | newLineNo | +/-
+//           gutter (shrink-0, overflow: hidden):
+//             markers 模式: oldLineNo | newLineNo | +/-
+//             changeBars 模式: changeBar | oldLineNo | newLineNo
 //           content (flex-1, overflow-x: auto, scrollbar-none): 代码
 //             inline-block min-w-full — 被最宽行撑开
 //     sticky proxy scrollbar (bottom: 0) — 可见的横向滚动条
@@ -452,12 +517,14 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
   language,
   isResizing,
   maxHeight,
+  diffStyle,
 }: {
   before: string
   after: string
   language: string
   isResizing: boolean
   maxHeight?: number
+  diffStyle: DiffStyle
 }) {
   const { t } = useTranslation(['components', 'common'])
   const containerRef = useRef<HTMLDivElement>(null)
@@ -564,8 +631,10 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
     )
   }
 
-  // gutter 宽度: oldLineNo(32px) + newLineNo(32px) + 标记(20px) = 84px
-  const GUTTER_WIDTH = 84
+  // markers: oldLineNo(32) + newLineNo(32) + 符号(20) = 84px
+  // changeBars: bar(3) + oldLineNo(32) + newLineNo(32) = 67px
+  const useChangeBars = diffStyle === 'changeBars'
+  const GUTTER_WIDTH = useChangeBars ? 67 : 84
 
   const gutterRows: React.ReactNode[] = []
   const contentRows: React.ReactNode[] = []
@@ -582,20 +651,32 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
       lineNo = line.newLineNo
     }
 
-    // Gutter 行: oldLineNo | newLineNo | +/-
+    // Gutter 行
     gutterRows.push(
-      <div key={i} className={`flex ${getGutterBgClass(line.type)}`} style={{ height: LINE_HEIGHT }}>
-        <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[11px] leading-5 select-none opacity-60">
-          {line.oldLineNo}
+      useChangeBars ? (
+        <div key={i} className={`flex items-stretch ${getGutterBgClass(line.type)}`} style={{ height: LINE_HEIGHT }}>
+          <div {...getChangeBarProps(line.type)} />
+          <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[11px] leading-5 select-none opacity-60">
+            {line.oldLineNo}
+          </div>
+          <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[11px] leading-5 select-none opacity-60">
+            {line.newLineNo}
+          </div>
         </div>
-        <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[11px] leading-5 select-none opacity-60">
-          {line.newLineNo}
+      ) : (
+        <div key={i} className={`flex ${getGutterBgClass(line.type)}`} style={{ height: LINE_HEIGHT }}>
+          <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[11px] leading-5 select-none opacity-60">
+            {line.oldLineNo}
+          </div>
+          <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[11px] leading-5 select-none opacity-60">
+            {line.newLineNo}
+          </div>
+          <div className="w-5 shrink-0 text-center text-[11px] leading-5 select-none">
+            {line.type === 'add' && <span className="text-success-100">+</span>}
+            {line.type === 'delete' && <span className="text-danger-100">−</span>}
+          </div>
         </div>
-        <div className="w-5 shrink-0 text-center text-[11px] leading-5 select-none">
-          {line.type === 'add' && <span className="text-success-100">+</span>}
-          {line.type === 'delete' && <span className="text-danger-100">−</span>}
-        </div>
-      </div>,
+      ),
     )
 
     // Content 行

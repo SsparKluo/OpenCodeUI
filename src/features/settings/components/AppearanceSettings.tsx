@@ -325,6 +325,8 @@ export function AppearanceSettings() {
     availablePresets,
     customCSS,
     setCustomCSS,
+    diffStyle,
+    setDiffStyle,
   } = useTheme()
 
   return (
@@ -376,6 +378,23 @@ export function AppearanceSettings() {
             >
               <Toggle enabled={isWideMode} onChange={toggleWideMode} />
             </SettingRow>
+          </div>
+
+          <div className="pt-3 border-t border-border-100/55">
+            <div>
+              <div className="text-[11px] font-medium text-text-400 uppercase tracking-wider mb-1.5">
+                {t('appearance.diffStyle')}
+              </div>
+              <SegmentedControl
+                value={diffStyle}
+                options={[
+                  { value: 'markers', label: t('appearance.diffStyleMarkers') },
+                  { value: 'changeBars', label: t('appearance.diffStyleChangeBars') },
+                ]}
+                onChange={v => setDiffStyle(v as 'markers' | 'changeBars')}
+              />
+              <div className="text-[11px] text-text-500 mt-1">{t('appearance.diffStyleDesc')}</div>
+            </div>
           </div>
 
           <div className="pt-3 border-t border-border-100/55">

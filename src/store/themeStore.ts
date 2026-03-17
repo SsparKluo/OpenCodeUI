@@ -65,6 +65,9 @@ export interface StepFinishDisplay {
 
 export type ReasoningDisplayMode = 'capsule' | 'italic'
 
+/** Diff 行标记风格：markers = 传统 +/- 符号, changeBars = 行号左侧彩色竖条 */
+export type DiffStyle = 'markers' | 'changeBars'
+
 const DEFAULT_STEP_FINISH_DISPLAY: StepFinishDisplay = {
   tokens: true,
   cache: true,
@@ -74,6 +77,7 @@ const DEFAULT_STEP_FINISH_DISPLAY: StepFinishDisplay = {
 }
 
 const DEFAULT_REASONING_DISPLAY_MODE: ReasoningDisplayMode = 'capsule'
+const DEFAULT_DIFF_STYLE: DiffStyle = 'markers'
 
 export interface ThemeState {
   /** 当前选中的主题风格 ID */
@@ -90,6 +94,8 @@ export interface ThemeState {
   reasoningDisplayMode: ReasoningDisplayMode
   /** 宽模式 */
   wideMode: boolean
+  /** Diff 行标记风格 */
+  diffStyle: DiffStyle
 }
 
 // ============================================
@@ -103,6 +109,7 @@ const STORAGE_KEY_COLLAPSE_USER_MESSAGES = 'collapse-user-messages'
 const STORAGE_KEY_STEP_FINISH_DISPLAY = 'step-finish-display'
 const STORAGE_KEY_REASONING_DISPLAY_MODE = 'reasoning-display-mode'
 const STORAGE_KEY_WIDE_MODE = 'chat-wide-mode'
+const STORAGE_KEY_DIFF_STYLE = 'diff-style'
 
 // ============================================
 // DOM Style Element IDs
@@ -138,6 +145,8 @@ class ThemeStore {
     }
 
     const savedWideMode = localStorage.getItem(STORAGE_KEY_WIDE_MODE) === 'true'
+    const savedDiffStyle = localStorage.getItem(STORAGE_KEY_DIFF_STYLE) as DiffStyle | null
+    const diffStyle: DiffStyle = savedDiffStyle === 'changeBars' ? 'changeBars' : DEFAULT_DIFF_STYLE
 
     this.state = {
       presetId: savedPreset,
@@ -147,6 +156,7 @@ class ThemeStore {
       stepFinishDisplay,
       reasoningDisplayMode,
       wideMode: savedWideMode,
+      diffStyle,
     }
   }
 
@@ -176,6 +186,9 @@ class ThemeStore {
   }
   get wideMode() {
     return this.state.wideMode
+  }
+  get diffStyle() {
+    return this.state.diffStyle
   }
 
   /** 获取当前主题预设（内置主题返回对象，自定义返回 undefined） */
@@ -265,6 +278,13 @@ class ThemeStore {
 
   toggleWideMode() {
     this.setWideMode(!this.state.wideMode)
+  }
+
+  setDiffStyle(style: DiffStyle) {
+    if (this.state.diffStyle === style) return
+    this.state = { ...this.state, diffStyle: style }
+    localStorage.setItem(STORAGE_KEY_DIFF_STYLE, style)
+    this.emit()
   }
 
   // ---- Theme Application ----
