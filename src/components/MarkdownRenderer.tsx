@@ -16,9 +16,21 @@ interface MarkdownRendererProps {
 /**
  * Inline code component
  */
-const InlineCode = memo(function InlineCode({ children }: { children: React.ReactNode }) {
+const InlineCode = memo(function InlineCode({
+  children,
+  variant = 'default',
+}: {
+  children: React.ReactNode
+  variant?: 'default' | 'reasoning'
+}) {
   return (
-    <code className="font-mono text-accent-main-100 text-[0.9em] align-baseline break-words">
+    <code
+      className={
+        variant === 'reasoning'
+          ? 'font-mono text-accent-main-100 text-[0.9em] align-baseline break-words'
+          : 'px-1 py-0.5 bg-bg-200/50 border border-border-200/50 rounded text-accent-main-100 text-[0.9em] font-mono align-baseline break-words'
+      }
+    >
       {children}
     </code>
   )
@@ -70,7 +82,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     () => ({
       // Inline code — Streamdown supports `inlineCode` as a dedicated key
       inlineCode({ children }) {
-        return <InlineCode>{children}</InlineCode>
+        return <InlineCode variant={isReasoning ? 'reasoning' : 'default'}>{children}</InlineCode>
       },
 
       // Block code — delegate to our existing CodeBlock with shiki highlighting
@@ -96,7 +108,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         <h1
           className={
             isReasoning
-              ? 'text-xs font-semibold text-text-300 mt-2 mb-1 first:mt-0 last:mb-0 italic'
+              ? 'text-xs font-semibold text-text-300 mt-2 mb-1 first:mt-0 last:mb-0'
               : 'text-xl font-bold text-text-100 mt-8 mb-4 first:mt-0 last:mb-0 tracking-tight'
           }
         >
@@ -107,7 +119,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         <h2
           className={
             isReasoning
-              ? 'text-xs font-semibold text-text-300 mt-2 mb-1 first:mt-0 last:mb-0 italic'
+              ? 'text-xs font-semibold text-text-300 mt-2 mb-1 first:mt-0 last:mb-0'
               : 'text-lg font-bold text-text-100 mt-6 mb-3 first:mt-0 last:mb-0 tracking-tight pb-1 border-b border-border-100/50'
           }
         >
@@ -118,7 +130,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         <h3
           className={
             isReasoning
-              ? 'text-xs font-semibold text-text-300 mt-2 mb-1 first:mt-0 last:mb-0 italic'
+              ? 'text-xs font-semibold text-text-300 mt-2 mb-1 first:mt-0 last:mb-0'
               : 'text-base font-semibold text-text-100 mt-5 mb-2 first:mt-0 last:mb-0 tracking-tight'
           }
         >
@@ -129,7 +141,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         <h4
           className={
             isReasoning
-              ? 'text-xs font-semibold text-text-300 mt-2 mb-1 first:mt-0 last:mb-0 italic'
+              ? 'text-xs font-semibold text-text-300 mt-2 mb-1 first:mt-0 last:mb-0'
               : 'text-sm font-semibold text-text-100 mt-4 mb-2 first:mt-0 last:mb-0 tracking-tight'
           }
         >
@@ -139,7 +151,11 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
 
       // Paragraphs
       p: ({ children }) => (
-        <p className={isReasoning ? 'text-xs mb-2 last:mb-0 leading-5 text-text-400 italic' : 'mb-4 last:mb-0 leading-7 text-text-200'}>
+        <p
+          className={
+            isReasoning ? 'text-xs mb-2 last:mb-0 leading-5 text-text-400' : 'mb-4 last:mb-0 leading-7 text-text-200'
+          }
+        >
           {children}
         </p>
       ),
@@ -168,7 +184,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         </ol>
       ),
       li: ({ children }) => (
-        <li className={isReasoning ? 'text-xs text-text-400 pl-1 leading-5 italic' : 'text-text-200 pl-1 leading-7'}>
+        <li className={isReasoning ? 'text-xs text-text-400 pl-1 leading-5' : 'text-text-200 pl-1 leading-7'}>
           {children}
         </li>
       ),
@@ -194,7 +210,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         <blockquote
           className={
             isReasoning
-              ? 'text-xs border-l-2 border-accent-main-100/50 pl-3 py-0.5 my-2 first:mt-0 last:mb-0 bg-bg-200/20 rounded-r-md text-text-400 italic'
+              ? 'text-xs border-l-2 border-accent-main-100/50 pl-3 py-0.5 my-2 first:mt-0 last:mb-0 bg-bg-200/20 rounded-r-md text-text-400'
               : 'border-l-2 border-accent-main-100 pl-4 py-1 my-4 first:mt-0 last:mb-0 bg-bg-200/30 rounded-r-md text-text-300 italic'
           }
         >
@@ -211,13 +227,23 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
               : 'overflow-x-auto my-6 first:mt-0 last:mb-0 border border-border-200 rounded-lg shadow-sm w-full'
           }
         >
-          <table className={isReasoning ? 'min-w-full border-collapse text-xs divide-y divide-border-200/50' : 'min-w-full border-collapse text-sm divide-y divide-border-200'}>
+          <table
+            className={
+              isReasoning
+                ? 'min-w-full border-collapse text-xs divide-y divide-border-200/50'
+                : 'min-w-full border-collapse text-sm divide-y divide-border-200'
+            }
+          >
             {children}
           </table>
         </div>
       ),
       thead: ({ children }) => (
-        <thead className={isReasoning ? 'text-xs bg-bg-100/50 text-text-300 font-medium' : 'bg-bg-100 text-text-200 font-medium'}>
+        <thead
+          className={
+            isReasoning ? 'text-xs bg-bg-100/50 text-text-300 font-medium' : 'bg-bg-100 text-text-200 font-medium'
+          }
+        >
           {children}
         </thead>
       ),
@@ -233,33 +259,67 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         </th>
       ),
       tbody: ({ children }) => (
-        <tbody className={isReasoning ? 'text-xs divide-y divide-border-200/30 bg-bg-000' : 'divide-y divide-border-200/50 bg-bg-000'}>
+        <tbody
+          className={
+            isReasoning ? 'text-xs divide-y divide-border-200/30 bg-bg-000' : 'divide-y divide-border-200/50 bg-bg-000'
+          }
+        >
           {children}
         </tbody>
       ),
       tr: ({ children }) => (
-        <tr className={isReasoning ? 'text-xs hover:bg-bg-200/20 transition-colors even:bg-bg-200/10' : 'hover:bg-bg-200/30 transition-colors even:bg-bg-200/15'}>
+        <tr
+          className={
+            isReasoning
+              ? 'text-xs hover:bg-bg-200/20 transition-colors even:bg-bg-200/10'
+              : 'hover:bg-bg-200/30 transition-colors even:bg-bg-200/15'
+          }
+        >
           {children}
         </tr>
       ),
       td: ({ children }) => (
-        <td className={isReasoning ? 'text-xs px-3 py-2 text-text-400 leading-relaxed' : 'px-4 py-2.5 text-text-300 leading-relaxed'}>
+        <td
+          className={
+            isReasoning
+              ? 'text-xs px-3 py-2 text-text-400 leading-relaxed'
+              : 'px-4 py-2.5 text-text-300 leading-relaxed'
+          }
+        >
           {children}
         </td>
       ),
 
       // Horizontal rule
-      hr: () => <hr className={isReasoning ? 'border-border-200/50 my-4 first:mt-0 last:mb-0' : 'border-border-200 my-8 first:mt-0 last:mb-0'} />,
+      hr: () => (
+        <hr
+          className={
+            isReasoning
+              ? 'border-border-200/50 my-4 first:mt-0 last:mb-0'
+              : 'border-border-200 my-8 first:mt-0 last:mb-0'
+          }
+        />
+      ),
 
       // Strong and emphasis
       strong: ({ children }) => (
-        <strong className={isReasoning ? 'text-xs font-semibold text-text-300' : 'font-semibold text-text-100'}>{children}</strong>
+        <strong className={isReasoning ? 'font-semibold text-text-300' : 'font-semibold text-text-100'}>
+          {children}
+        </strong>
       ),
-      em: ({ children }) => <em className={isReasoning ? 'text-xs italic text-text-400' : 'italic text-text-200'}>{children}</em>,
+      em: ({ children }) => (
+        <em className={isReasoning ? 'italic text-text-300' : 'italic text-text-200'}>{children}</em>
+      ),
 
       // Strikethrough (GFM)
       del: ({ children }) => (
-        <del className={isReasoning ? 'text-xs text-text-500 line-through decoration-text-500/50' : 'text-text-400 line-through decoration-text-400/50'}>
+        <del
+          className={
+            isReasoning
+              ? 'text-xs text-text-500 line-through decoration-text-500/50'
+              : 'text-text-400 line-through decoration-text-400/50'
+          }
+        >
           {children}
         </del>
       ),
@@ -269,7 +329,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
 
   return (
     <div
-      className={`markdown-content ${isReasoning ? 'text-xs leading-5 text-text-400 italic' : 'text-sm leading-relaxed text-text-100'} break-words min-w-0 overflow-hidden ${className}`}
+      className={`markdown-content ${isReasoning ? 'text-xs leading-5 text-text-400' : 'text-sm leading-relaxed text-text-100'} break-words min-w-0 overflow-hidden ${className}`}
     >
       <Streamdown components={components} isAnimating={isStreaming} controls={false} plugins={{ math }}>
         {content}

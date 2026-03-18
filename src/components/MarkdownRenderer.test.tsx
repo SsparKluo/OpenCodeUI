@@ -18,12 +18,12 @@ describe('MarkdownRenderer', () => {
     expect(codeEl.tagName).toBe('CODE')
   })
 
-  it('renders inline code without border or background', () => {
+  it('renders inline code with compact badge styling', () => {
     render(<MarkdownRenderer content={'Use `code` here'} />)
 
     const codeEl = screen.getByText('code')
-    expect(codeEl.className).not.toMatch(/border/)
-    expect(codeEl.className).not.toMatch(/bg-bg/)
+    expect(codeEl.className).toMatch(/border/)
+    expect(codeEl.className).toMatch(/bg-bg/)
     expect(codeEl.className).toMatch(/font-mono/)
     expect(codeEl.className).toMatch(/text-accent-main-100/)
   })
@@ -44,11 +44,13 @@ describe('MarkdownRenderer', () => {
     render(<MarkdownRenderer content={'# Heading\n\nSome text with `code`'} variant="reasoning" />)
 
     const heading = screen.getByRole('heading', { name: 'Heading' })
-    expect(heading.className).toMatch(/italic/)
     expect(heading.className).toMatch(/text-text-300/)
-    
+
     const paragraph = screen.getByRole('paragraph')
-    expect(paragraph.className).toMatch(/italic/)
     expect(paragraph.className).toMatch(/text-text-400/)
+
+    const codeEl = screen.getByText('code')
+    expect(codeEl.className).not.toMatch(/border/)
+    expect(codeEl.className).not.toMatch(/bg-bg/)
   })
 })

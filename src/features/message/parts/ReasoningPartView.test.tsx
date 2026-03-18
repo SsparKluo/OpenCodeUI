@@ -3,12 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ReasoningPartView } from './ReasoningPartView'
 import type { ReasoningPart } from '../../../types/message'
 
+let mockReasoningDisplayMode: 'italic' | 'markdown' | 'capsule' = 'italic'
+
 vi.mock('../../../hooks', () => ({
   useDelayedRender: (show: boolean) => show,
 }))
 
 vi.mock('../../../hooks/useTheme', () => ({
-  useTheme: () => ({ reasoningDisplayMode: 'italic' }),
+  useTheme: () => ({ reasoningDisplayMode: mockReasoningDisplayMode }),
 }))
 
 vi.mock('../../../components/MarkdownRenderer', () => ({
@@ -17,6 +19,7 @@ vi.mock('../../../components/MarkdownRenderer', () => ({
 
 describe('ReasoningPartView', () => {
   beforeEach(() => {
+    mockReasoningDisplayMode = 'italic'
     vi.useFakeTimers()
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation(cb =>
       window.setTimeout(() => cb(performance.now()), 16),
@@ -49,10 +52,13 @@ describe('ReasoningPartView', () => {
 
     expect(screen.getByRole('button', { expanded: true })).toBeInTheDocument()
     expect(screen.getByText('Thinking...')).toBeInTheDocument()
-    expect(screen.getByTestId('markdown-content')).toHaveTextContent('thinking through steps...')
+    expect(screen.getAllByText('thinking through steps...').length).toBeGreaterThan(0)
+    expect(screen.queryByTestId('markdown-content')).not.toBeInTheDocument()
   })
 
-  it('renders markdown content with formatting', () => {
+  it('renders markdown content in markdown reasoning mode', () => {
+    mockReasoningDisplayMode = 'markdown'
+
     const part = {
       id: 'reason-2',
       sessionID: 'session-1',
@@ -80,6 +86,6 @@ describe('ReasoningPartView', () => {
     render(<ReasoningPartView part={part} isStreaming={false} />)
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
-    expect(screen.getByTestId('markdown-content')).toHaveTextContent('short')
+    expect(screen.getAllByText('short').length).toBeGreaterThan(0)
   })
 })
