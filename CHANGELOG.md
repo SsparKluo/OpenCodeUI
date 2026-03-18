@@ -1,5 +1,23 @@
 # Changelog
 
+## [v0.2.7] - 2026-03-18
+
+- feat: add markdown reasoning display mode (20fa476)
+- fix: avoid action overlap in folder recents on mobile (83b40b9)
+- feat: animate folder recents expansion (1b8ea13)
+- fix: preserve folder recents expansion across tab switches (058c289)
+- fix: limit streaming layout animation to bottom-follow mode (95c6aca)
+- fix: restore reasoning thinking shimmer transition (5c631c8)
+- feat: refine reasoning markdown presentation (71a012a)
+- fix(chat): extract formatDuration to shared formatUtils (c405092)
+- fix(chat): preserve aborted turn durations (13633fb)
+- feat: add diff gutter style setting (markers vs change bars) (4c5e7b8)
+- fix(i18n): improve permission dialog labels for request/rule clarity (e3730d5)
+- refactor: replace react-markdown with Streamdown for streaming-optimized markdown rendering (fcf3307)
+- refactor: extract useResponsiveMaxHeight hook for shared viewport-aware sizing (1993eb8)
+- fix: make ContentBlock maxHeight responsive to viewport size (b584071)
+- fix: resolve drag-to-reorder race condition causing stale closures (b08a763)
+
 ## [v0.2.6] - 2026-03-17
 
 - refactor: redesign folder recents with drag-to-reorder and compact session items (88b4139)
