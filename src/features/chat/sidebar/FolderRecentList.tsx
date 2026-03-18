@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ApiSession } from '../../../api'
 import { FolderIcon, FolderOpenIcon, SpinnerIcon } from '../../../components/Icons'
+import { ExpandableSection } from '../../../components/ui'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
-import { useSessions } from '../../../hooks'
+import { useDelayedRender, useSessions } from '../../../hooks'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { useInView } from '../../../hooks/useInView'
 import { getDirectoryName, isSameDirectory } from '../../../utils'
@@ -376,6 +377,7 @@ function FolderRecentSection({
   const { t } = useTranslation(['chat', 'common'])
   const { ref: inViewRef, inView } = useInView({ rootMargin: '200px 0px', triggerOnce: true })
   const [hasActivated, setHasActivated] = useState(false)
+  const shouldRenderBody = useDelayedRender(isExpanded)
 
   useEffect(() => {
     if (isExpanded && inView) {
@@ -463,43 +465,45 @@ function FolderRecentSection({
         />
 
         {/* Session 列表 */}
-        {isExpanded && (
-          <div onTouchStart={e => e.stopPropagation()}>
-            {!hasActivated || isLoading ? (
-              <div className="flex items-center px-2 py-1 text-[11px] text-text-400/70">
-                <SpinnerIcon size={12} className="animate-spin" />
-              </div>
-            ) : sessions.length === 0 ? (
-              <div className="px-2 py-1 text-[11px] text-text-400/50">{t('sidebar.noChatsInFolder')}</div>
-            ) : (
-              <>
-                {sessions.map(session => (
-                  <SessionListItem
-                    key={session.id}
-                    session={session}
-                    isSelected={session.id === selectedSessionId}
-                    onSelect={() => onSelectSession(session)}
-                    onRename={newTitle => handleRename(session.id, newTitle)}
-                    onDelete={() => handleDelete(session.id)}
-                    density="minimal"
-                    showStats={false}
-                    showDirectory={false}
-                  />
-                ))}
+        <ExpandableSection show={isExpanded}>
+          {shouldRenderBody && (
+            <div onTouchStart={e => e.stopPropagation()}>
+              {!hasActivated || isLoading ? (
+                <div className="flex items-center px-2 py-1 text-[11px] text-text-400/70">
+                  <SpinnerIcon size={12} className="animate-spin" />
+                </div>
+              ) : sessions.length === 0 ? (
+                <div className="px-2 py-1 text-[11px] text-text-400/50">{t('sidebar.noChatsInFolder')}</div>
+              ) : (
+                <>
+                  {sessions.map(session => (
+                    <SessionListItem
+                      key={session.id}
+                      session={session}
+                      isSelected={session.id === selectedSessionId}
+                      onSelect={() => onSelectSession(session)}
+                      onRename={newTitle => handleRename(session.id, newTitle)}
+                      onDelete={() => handleDelete(session.id)}
+                      density="minimal"
+                      showStats={false}
+                      showDirectory={false}
+                    />
+                  ))}
 
-                {hasMore && (
-                  <button
-                    onClick={() => void loadMore()}
-                    disabled={isLoadingMore}
-                    className="w-full rounded px-2 py-1 text-left text-[11px] text-text-500 transition-colors hover:text-text-300 disabled:cursor-default"
-                  >
-                    {isLoadingMore ? t('common:loadingMore') : t('sidebar.showMoreChats')}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        )}
+                  {hasMore && (
+                    <button
+                      onClick={() => void loadMore()}
+                      disabled={isLoadingMore}
+                      className="w-full rounded px-2 py-1 text-left text-[11px] text-text-500 transition-colors hover:text-text-300 disabled:cursor-default"
+                    >
+                      {isLoadingMore ? t('common:loadingMore') : t('sidebar.showMoreChats')}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </ExpandableSection>
       </div>
     </div>
   )
