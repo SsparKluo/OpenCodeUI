@@ -155,6 +155,8 @@
     "noSound": "None",
     "preview": "Preview",
     "uploadAudio": "Upload",
+    "replaceAudio": "Replace",
+    "exportAudio": "Export",
     "removeCustom": "Remove",
     "customAudioActive": "Custom: {{filename}}",
     "selectSound": "Select sound",

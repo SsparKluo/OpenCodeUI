@@ -253,8 +253,8 @@ class SoundStore {
         [type]: {
           ...this.settings.events[type],
           soundId,
-          // 切换到内置音效时清掉 customFileName
-          ...(soundId !== 'custom' ? { customFileName: undefined } : {}),
+          // 切换音效时保留 customFileName —— 自定义音频留在 IDB 里不删，
+          // 用户随时可以切回来。只有显式点"移除"才真删。
         },
       },
     }
@@ -325,6 +325,27 @@ class SoundStore {
     return this.customAudioCache.get(type) || null
   }
 
+  /** 该事件是否有已上传的自定义音频（不管当前是否选中 custom） */
+  hasCustomAudio(type: NotificationType): boolean {
+    return this.customAudioCache.has(type) || !!this.settings.events[type].customFileName
+  }
+
+  /** 导出自定义音频为可下载文件 */
+  async exportCustomAudio(type: NotificationType): Promise<void> {
+    const blob = await this.getCustomAudioBlobAsync(type)
+    if (!blob) return
+
+    const fileName = this.settings.events[type].customFileName || `custom-${type}.audio`
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   /** 异步获取自定义音频（如果缓存没有，从 IDB 加载） */
   async getCustomAudioBlobAsync(type: NotificationType): Promise<Blob | null> {
     const cached = this.customAudioCache.get(type)
@@ -350,7 +371,8 @@ class SoundStore {
   private async preloadCustomAudio() {
     const types: NotificationType[] = ['completed', 'permission', 'question', 'error']
     for (const type of types) {
-      if (this.settings.events[type].soundId === 'custom') {
+      // 只要有 customFileName 就预加载，不管当前是否选中 custom
+      if (this.settings.events[type].customFileName) {
         try {
           const blob = await idbGet(`custom-${type}`)
           if (blob) {

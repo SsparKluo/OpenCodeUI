@@ -7,6 +7,7 @@ import {
   VolumeOffIcon,
   PlayIcon,
   UploadIcon,
+  DownloadIcon,
   TrashIcon,
   CheckIcon,
   ShieldIcon,
@@ -17,13 +18,7 @@ import { useNotification } from '../../../hooks'
 import { notificationStore } from '../../../store'
 import { soundStore, useSoundSettings } from '../../../store/soundStore'
 import { Toggle, SettingRow, SettingsCard } from './SettingsUI'
-import {
-  BUILTIN_SOUNDS,
-  SOUND_OPTIONS,
-  isSoundSupported,
-  playSound,
-  type BuiltinSoundId,
-} from '../../../utils/soundPlayer'
+import { BUILTIN_SOUNDS, SOUND_OPTIONS, isSoundSupported, playSound } from '../../../utils/soundPlayer'
 import type { NotificationType } from '../../../store/notificationStore'
 
 // ============================================
@@ -132,6 +127,7 @@ function EventSoundCard({
   const [uploadError, setUploadError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const soundOptions = SOUND_OPTIONS[type]
+  const hasCustom = soundStore.hasCustomAudio(type)
 
   const handlePreview = useCallback(() => {
     if (eventConfig.soundId === 'none') return
@@ -174,17 +170,9 @@ function EventSoundCard({
     await soundStore.removeCustomAudio(type)
   }, [type])
 
-  // Determine current state label
-  const getStateLabel = () => {
-    if (eventConfig.soundId === 'none') return t('notifications.noSound')
-    if (eventConfig.soundId === 'custom' && eventConfig.customFileName) {
-      return t('notifications.customAudioActive', { filename: eventConfig.customFileName })
-    }
-    if (eventConfig.soundId.startsWith('builtin:')) {
-      return BUILTIN_SOUNDS[eventConfig.soundId as BuiltinSoundId] || eventConfig.soundId
-    }
-    return ''
-  }
+  const handleExportCustom = useCallback(async () => {
+    await soundStore.exportCustomAudio(type)
+  }, [type])
 
   return (
     <div className="rounded-lg border border-border-200/50 bg-bg-000/40 p-3">
@@ -242,18 +230,46 @@ function EventSoundCard({
           </button>
         ))}
 
-        {/* Custom option */}
-        {eventConfig.soundId === 'custom' && (
+        {/* Custom option — 只要有已上传的自定义音频就显示，可来回切换 */}
+        {hasCustom && (
           <button
             type="button"
-            className="px-2.5 py-1 rounded-md text-[12px] font-medium bg-accent-main-100/10 text-accent-main-100 border border-accent-main-100/30"
+            onClick={() => handleSoundChange('custom')}
+            className={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors border
+              ${
+                eventConfig.soundId === 'custom'
+                  ? 'bg-accent-main-100/10 text-accent-main-100 border-accent-main-100/30'
+                  : 'text-text-400 border-border-200/40 hover:bg-bg-100/60 hover:text-text-200'
+              }`}
           >
             {t('notifications.customSound')}
           </button>
         )}
       </div>
 
-      {/* Upload & Status Row */}
+      {/* Custom audio info + actions */}
+      {hasCustom && eventConfig.customFileName && (
+        <div className="flex items-center gap-2 mb-1.5 px-0.5">
+          <span className="text-[11px] text-text-300 truncate max-w-[200px]" title={eventConfig.customFileName}>
+            {eventConfig.customFileName}
+          </span>
+          <Button size="sm" variant="ghost" onClick={handleExportCustom} className="gap-1 text-[11px] h-6 px-1.5">
+            <DownloadIcon size={10} />
+            {t('notifications.exportAudio')}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleRemoveCustom}
+            className="gap-1 text-[11px] h-6 px-1.5 text-red-400 hover:text-red-300"
+          >
+            <TrashIcon size={10} />
+            {t('notifications.removeCustom')}
+          </Button>
+        </div>
+      )}
+
+      {/* Upload row */}
       <div className="flex items-center gap-2 mt-1">
         <input ref={fileInputRef} type="file" accept="audio/*" onChange={handleFileUpload} className="hidden" />
         <Button
@@ -263,22 +279,9 @@ function EventSoundCard({
           className="gap-1.5 text-[11px] h-7"
         >
           <UploadIcon size={11} />
-          {t('notifications.uploadAudio')}
+          {hasCustom ? t('notifications.replaceAudio') : t('notifications.uploadAudio')}
         </Button>
-
-        {eventConfig.soundId === 'custom' && eventConfig.customFileName && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleRemoveCustom}
-            className="gap-1.5 text-[11px] h-7 text-red-400 hover:text-red-300"
-          >
-            <TrashIcon size={11} />
-            {t('notifications.removeCustom')}
-          </Button>
-        )}
-
-        <span className="text-[11px] text-text-400 ml-auto truncate max-w-[180px]">{getStateLabel()}</span>
+        <span className="text-[11px] text-text-500 ml-auto">{t('notifications.supportedFormats')}</span>
       </div>
 
       {/* Upload Error */}

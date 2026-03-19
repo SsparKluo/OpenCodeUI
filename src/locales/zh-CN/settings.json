@@ -155,6 +155,8 @@
     "noSound": "无",
     "preview": "试听",
     "uploadAudio": "上传",
+    "replaceAudio": "替换",
+    "exportAudio": "导出",
     "removeCustom": "移除",
     "customAudioActive": "自定义：{{filename}}",
     "selectSound": "选择音效",
