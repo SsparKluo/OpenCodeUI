@@ -463,14 +463,13 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
         </div>
       </div>
 
-      {/* Resize Handle - 扩大拖拽区域，支持触摸 */}
+      {/* Resize Handle - 与标签栏同色 */}
       {showPreview && (
         <div
           className={`
-            h-2.5 cursor-row-resize shrink-0 relative
+            h-1.5 cursor-row-resize shrink-0 relative
             hover:bg-accent-main-100/50 active:bg-accent-main-100 transition-colors
-            border-t border-border-200
-            ${isResizing ? 'bg-accent-main-100' : 'bg-transparent'}
+            ${isResizing ? 'bg-accent-main-100' : 'bg-bg-200/60'}
           `}
           onMouseDown={handleResizeStart}
           onTouchStart={handleTouchResizeStart}
@@ -551,14 +550,14 @@ const DiffPreviewPanel = memo(function DiffPreviewPanel({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Preview Header */}
-      <div className="flex items-stretch justify-between border-b border-border-100/50 bg-bg-100/30 shrink-0">
+      {/* Tab bar — 与 Files 预览区保持一致 */}
+      <div className="relative flex items-center justify-between shrink-0 bg-bg-200/60 h-[30px]">
         <div
           ref={tabsScrollRef}
           onWheel={handleTabsWheel}
-          className="min-w-0 flex-1 overflow-x-auto no-scrollbar px-1 py-1"
+          className="min-w-0 flex-1 h-full overflow-x-auto overflow-y-hidden no-scrollbar"
         >
-          <div className="flex min-w-max items-center gap-1">
+          <div className="flex min-w-max items-center h-full gap-0">
             {previewDiffs.map(previewDiff => {
               const currentFileName = previewDiff.file.split(/[/\\]/).pop() || previewDiff.file
               const isActive = previewDiff.file === diff.file
@@ -589,15 +588,15 @@ const DiffPreviewPanel = memo(function DiffPreviewPanel({
                   onDragEnd={handlePreviewDragEnd}
                   className={
                     isActive
-                      ? `flex h-7 w-44 max-w-44 shrink-0 items-center gap-1 overflow-hidden rounded-md border bg-bg-200 text-text-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] ${isDragOver ? 'border-accent-main-100/70' : 'border-border-200/60'}`
-                      : `flex h-7 w-44 max-w-44 shrink-0 items-center gap-1 overflow-hidden rounded-md border bg-transparent text-text-400 hover:border-border-100/40 hover:bg-bg-100/80 hover:text-text-200 ${isDragOver ? 'border-accent-main-100/70 bg-accent-main-100/8' : 'border-transparent'}`
+                      ? `tab-active relative z-10 flex h-full w-44 max-w-44 shrink-0 items-center gap-1 bg-bg-100 text-text-100 ${isDragOver ? '' : ''}`
+                      : `relative flex h-full w-44 max-w-44 shrink-0 items-center gap-1 overflow-hidden bg-transparent text-text-400 mx-px hover:bg-bg-100/60 hover:text-text-200 ${isDragOver ? 'bg-accent-main-100/8' : ''}`
                   }
                   title={previewDiff.file}
                 >
                   <button
                     type="button"
                     onClick={() => onActivatePreview(previewDiff.file)}
-                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 overflow-hidden pl-2 pr-1 text-left"
+                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 overflow-hidden pl-2.5 pr-1 text-left"
                   >
                     <img
                       src={getMaterialIconUrl(previewDiff.file, 'file')}
@@ -624,7 +623,7 @@ const DiffPreviewPanel = memo(function DiffPreviewPanel({
                       onClosePreview(previewDiff.file)
                     }}
                     onDragStart={e => e.stopPropagation()}
-                    className="mr-1 shrink-0 rounded p-1 text-text-500 hover:bg-bg-300 hover:text-text-100 transition-colors"
+                    className="mr-1.5 shrink-0 rounded p-1 text-text-500 hover:bg-bg-300 hover:text-text-100 transition-colors"
                     title={`${t('common:close')} ${currentFileName}`}
                   >
                     <CloseIcon size={10} />
@@ -634,10 +633,10 @@ const DiffPreviewPanel = memo(function DiffPreviewPanel({
             })}
           </div>
         </div>
-        <div className="flex items-center gap-0.5 shrink-0 border-l border-border-100/40 px-1.5">
+        <div className="flex items-center gap-0.5 shrink-0 px-1.5 h-full">
           <button
             onClick={onClose}
-            className="p-1 text-text-400 hover:text-text-100 hover:bg-bg-200 rounded transition-colors shrink-0"
+            className="p-1 text-text-400 hover:text-text-100 hover:bg-bg-300/50 rounded transition-colors shrink-0"
             title={t('common:closeAllTabs')}
           >
             <CloseIcon size={12} />
