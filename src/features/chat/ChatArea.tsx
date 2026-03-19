@@ -8,7 +8,17 @@
 // - 消息反序渲染：DOM 前面=视觉底部，loadMore append 到 DOM 末尾=视觉顶部
 // - IntersectionObserver 触发 loadMore，prepend 时临时禁用 content-visibility
 
-import { useRef, useImperativeHandle, forwardRef, memo, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  useRef,
+  useImperativeHandle,
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { animate } from 'motion/mini'
 import { MessageRenderer } from '../message'
@@ -19,6 +29,9 @@ import { RetryStatusInline, type RetryStatusInlineData } from './RetryStatusInli
 import { buildVisibleMessageEntries } from './chatAreaVisibility'
 import { AT_BOTTOM_THRESHOLD_PX } from '../../constants'
 import { useIsMobile } from '../../hooks'
+
+const MESSAGE_RENDER_ROOT_MARGIN = '150% 0px'
+const STICKY_RENDER_MESSAGE_COUNT = 8
 
 interface ChatAreaProps {
   messages: Message[]
@@ -69,6 +82,7 @@ export const ChatArea = memo(
       // ---- Refs ----
       const { t } = useTranslation('chat')
       const scrollRef = useRef<HTMLDivElement>(null)
+      const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null)
       const topSentinelRef = useRef<HTMLDivElement>(null)
       const isAtBottomRef = useRef(true)
       const loadMoreRef = useRef(onLoadMore)
@@ -142,6 +156,15 @@ export const ChatArea = memo(
       }, [messages, visibleMessages])
 
       const messageMaxWidthClass = isWideMode ? 'max-w-[95%] xl:max-w-6xl' : 'max-w-2xl'
+      const stickyRenderIds = useMemo(
+        () => new Set(visibleMessages.slice(-STICKY_RENDER_MESSAGE_COUNT).map(message => message.info.id)),
+        [visibleMessages],
+      )
+
+      const setScrollContainerRef = useCallback((node: HTMLDivElement | null) => {
+        scrollRef.current = node
+        setScrollRoot(prev => (prev === node ? prev : node))
+      }, [])
 
       // ============================================
       // Scroll: isAtBottom tracking
@@ -369,10 +392,12 @@ export const ChatArea = memo(
               <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
                 <div className={`min-w-0 group ${!isUser ? 'w-full' : ''} flex flex-col gap-2`}>
                   {messages.map(msg => (
-                    <div
+                    <ViewportMessageItem
                       key={msg.info.id}
-                      ref={(el: HTMLDivElement | null) => registerMessage?.(msg.info.id, el)}
-                      data-message-id={msg.info.id}
+                      messageId={msg.info.id}
+                      scrollRoot={scrollRoot}
+                      registerMessage={registerMessage}
+                      forceRender={msg.isStreaming || stickyRenderIds.has(msg.info.id)}
                     >
                       <MessageRenderer
                         message={msg}
@@ -385,7 +410,7 @@ export const ChatArea = memo(
                           void messageStore.hydrateMessageParts(sessionId, id)
                         }}
                       />
-                    </div>
+                    </ViewportMessageItem>
                   ))}
                 </div>
               </div>
@@ -393,6 +418,8 @@ export const ChatArea = memo(
           )
         },
         [
+          scrollRoot,
+          stickyRenderIds,
           registerMessage,
           onUndo,
           canUndo,
@@ -416,7 +443,7 @@ export const ChatArea = memo(
           )}
 
           <div
-            ref={scrollRef}
+            ref={setScrollContainerRef}
             className="h-full overflow-y-auto overflow-x-hidden custom-scrollbar contain-content flex flex-col-reverse"
           >
             {/* column-reverse: DOM 第一个 = 视觉最底。所有子元素直接平铺，无 wrapper。
@@ -477,3 +504,79 @@ export const ChatArea = memo(
     },
   ),
 )
+
+interface ViewportMessageItemProps {
+  messageId: string
+  scrollRoot: HTMLDivElement | null
+  forceRender?: boolean
+  registerMessage?: (id: string, element: HTMLElement | null) => void
+  children: ReactNode
+}
+
+const ViewportMessageItem = memo(function ViewportMessageItem({
+  messageId,
+  scrollRoot,
+  forceRender = false,
+  registerMessage,
+  children,
+}: ViewportMessageItemProps) {
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  const [isNearViewport, setIsNearViewport] = useState(true)
+  const [measuredHeight, setMeasuredHeight] = useState<number | null>(null)
+
+  const setWrapperElement = useCallback(
+    (node: HTMLDivElement | null) => {
+      wrapperRef.current = node
+      registerMessage?.(messageId, node)
+    },
+    [messageId, registerMessage],
+  )
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current
+    if (!wrapper || !scrollRoot) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsNearViewport(entry.isIntersecting)
+      },
+      {
+        root: scrollRoot,
+        rootMargin: MESSAGE_RENDER_ROOT_MARGIN,
+      },
+    )
+
+    observer.observe(wrapper)
+    return () => observer.disconnect()
+  }, [scrollRoot])
+
+  const shouldRender = forceRender || measuredHeight === null || isNearViewport
+
+  useEffect(() => {
+    const content = contentRef.current
+    if (!content || !shouldRender || typeof ResizeObserver === 'undefined') return
+
+    const updateHeight = () => {
+      const nextHeight = content.offsetHeight
+      if (nextHeight <= 0) return
+      setMeasuredHeight(prev => (prev !== null && Math.abs(prev - nextHeight) < 1 ? prev : nextHeight))
+    }
+
+    updateHeight()
+
+    const observer = new ResizeObserver(updateHeight)
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [shouldRender])
+
+  return (
+    <div ref={setWrapperElement} data-message-id={messageId}>
+      {shouldRender ? (
+        <div ref={contentRef}>{children}</div>
+      ) : (
+        <div aria-hidden="true" style={measuredHeight ? { height: `${measuredHeight}px` } : undefined} />
+      )}
+    </div>
+  )
+})
