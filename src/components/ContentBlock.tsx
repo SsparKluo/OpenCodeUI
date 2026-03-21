@@ -153,7 +153,7 @@ export const ContentBlock = memo(function ContentBlock({
   const containerClass = isError
     ? 'border border-danger-100/30 bg-danger-100/5'
     : isAmbient
-      ? '' // ambient: 无边框无背景，完全融入信息流
+      ? 'bg-bg-100 border border-border-200/30'
       : 'bg-bg-100 border border-border-200/40'
 
   // Header 样式

@@ -116,7 +116,7 @@ export const InlineQuestion = memo(function InlineQuestion({
   })
 
   return (
-    <div className="my-1.5 space-y-3">
+    <div className="space-y-2">
       {/* 问题列表 */}
       <div className="space-y-3">
         {request.questions.map((question, qIdx) => (
@@ -205,8 +205,10 @@ function InlineQuestionItem({
   return (
     <div className="space-y-2">
       {/* 问题文字 */}
-      {question.header && <div className="text-[11px] text-text-400 font-medium">{question.header}</div>}
-      <div className="text-[13px] text-text-100">{question.question}</div>
+      <div>
+        {question.header && <div className="text-[11px] text-text-400 font-medium mb-0.5">{question.header}</div>}
+        <div className="text-[13px] text-text-100">{question.question}</div>
+      </div>
 
       {/* 选项 — 紧凑按钮组 */}
       <div className="flex flex-wrap gap-1.5">

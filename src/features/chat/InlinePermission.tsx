@@ -57,7 +57,7 @@ export const InlinePermission = memo(function InlinePermission({
   }
 
   return (
-    <div className="my-1.5">
+    <div className="space-y-2">
       {/* 内容 — 复用 ContentBlock ambient variant，和工具调用结果一致 */}
       {isFileEdit && diffData ? (
         <ContentBlock
@@ -80,7 +80,7 @@ export const InlinePermission = memo(function InlinePermission({
       ) : null}
 
       {/* 操作按钮 */}
-      <div className="flex items-center gap-2 mt-1">
+      <div className="flex items-center gap-2">
         <button
           onClick={() => onReply(request.id, 'once')}
           disabled={isReplying}

@@ -126,7 +126,7 @@ export const AmbientToolGroup = memo(function AmbientToolGroup({
 
   return (
     <SmoothHeight isActive={!!isStreaming}>
-      <div className="py-0.5">
+      <div className="py-1">
         {/* 摘要 — 纯文字，点击展开 */}
         <span
           ref={summaryRef}
@@ -137,7 +137,7 @@ export const AmbientToolGroup = memo(function AmbientToolGroup({
             if (e.key === 'Enter' || e.key === ' ') setExpanded(!expanded)
           }}
           aria-expanded={effectiveExpanded}
-          className={`text-sm leading-relaxed cursor-pointer hover:text-text-200 transition-colors ${
+          className={`text-sm leading-5 cursor-pointer hover:text-text-200 transition-colors ${
             showShimmer ? 'reasoning-shimmer-text' : 'text-text-300'
           }`}
         >
@@ -152,7 +152,7 @@ export const AmbientToolGroup = memo(function AmbientToolGroup({
         >
           <div className="min-h-0 min-w-0 overflow-hidden" style={{ clipPath: 'inset(0 -100% 0 -100%)' }}>
             {shouldRenderBody && (
-              <div className="pt-1.5 flex flex-col gap-0.5">
+              <div className="flex flex-col">
                 {parts.map(part => (
                   <AmbientToolItem key={part.id} part={part} />
                 ))}
@@ -192,7 +192,7 @@ const AmbientToolItem = memo(function AmbientToolItem({ part }: { part: ToolPart
   // 有 pending question/permission 时，直接渲染 inline UI
   if (permissionRequest) {
     return (
-      <div className="min-w-0">
+      <div className="min-w-0 py-1">
         <InlinePermission request={permissionRequest} onReply={onPermissionReply} isReplying={isReplying} />
       </div>
     )
@@ -200,7 +200,7 @@ const AmbientToolItem = memo(function AmbientToolItem({ part }: { part: ToolPart
 
   if (questionRequest) {
     return (
-      <div className="min-w-0">
+      <div className="min-w-0 py-1">
         <InlineQuestion
           request={questionRequest}
           onReply={onQuestionReply}
@@ -214,28 +214,26 @@ const AmbientToolItem = memo(function AmbientToolItem({ part }: { part: ToolPart
   return (
     <div className="min-w-0">
       {/* 工具名行 */}
-      <div className="inline-flex items-baseline gap-1.5 w-full text-left py-0.5">
+      <div className="flex items-center gap-1.5 w-full text-left py-1">
         <span
-          className={`text-[12px] leading-5 shrink-0 ${
+          className={`text-sm leading-5 shrink-0 ${
             isActive ? 'reasoning-shimmer-text' : isError ? 'text-danger-100' : 'text-text-400'
           }`}
         >
           {formatToolName(toolName)}
         </span>
 
-        {title && (
-          <span className="text-[12px] leading-5 text-text-400 truncate min-w-0 flex-1 opacity-60">{title}</span>
-        )}
+        {title && <span className="text-sm leading-5 text-text-400 truncate min-w-0 flex-1 opacity-60">{title}</span>}
 
         <span className="inline-flex items-center gap-1.5 ml-auto shrink-0">
           {dur !== undefined && state.status === 'completed' && (
-            <span className="text-[11px] text-text-500 tabular-nums">{formatDuration(dur)}</span>
+            <span className="text-[12px] text-text-500 tabular-nums">{formatDuration(dur)}</span>
           )}
         </span>
       </div>
 
-      {/* Body — 永远显示 */}
-      <div className="pb-1.5 pt-0.5">
+      {/* Body — 永远显示，紧贴工具名行 */}
+      <div>
         <AmbientToolBody part={part} />
       </div>
     </div>
