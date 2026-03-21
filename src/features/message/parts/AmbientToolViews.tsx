@@ -126,7 +126,7 @@ export const AmbientToolGroup = memo(function AmbientToolGroup({
 
         {/* 展开后的工具详情列表 */}
         <div
-          className={`grid transition-[grid-template-rows,opacity] duration-250 ease-out ${
+          className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${
             effectiveExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
           }`}
         >
@@ -239,11 +239,11 @@ const AmbientToolItem = memo(function AmbientToolItem({ part }: { part: ToolPart
 
       {/* 可展开的详情 */}
       <div
-        className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
+        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${
           expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
         }`}
       >
-        <div className="min-h-0 min-w-0 overflow-hidden">
+        <div className="min-h-0 min-w-0 overflow-hidden" style={{ clipPath: 'inset(0 -100% 0 -100%)' }}>
           {shouldRenderBody && (
             <div className="pb-1.5 pt-0.5">
               <AmbientToolBody part={part} />

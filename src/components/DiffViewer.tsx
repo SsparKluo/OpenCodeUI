@@ -133,7 +133,12 @@ export const DiffViewer = memo(function DiffViewer({
   const totalLines = before.split('\n').length + after.split('\n').length
   const isLargeFile = totalLines > LARGE_FILE_LINES || before.length + after.length > LARGE_FILE_CHARS
 
-  if (viewMode === 'split') {
+  // 纯增加或纯删除时，split 模式另一边是空的没意义，自动降级为 unified
+  const isAddOnly = !before.trim()
+  const isDeleteOnly = !after.trim()
+  const effectiveViewMode = isAddOnly || isDeleteOnly ? 'unified' : viewMode
+
+  if (effectiveViewMode === 'split') {
     return (
       <SplitDiffView
         before={before}
