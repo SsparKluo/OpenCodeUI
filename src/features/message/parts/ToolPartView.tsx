@@ -160,8 +160,8 @@ export const ToolPartView = memo(function ToolPartView({
           </div>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            {/* Diff stats — 只在收起时显示 */}
-            {!effectiveExpanded && !isActive && (diffStats || hasDiffFiles) && (
+            {/* Diff stats — 只在收起时且非失败时显示 */}
+            {!effectiveExpanded && !isActive && !isError && (diffStats || hasDiffFiles) && (
               <span className="flex items-center gap-1 text-[10px] font-mono font-medium tabular-nums">
                 {(diffStats?.additions ?? 0) > 0 && <span className="text-success-100">+{diffStats!.additions}</span>}
                 {(diffStats?.deletions ?? 0) > 0 && <span className="text-danger-100">-{diffStats!.deletions}</span>}

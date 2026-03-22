@@ -513,15 +513,15 @@ const ToolGroup = memo(function ToolGroup({ parts, stepFinish, duration, turnDur
   const totalCount = parts.length
   const isAllDone = doneCount === totalCount
   const hasActiveTools = parts.some(isToolPartActive)
-  const hasErroredTools = parts.some(part => part.state.status === 'error')
   const stepsSummary = descriptiveToolSteps ? buildDescriptiveToolStepsSummary(parts, t) : undefined
 
-  // 汇总所有工具的 diff stats
+  // 汇总所有成功完成的工具的 diff stats（失败的不算）
   const totalDiffStats = useMemo(() => {
     if (!descriptiveToolSteps) return undefined
     let additions = 0,
       deletions = 0
     for (const part of parts) {
+      if (part.state.status === 'error') continue
       const data = extractToolData(part)
       const stats = data.diffStats || computePartDiffStats(data)
       if (stats) {
@@ -543,11 +543,11 @@ const ToolGroup = memo(function ToolGroup({ parts, stepFinish, duration, turnDur
     if (!descriptiveToolSteps) return
     // 沉浸模式下没有可读工具：始终收起，不展开
     if (immersiveMode && !hasReadableTools) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 沉浸模式联动
       setExpanded(false)
       return
     }
     if (hasActiveTools || hasPendingInteraction) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setExpanded(true)
     }
   }, [descriptiveToolSteps, hasActiveTools, hasPendingInteraction, immersiveMode, hasReadableTools])
@@ -573,12 +573,21 @@ const ToolGroup = memo(function ToolGroup({ parts, stepFinish, duration, turnDur
               onClick={() => setExpanded(!expanded)}
               className="flex w-full items-baseline rounded-md py-1 text-left hover:bg-bg-200/30 transition-colors"
             >
-              <span
-                className={`text-[12px] leading-5 ${
-                  hasActiveTools ? 'reasoning-shimmer-text' : hasErroredTools ? 'text-danger-100' : 'text-text-300'
-                }`}
-              >
-                {stepsSummary}
+              <span className="text-[12px] leading-5">
+                {stepsSummary?.map((seg, i) => (
+                  <span
+                    key={i}
+                    className={
+                      seg.type === 'error'
+                        ? 'text-danger-100'
+                        : seg.type === 'active'
+                          ? 'reasoning-shimmer-text'
+                          : 'text-text-300'
+                    }
+                  >
+                    {seg.text}
+                  </span>
+                ))}
               </span>
               {totalDiffStats && !hasActiveTools && (
                 <span className="ml-1.5 inline-flex items-center gap-1 text-[10px] font-mono font-medium tabular-nums">
@@ -676,29 +685,46 @@ type ToolSummaryCategory =
 
 type ToolSummaryPhase = 'done' | 'active'
 
+interface SummarySegment {
+  text: string
+  type: 'normal' | 'error' | 'active'
+}
+
 function buildDescriptiveToolStepsSummary(
   parts: ToolPart[],
   t: (key: string, opts?: Record<string, unknown>) => string,
-): string {
-  const doneSegments = collectToolSummaryCounts(parts.filter(part => part.state.status === 'completed')).map(
+): SummarySegment[] {
+  const sep = t('toolSteps.separator')
+  const segments: SummarySegment[] = []
+
+  const doneTexts = collectToolSummaryCounts(parts.filter(part => part.state.status === 'completed')).map(
     ({ category, count }) => formatToolSummarySegment(category, count, 'done', t),
   )
   const failedCount = parts.filter(part => part.state.status === 'error').length
-  const activeSegments = collectToolSummaryCounts(parts.filter(isToolPartActive)).map(({ category, count }) =>
+  const activeTexts = collectToolSummaryCounts(parts.filter(isToolPartActive)).map(({ category, count }) =>
     formatToolSummarySegment(category, count, 'active', t),
   )
 
-  const segments = [...doneSegments]
-  if (failedCount > 0) {
-    segments.push(t('toolSteps.failed', { count: failedCount }))
+  for (let i = 0; i < doneTexts.length; i++) {
+    if (i > 0) segments.push({ text: sep, type: 'normal' })
+    segments.push({ text: doneTexts[i], type: 'normal' })
   }
-  segments.push(...activeSegments)
+
+  if (failedCount > 0) {
+    if (segments.length > 0) segments.push({ text: sep, type: 'normal' })
+    segments.push({ text: t('toolSteps.failed', { count: failedCount }), type: 'error' })
+  }
+
+  for (let i = 0; i < activeTexts.length; i++) {
+    if (segments.length > 0) segments.push({ text: sep, type: 'normal' })
+    segments.push({ text: activeTexts[i], type: 'active' })
+  }
 
   if (segments.length === 0) {
-    return t('stepsCount', { done: 0, total: parts.length })
+    return [{ text: t('stepsCount', { done: 0, total: parts.length }), type: 'normal' }]
   }
 
-  return segments.join(t('toolSteps.separator'))
+  return segments
 }
 
 function collectToolSummaryCounts(parts: ToolPart[]): Array<{ category: ToolSummaryCategory; count: number }> {

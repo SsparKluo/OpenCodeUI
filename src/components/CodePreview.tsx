@@ -154,8 +154,8 @@ function VirtualizedCodePreview({
     })
   }, [])
 
-  const tokens = tokensRef.current
   const { gutterRows, contentRows } = useMemo(() => {
+    const tokens = tokensRef.current
     const gutters: React.ReactNode[] = []
     const contents: React.ReactNode[] = []
 
@@ -208,7 +208,8 @@ function VirtualizedCodePreview({
     }
 
     return { gutterRows: gutters, contentRows: contents }
-  }, [startIndex, endIndex, lines, version, tokens, truncateLines, t])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- version 用于在 tokensRef 更新时触发重算
+  }, [startIndex, endIndex, lines, version, truncateLines, t])
 
   return (
     <div
@@ -261,8 +262,8 @@ function WrappedCodePreview({ code, language, truncateLines = true, maxHeight, i
   const { containerRef, totalHeight, startIndex, endIndex, offsetY, handleScroll, measureRef } =
     useDynamicVirtualScroll({ lineCount: lines.length, isResizing })
 
-  const tokens = tokensRef.current
   const visibleRows = useMemo(() => {
+    const tokens = tokensRef.current
     const rows: React.ReactNode[] = []
     for (let i = startIndex; i < endIndex; i++) {
       const rawLine = lines[i] || ' '
@@ -309,7 +310,8 @@ function WrappedCodePreview({ code, language, truncateLines = true, maxHeight, i
       )
     }
     return rows
-  }, [startIndex, endIndex, lines, tokens, version, truncateLines, t, gutterWidth, measureRef])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- version 用于在 tokensRef 更新时触发重算
+  }, [startIndex, endIndex, lines, version, truncateLines, t, gutterWidth, measureRef])
 
   return (
     <div
