@@ -527,7 +527,6 @@ const ToolGroup = memo(function ToolGroup({ parts, stepFinish, duration, turnDur
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setExpanded(true)
     } else if (immersiveMode && !hasReadableTools) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setExpanded(false)
     }
   }, [descriptiveToolSteps, hasActiveTools, hasPendingInteraction, immersiveMode, hasReadableTools])

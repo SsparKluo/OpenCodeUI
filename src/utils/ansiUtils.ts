@@ -8,6 +8,7 @@
 
 // ANSI escape sequence 正则
 // 匹配 CSI (Control Sequence Introducer) 序列：ESC[ ... 终止符
+// eslint-disable-next-line no-control-regex
 const ANSI_RE = /\x1b\[[0-9;]*m/g
 
 /**

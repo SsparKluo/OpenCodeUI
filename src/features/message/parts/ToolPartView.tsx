@@ -75,7 +75,6 @@ export const ToolPartView = memo(function ToolPartView({
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 运行中或待交互时保持展开
       setExpanded(true)
     } else if (immersiveMode && descriptive && !isReadableTool(toolName)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- 沉浸模式下非可读工具完成后收起
       setExpanded(false)
     }
   }, [isActive, hasPendingInteraction, immersiveMode, descriptive, toolName])
