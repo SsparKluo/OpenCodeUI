@@ -1,5 +1,25 @@
 # Changelog
 
+## [v0.3.0] - 2026-03-22
+
+- fix: lint warnings, error tool diff stats, descriptive steps partial error coloring (ea53836)
+- feat: add diff stats summary to descriptive steps, fix write tool diff display (ce29807)
+- fix: immersive mode keeps non-readable tool groups collapsed even during execution (be61de2)
+- fix: resolve lint errors and remove unused eslint-disable directives (6037d19)
+- feat: add immersive mode with smart tool expand/collapse (0d4252d)
+- fix: skip QuestionRenderer when user dismissed or error (2029584)
+- feat: add QuestionRenderer with InlineQuestion-style read-only answered view (207f0c6)
+- fix: allow long bash commands to wrap in terminal view (8a7ddfd)
+- simplify: BashRenderer remove buttons, click command to copy, inline exit code (72186b5)
+- refactor: BashRenderer with fixed bottom bar, exit code, fullscreen, mobile-friendly buttons (cb7bb70)
+- fix: restore height limit and fullscreen button in compact mode (8f8689d)
+- feat: add BashRenderer with terminal style, Shiki highlighting, ANSI color support (856d74d)
+- feat: descriptive steps default collapsed, show output status on tool row (b25a0f2)
+- refactor: unify InlinePermission with tool output style, remove unused inline variant (ac510d7)
+- feat: add compact tool output mode (hide input, no collapse, no height limit) (1036133)
+- feat: add descriptive tool steps mode (d7e153f)
+- refactor: remove ambient tool mode and make inline requests opt-in (06034a2)
+
 ## [v0.2.10] - 2026-03-21
 
 - feat: restore forked prompts in the composer (0792cf6)
