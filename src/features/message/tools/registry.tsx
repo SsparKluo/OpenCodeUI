@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import type { ToolPart } from '../../../types/message'
 import type { ToolConfig, ToolRegistry, ExtractedToolData, DiagnosticInfo } from './types'
-import { BashRenderer } from './renderers'
+import { BashRenderer, QuestionRenderer } from './renderers'
 import {
   FileReadIcon,
   FileWriteIcon,
@@ -310,6 +310,7 @@ export const toolRegistry: ToolRegistry = [
   {
     match: includes('question', 'ask'),
     icon: <QuestionIcon />,
+    renderer: QuestionRenderer,
   },
 ]
 
