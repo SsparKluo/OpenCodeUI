@@ -523,11 +523,14 @@ const ToolGroup = memo(function ToolGroup({ parts, stepFinish, duration, turnDur
 
   useEffect(() => {
     if (!descriptiveToolSteps) return
+    // 沉浸模式下没有可读工具：始终收起，不展开
+    if (immersiveMode && !hasReadableTools) {
+      setExpanded(false)
+      return
+    }
     if (hasActiveTools || hasPendingInteraction) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setExpanded(true)
-    } else if (immersiveMode && !hasReadableTools) {
-      setExpanded(false)
     }
   }, [descriptiveToolSteps, hasActiveTools, hasPendingInteraction, immersiveMode, hasReadableTools])
 
