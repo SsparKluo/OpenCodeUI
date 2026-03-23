@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.3.1] - 2026-03-23
+
+- fix: unify chevron arrow direction - collapsed points right, expanded points down (3557e5a)
+- feat: compact inline permission - hide duplicate content when tool body already renders (63d571b)
+- refactor: redesign descriptive steps summary - merge categories, per-category errors, truncation (870f490)
+- fix: move diff stats next to title and remove exit code from descriptive steps (74e69c0)
+- fix: deferred permission unmount and multi-select question answer parsing (a8dc9bd)
+- fix: auto-expand readable tools that finish instantly in immersive mode (06dd4d4)
+
 ## [v0.3.0] - 2026-03-22
 
 - fix: lint warnings, error tool diff stats, descriptive steps partial error coloring (ea53836)
