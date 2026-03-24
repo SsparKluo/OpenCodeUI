@@ -90,11 +90,7 @@ export const AttachmentDetailModal = memo(function AttachmentDetailModal({
       {isImage && hasUrl ? (
         <ZoomableImage url={attachment.url!} alt={attachment.displayName} />
       ) : hasContent ? (
-        <CodePreview
-          code={attachment.content!}
-          language={detectLanguage(attachment.displayName) || 'text'}
-          truncateLines={false}
-        />
+        <CodePreview code={attachment.content!} language={detectLanguage(attachment.displayName) || 'text'} />
       ) : (
         <div className="flex items-center justify-center h-full text-text-400 text-sm">{t('attachment.noPreview')}</div>
       )}

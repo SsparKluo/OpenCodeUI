@@ -77,11 +77,6 @@ class LRUCache<T> {
 const htmlCache = new LRUCache<string>(120)
 const tokensCache = new LRUCache<HighlightTokens>(80)
 
-// 代码长度限制 - 超过此长度跳过高亮
-// 配合虚拟滚动，高亮本身开销不大，放宽限制
-const MAX_CODE_LENGTH = 500000 // 500KB
-const MAX_LINES_FOR_HIGHLIGHT = 20000
-
 // 生成缓存 key
 function getCacheKey(code: string, lang: string, theme: string): string {
   // 使用简单 hash 减少 key 长度
@@ -100,14 +95,6 @@ function simpleHash(str: string): number {
   return hash
 }
 
-// 检查代码是否应该跳过高亮
-function shouldSkipHighlight(code: string): boolean {
-  if (code.length > MAX_CODE_LENGTH) return true
-  const lineCount = code.split('\n').length
-  if (lineCount > MAX_LINES_FOR_HIGHLIGHT) return true
-  return false
-}
-
 // 带缓存的高亮函数
 async function highlightWithCache(
   code: string,
@@ -121,13 +108,6 @@ async function highlightWithCache(
     if (transitioning) {
       return null
     }
-  }
-  // 检查是否应该跳过
-  if (shouldSkipHighlight(code)) {
-    if (import.meta.env.DEV) {
-      console.debug('[Syntax] Skipping highlight for large code block:', code.length, 'chars')
-    }
-    return null
   }
 
   const cacheKey = getCacheKey(code, lang, theme)

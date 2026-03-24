@@ -264,7 +264,7 @@ export const ContentBlock = memo(function ContentBlock({
                   maxHeight={maxHeight}
                 />
               ) : content?.trim() ? (
-                <CodePreview code={content} language={lang} maxHeight={maxHeight} truncateLines={false} />
+                <CodePreview code={content} language={lang} maxHeight={maxHeight} />
               ) : null}
             </div>
           )}
@@ -301,7 +301,7 @@ export const ContentBlock = memo(function ContentBlock({
           title={fileName || label}
           headerRight={<CopyButton text={content} position="static" />}
         >
-          <CodePreview code={content} language={lang} truncateLines={false} />
+          <CodePreview code={content} language={lang} />
         </FullscreenViewer>
       ) : null}
     </div>

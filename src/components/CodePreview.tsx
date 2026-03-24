@@ -1,19 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { useTranslation } from 'react-i18next'
-import { useSyntaxHighlightRef, type HighlightTokens } from '../hooks/useSyntaxHighlight'
+import { useSyntaxHighlightRef } from '../hooks/useSyntaxHighlight'
 import { useDynamicVirtualScroll } from '../hooks/useDynamicVirtualScroll'
 import { themeStore } from '../store/themeStore'
 
 const LINE_HEIGHT = 20
 const OVERSCAN = 5
-const MAX_LINE_LENGTH = 5000
-const LARGE_FILE_LINES = 2000
-const LARGE_FILE_CHARS = 300000
 
 interface CodePreviewProps {
   code: string
   language: string
-  truncateLines?: boolean
   maxHeight?: number
   isResizing?: boolean
   wordWrap?: boolean
@@ -36,14 +31,7 @@ export function CodePreview(props: CodePreviewProps) {
   return <VirtualizedCodePreview {...props} />
 }
 
-function VirtualizedCodePreview({
-  code,
-  language,
-  truncateLines = true,
-  maxHeight,
-  isResizing = false,
-}: CodePreviewProps) {
-  const { t } = useTranslation(['common'])
+function VirtualizedCodePreview({ code, language, maxHeight, isResizing = false }: CodePreviewProps) {
   const lines = useMemo(() => splitCodeLines(code), [code])
   const totalHeight = lines.length * LINE_HEIGHT
   const gutterCh = Math.max(2, String(lines.length).length)
@@ -164,27 +152,17 @@ function VirtualizedCodePreview({
       const lineTokens = tokens?.[i]
 
       let displayContent: React.ReactNode
-      let isTruncated = false
 
       if (lineTokens && lineTokens.length > 0) {
-        if (truncateLines) {
-          const { elements, truncated } = renderTokensTruncated(lineTokens)
-          isTruncated = truncated
-          displayContent = <span className="whitespace-pre">{elements}</span>
-        } else {
-          displayContent = (
-            <span className="whitespace-pre">
-              {lineTokens.map((token, j) => (
-                <span key={j} style={token.color ? { color: token.color } : undefined}>
-                  {token.content}
-                </span>
-              ))}
-            </span>
-          )
-        }
-      } else if (truncateLines && rawLine.length > MAX_LINE_LENGTH) {
-        isTruncated = true
-        displayContent = <span className="text-text-200 whitespace-pre">{rawLine.slice(0, MAX_LINE_LENGTH)}</span>
+        displayContent = (
+          <span className="whitespace-pre">
+            {lineTokens.map((token, j) => (
+              <span key={j} style={token.color ? { color: token.color } : undefined}>
+                {token.content}
+              </span>
+            ))}
+          </span>
+        )
       } else {
         displayContent = <span className="text-text-200 whitespace-pre">{rawLine}</span>
       }
@@ -202,14 +180,13 @@ function VirtualizedCodePreview({
       contents.push(
         <div key={i} className="leading-5 pl-3 pr-4 whitespace-pre" style={{ height: LINE_HEIGHT }}>
           {displayContent}
-          {isTruncated && <span className="text-text-500 ml-1">{t('common:truncated')}</span>}
         </div>,
       )
     }
 
     return { gutterRows: gutters, contentRows: contents }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- version 用于在 tokensRef 更新时触发重算
-  }, [startIndex, endIndex, lines, version, truncateLines, t])
+  }, [startIndex, endIndex, lines, version])
 
   return (
     <div
@@ -246,14 +223,12 @@ function VirtualizedCodePreview({
   )
 }
 
-function WrappedCodePreview({ code, language, truncateLines = true, maxHeight, isResizing = false }: CodePreviewProps) {
-  const { t } = useTranslation(['common'])
+function WrappedCodePreview({ code, language, maxHeight, isResizing = false }: CodePreviewProps) {
   const lines = useMemo(() => splitCodeLines(code), [code])
-  const isLargeFile = lines.length > LARGE_FILE_LINES || code.length > LARGE_FILE_CHARS
   const gutterCh = Math.max(2, String(lines.length).length)
   const gutterWidth = `calc(${gutterCh}ch + 1.75rem)`
 
-  const enableHighlight = !isResizing && language !== 'text' && !isLargeFile
+  const enableHighlight = !isResizing && language !== 'text'
   const { tokensRef, version } = useSyntaxHighlightRef(code, {
     lang: language,
     enabled: enableHighlight,
@@ -270,23 +245,13 @@ function WrappedCodePreview({ code, language, truncateLines = true, maxHeight, i
       const lineTokens = tokens?.[i]
 
       let displayContent: React.ReactNode
-      let isTruncated = false
 
       if (lineTokens && lineTokens.length > 0) {
-        if (truncateLines) {
-          const { elements, truncated } = renderTokensTruncated(lineTokens)
-          isTruncated = truncated
-          displayContent = <>{elements}</>
-        } else {
-          displayContent = lineTokens.map((token, j) => (
-            <span key={j} style={token.color ? { color: token.color } : undefined}>
-              {token.content}
-            </span>
-          ))
-        }
-      } else if (truncateLines && rawLine.length > MAX_LINE_LENGTH) {
-        isTruncated = true
-        displayContent = <span className="text-text-200">{rawLine.slice(0, MAX_LINE_LENGTH)}</span>
+        displayContent = lineTokens.map((token, j) => (
+          <span key={j} style={token.color ? { color: token.color } : undefined}>
+            {token.content}
+          </span>
+        ))
       } else {
         displayContent = <span className="text-text-200">{rawLine}</span>
       }
@@ -304,14 +269,13 @@ function WrappedCodePreview({ code, language, truncateLines = true, maxHeight, i
             style={{ minHeight: LINE_HEIGHT }}
           >
             {displayContent}
-            {isTruncated && <span className="text-text-500 ml-1">{t('common:truncated')}</span>}
           </div>
         </div>,
       )
     }
     return rows
     // eslint-disable-next-line react-hooks/exhaustive-deps -- version 用于在 tokensRef 更新时触发重算
-  }, [startIndex, endIndex, lines, version, truncateLines, t, gutterWidth, measureRef])
+  }, [startIndex, endIndex, lines, version, gutterWidth, measureRef])
 
   return (
     <div
@@ -327,46 +291,6 @@ function WrappedCodePreview({ code, language, truncateLines = true, maxHeight, i
       </div>
     </div>
   )
-}
-
-type HighlightToken = HighlightTokens[number][number]
-
-function renderTokensTruncated(lineTokens: HighlightToken[]): {
-  elements: React.ReactNode[]
-  truncated: boolean
-} {
-  const elements: React.ReactNode[] = []
-  let charCount = 0
-  let truncated = false
-
-  for (let j = 0; j < lineTokens.length; j++) {
-    const token = lineTokens[j]
-    const remaining = MAX_LINE_LENGTH - charCount
-
-    if (remaining <= 0) {
-      truncated = true
-      break
-    }
-
-    if (token.content.length > remaining) {
-      elements.push(
-        <span key={j} style={token.color ? { color: token.color } : undefined}>
-          {token.content.slice(0, remaining)}
-        </span>,
-      )
-      truncated = true
-      break
-    }
-
-    elements.push(
-      <span key={j} style={token.color ? { color: token.color } : undefined}>
-        {token.content}
-      </span>,
-    )
-    charCount += token.content.length
-  }
-
-  return { elements, truncated }
 }
 
 function splitCodeLines(code: string) {
