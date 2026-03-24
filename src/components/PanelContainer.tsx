@@ -295,12 +295,12 @@ export const PanelContainer = memo(function PanelContainer({
         createPortal(
           <div
             ref={contextMenuRef}
-            className="fixed z-[9999] bg-bg-100 border border-border-200 rounded-lg shadow-xl py-1 min-w-[160px]"
+            className="fixed z-[9999] bg-bg-100 border border-border-200 rounded-lg shadow-xl p-1 min-w-[160px]"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
             <button
               onClick={handleMoveToOtherPanel}
-              className="w-full px-3 py-1.5 text-left text-xs text-text-200 hover:bg-bg-200 hover:text-text-100 transition-colors"
+              className="w-full px-2.5 py-1.5 text-left text-xs text-text-200 hover:bg-bg-200/60 hover:text-text-100 rounded-md transition-colors"
             >
               {otherPanelLabel}
             </button>
@@ -313,7 +313,7 @@ export const PanelContainer = memo(function PanelContainer({
         createPortal(
           <div
             ref={addMenuRef}
-            className="fixed z-[9999] bg-bg-100 border border-border-200 rounded-lg shadow-xl py-1 min-w-[140px]"
+            className="fixed z-[9999] bg-bg-100 border border-border-200 rounded-lg shadow-xl p-1 min-w-[140px]"
             style={{
               top: addMenuPos.y,
               left: addMenuPos.align === 'left' ? addMenuPos.x : undefined,
@@ -325,7 +325,7 @@ export const PanelContainer = memo(function PanelContainer({
                 onNewTerminal?.()
                 setAddMenuPos(null)
               }}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs text-text-200 hover:bg-bg-200 hover:text-text-100 transition-colors"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-xs text-text-200 hover:bg-bg-200/60 hover:text-text-100 rounded-md transition-colors"
             >
               <span className="opacity-60 shrink-0">
                 <TerminalIcon size={12} />
@@ -337,7 +337,7 @@ export const PanelContainer = memo(function PanelContainer({
                 layoutStore.addFilesTab(position)
                 setAddMenuPos(null)
               }}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs text-text-200 hover:bg-bg-200 hover:text-text-100 transition-colors"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-xs text-text-200 hover:bg-bg-200/60 hover:text-text-100 rounded-md transition-colors"
             >
               <span className="opacity-60 shrink-0">
                 <FolderIcon size={12} />
@@ -349,7 +349,7 @@ export const PanelContainer = memo(function PanelContainer({
                 layoutStore.addChangesTab(position)
                 setAddMenuPos(null)
               }}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs text-text-200 hover:bg-bg-200 hover:text-text-100 transition-colors"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-xs text-text-200 hover:bg-bg-200/60 hover:text-text-100 rounded-md transition-colors"
             >
               <span className="opacity-60 shrink-0">
                 <GitCommitIcon size={12} />
@@ -361,7 +361,7 @@ export const PanelContainer = memo(function PanelContainer({
                 layoutStore.addMcpTab(position)
                 setAddMenuPos(null)
               }}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs text-text-200 hover:bg-bg-200 hover:text-text-100 transition-colors"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-xs text-text-200 hover:bg-bg-200/60 hover:text-text-100 rounded-md transition-colors"
             >
               <span className="opacity-60 shrink-0">
                 <PlugIcon size={12} />
@@ -373,7 +373,7 @@ export const PanelContainer = memo(function PanelContainer({
                 layoutStore.addSkillTab(position)
                 setAddMenuPos(null)
               }}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs text-text-200 hover:bg-bg-200 hover:text-text-100 transition-colors"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-xs text-text-200 hover:bg-bg-200/60 hover:text-text-100 rounded-md transition-colors"
             >
               <span className="opacity-60 shrink-0">
                 <TeachIcon size={12} />
@@ -385,7 +385,7 @@ export const PanelContainer = memo(function PanelContainer({
                 layoutStore.addWorktreeTab(position)
                 setAddMenuPos(null)
               }}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs text-text-200 hover:bg-bg-200 hover:text-text-100 transition-colors"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-xs text-text-200 hover:bg-bg-200/60 hover:text-text-100 rounded-md transition-colors"
             >
               <span className="opacity-60 shrink-0">
                 <GitWorktreeIcon size={12} />
