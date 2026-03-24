@@ -159,11 +159,11 @@ export const ReasoningPartView = memo(function ReasoningPartView({ part, isStrea
           <div className="min-h-0 min-w-0 overflow-hidden" style={{ clipPath: 'inset(0 -100% 0 -100%)' }}>
             {shouldRenderBody &&
               (isMarkdownMode ? (
-                <div className="pt-0.5 pr-7 text-[12px]">
+                <div className="pt-0.5 pr-5 text-[12px]">
                   <MarkdownRenderer content={displayText} variant="reasoning" isStreaming={isPartStreaming} />
                 </div>
               ) : (
-                <div className="pt-0.5 pr-7 text-[12px] leading-6 italic whitespace-pre-wrap break-words overflow-x-hidden text-text-300">
+                <div className="pt-0.5 pr-5 text-[12px] leading-6 italic whitespace-pre-wrap break-words overflow-x-hidden text-text-300">
                   {displayText}
                 </div>
               ))}
