@@ -1,4 +1,4 @@
-import { isValidElement, memo, useCallback, useMemo } from 'react'
+import { isValidElement, memo, useMemo } from 'react'
 import { Streamdown, type Components } from 'streamdown'
 import { math } from '@streamdown/math'
 import { CodeBlock } from './CodeBlock'
@@ -84,7 +84,9 @@ function extractTableData(children: React.ReactNode): { headers: string[]; rows:
       if (!isValidElement(tr)) continue
       const trProps = tr.props as { children?: React.ReactNode }
       const cells = Array.isArray(trProps.children) ? trProps.children : [trProps.children]
-      const texts = cells.filter(isValidElement).map(c => extractText((c as React.ReactElement).props?.children ?? ''))
+      const texts = cells
+        .filter(isValidElement)
+        .map(c => extractText((c as React.ReactElement<{ children?: React.ReactNode }>).props?.children ?? ''))
 
       // If this row is inside thead (section type name check), treat as headers
       const sectionType = typeof section.type === 'string' ? section.type : (section.type as { name?: string })?.name
