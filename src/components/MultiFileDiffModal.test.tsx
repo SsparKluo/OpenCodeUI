@@ -18,9 +18,13 @@ vi.mock('./DiffViewer', () => ({
   DiffViewer: () => <div data-testid="diff-viewer">diff viewer</div>,
 }))
 
-vi.mock('./FullscreenViewer', () => ({
-  ViewModeSwitch: () => <div data-testid="view-mode-switch">switch</div>,
-}))
+vi.mock('./FullscreenViewer', async importOriginal => {
+  const actual = await importOriginal<typeof import('./FullscreenViewer')>()
+  return {
+    ...actual,
+    ViewModeSwitch: () => <div data-testid="view-mode-switch">switch</div>,
+  }
+})
 
 describe('MultiFileDiffModal', () => {
   beforeEach(() => {

@@ -70,23 +70,27 @@ export const ToolPartView = memo(function ToolPartView({
     ? findQuestionRequestForTool(pendingQuestions, part.callID, childSessionId)
     : undefined
 
+  const toolDone = state.status === 'completed' || state.status === 'error'
   // ── 延迟卸载 edit/write 权限组件 ──
   // 用户授权后 permissionRequest 会立即消失，但工具结果可能还没到，
   // 为了避免 "权限消失→空白→结果出现" 的跳动，缓存最后一次权限请求，
   // 在工具完成之前继续渲染（以 resolved 状态）
-  const lastPermissionRef = useRef(permissionRequest)
-  if (permissionRequest) {
-    lastPermissionRef.current = permissionRequest
-  }
+  const [cachedPermissionRequest, setCachedPermissionRequest] = useState(permissionRequest)
+  useEffect(() => {
+    if (permissionRequest) {
+      setCachedPermissionRequest(permissionRequest)
+      return
+    }
+    if (toolDone) {
+      setCachedPermissionRequest(undefined)
+    }
+  }, [permissionRequest, toolDone])
+
+  const effectivePermissionRequest = permissionRequest || cachedPermissionRequest
   const isFilePermission =
-    lastPermissionRef.current?.permission === 'edit' || lastPermissionRef.current?.permission === 'write'
-  // 工具完成后清除缓存
-  const toolDone = state.status === 'completed' || state.status === 'error'
-  if (toolDone) {
-    lastPermissionRef.current = undefined
-  }
+    effectivePermissionRequest?.permission === 'edit' || effectivePermissionRequest?.permission === 'write'
   // 权限已批准但工具还没完成 → 保留渲染
-  const permissionResolved = !permissionRequest && !!lastPermissionRef.current && isFilePermission && !toolDone
+  const permissionResolved = !permissionRequest && !!cachedPermissionRequest && isFilePermission && !toolDone
 
   const hasPendingInteraction = !!permissionRequest || !!questionRequest
   // 精简模式：非 edit/write 权限时不隐藏 ToolBody（ToolBody 已经渲染了命令内容）
@@ -104,7 +108,6 @@ export const ToolPartView = memo(function ToolPartView({
       if (immersiveMode && descriptive && isReadable) {
         hasAutoExpandedReadableRef.current = true
       }
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- 运行中或待交互时保持展开
       setExpanded(true)
     } else if (immersiveMode && descriptive && !isReadable) {
       setExpanded(false)
@@ -135,7 +138,7 @@ export const ToolPartView = memo(function ToolPartView({
   )
 
   // 需要渲染权限组件的请求对象：优先用活跃的，否则用缓存的（resolved 态）
-  const displayPermission = permissionRequest || (permissionResolved ? lastPermissionRef.current : undefined)
+  const displayPermission = permissionRequest || (permissionResolved ? cachedPermissionRequest : undefined)
 
   const bodyContent = (
     <>

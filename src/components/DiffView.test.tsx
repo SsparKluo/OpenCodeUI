@@ -10,8 +10,9 @@ vi.mock('../hooks/useSyntaxHighlight', () => ({
 }))
 
 vi.mock('./FullscreenViewer', () => ({
-  FullscreenViewer: ({ isOpen }: { isOpen: boolean }) =>
-    isOpen ? <div data-testid="fullscreen-viewer">viewer</div> : null,
+  FullscreenViewer: ({ isOpen, children }: { isOpen: boolean; children?: unknown }) =>
+    isOpen ? <div data-testid="fullscreen-viewer">{children}</div> : null,
+  ViewModeSwitch: () => <div data-testid="view-mode-switch">switch</div>,
 }))
 
 describe('DiffView', () => {
