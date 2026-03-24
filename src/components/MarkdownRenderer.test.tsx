@@ -93,4 +93,13 @@ describe('MarkdownRenderer', () => {
     expect(screen.getByRole('table')).toBeInTheDocument()
     expect(screen.queryByTestId('copy-button')).not.toBeInTheDocument()
   })
+
+  it('renders markdown images as plain img links without streamdown image wrapper controls', () => {
+    render(<MarkdownRenderer content={'![avatar](https://example.com/avatar.png)'} />)
+
+    const img = screen.getByRole('img', { name: 'avatar' })
+    expect(img).toBeInTheDocument()
+    expect(img.tagName).toBe('IMG')
+    expect(screen.queryByTitle('Download image')).not.toBeInTheDocument()
+  })
 })

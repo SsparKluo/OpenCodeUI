@@ -36,6 +36,22 @@ const InlineCode = memo(function InlineCode({
   )
 })
 
+const MarkdownImage = memo(function MarkdownImage({ src, alt, title }: { src?: string; alt?: string; title?: string }) {
+  if (!src) return null
+
+  return (
+    <a
+      href={src}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-block max-w-full align-top"
+      title={title || alt || undefined}
+    >
+      <img src={src} alt={alt || ''} title={title} loading="lazy" className="block max-w-full rounded-md" />
+    </a>
+  )
+})
+
 // ─── Helpers ───────────────────────────────────────────────────
 
 /** Extract text content from React node tree */
@@ -280,6 +296,9 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           {children}
         </a>
       ),
+
+      // --- Images ---
+      img: ({ src, alt, title }) => <MarkdownImage src={src} alt={alt} title={title} />,
 
       // --- Blockquotes ---
       blockquote: ({ children }) => (
