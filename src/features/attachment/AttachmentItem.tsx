@@ -208,7 +208,9 @@ function ExpandedContent({ attachment, imageError, onImageError, onOpenDetail }:
       />
 
       {/* 元信息 */}
-      <div className="p-2 text-xs space-y-1 text-text-300 bg-bg-100/50 border-t border-border-300">
+      <div
+        className={`p-2 text-xs space-y-1 text-text-300 bg-bg-100/50 ${contentNode || hasContent || hasDownloadable ? 'border-t border-border-300' : ''}`}
+      >
         {type === 'text' && <MetaRow label={t('attachment.category')} value={t('attachment.context')} />}
 
         {/* Full Path / URL */}

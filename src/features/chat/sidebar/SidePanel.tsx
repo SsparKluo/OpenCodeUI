@@ -19,7 +19,7 @@ import {
 import { useDirectory, useSessionStats, useKeybindingLabel } from '../../../hooks'
 import { useSessionContext } from '../../../contexts/useSessionContext'
 import { useLayoutStore, useMessageStore, childSessionStore } from '../../../store'
-import { useBusySessions, useBusyCount, type ActiveSessionEntry } from '../../../store/activeSessionStore'
+import { useBusySessions, useBusyCount } from '../../../store/activeSessionStore'
 import { notificationStore, useNotifications, useUnreadNotificationCount } from '../../../store/notificationStore'
 import type { NotificationEntry } from '../../../store/notificationStore'
 import {
