@@ -24,6 +24,7 @@ import {
 import { useNotification } from './useNotification'
 import {
   sendMessageAsync,
+  getSessionMessages,
   abortSession,
   getSelectableAgents,
   getPendingPermissions,
@@ -402,6 +403,9 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
 
         messageStore.setStreaming(sessionId, true)
 
+        // 记录发送前的消息数量，作为判断 SSE 是否推送新消息的基线
+        const msgCountBeforeSend = messageStore.getSessionState(sessionId)?.messages.length ?? 0
+
         await sendMessageAsync({
           sessionId,
           text: content,
@@ -414,6 +418,36 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
           variant: options?.variant,
           directory: effectiveDirectory,
         })
+
+        // 兜底：等待短暂时间后检查 SSE 是否已推送用户消息，
+        // 若未收到则主动拉取补齐，避免 SSE 断流导致用户消息不显示
+        const pullSessionId = sessionId
+        const pullDir = effectiveDirectory
+        setTimeout(() => {
+          const state = messageStore.getSessionState(pullSessionId)
+          if (!state) return
+          // 消息数量增加了，说明 SSE 已正常推送
+          if (state.messages.length > msgCountBeforeSend) return
+
+          getSessionMessages(pullSessionId, 5, pullDir)
+            .then(apiMessages => {
+              for (const msg of apiMessages) {
+                messageStore.handleMessageUpdated(msg.info)
+                if (msg.parts) {
+                  for (const part of msg.parts) {
+                    messageStore.handlePartUpdated({
+                      ...part,
+                      sessionID: pullSessionId,
+                      messageID: msg.info.id,
+                    })
+                  }
+                }
+              }
+            })
+            .catch(() => {
+              // 拉取失败不影响主流程，SSE 重连后仍可补齐
+            })
+        }, 1500)
 
         return true
       } catch (error) {
