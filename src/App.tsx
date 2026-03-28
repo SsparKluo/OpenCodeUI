@@ -760,6 +760,7 @@ function App() {
                   selectedModelKey={selectedModelKey}
                   onModelChange={handleModelChange}
                   modelsLoading={modelsLoading}
+                  modelSelectorRef={modelSelectorRef}
                   rootPath={effectiveDirectory}
                   sessionId={routeSessionId}
                   revertedText={revertedMessage?.text}

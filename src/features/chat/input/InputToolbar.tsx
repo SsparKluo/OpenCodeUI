@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDownIcon, SendIcon, StopIcon, PaperclipIcon, AgentIcon, ThinkingIcon } from '../../../components/Icons'
 import { DropdownMenu, MenuItem, IconButton, AnimatedPresence } from '../../../components/ui'
-import { InputToolbarModelSelector } from '../ModelSelector'
+import { InputToolbarModelSelector, type ModelSelectorHandle } from '../ModelSelector'
 import { useChatViewport } from '../chatViewport'
 import { isTauri, isTauriMobile, extToMime } from '../../../utils/tauri'
 import type { ApiAgent } from '../../../api/client'
@@ -34,6 +34,7 @@ interface InputToolbarProps {
   modelsLoading?: boolean
   // 输入框容器 ref，用于约束菜单边界
   inputContainerRef?: React.RefObject<HTMLDivElement | null>
+  modelSelectorRef?: React.RefObject<ModelSelectorHandle | null>
 }
 
 export function InputToolbar({
@@ -55,6 +56,7 @@ export function InputToolbar({
   onModelChange,
   modelsLoading = false,
   inputContainerRef,
+  modelSelectorRef,
 }: InputToolbarProps) {
   const { t } = useTranslation(['chat', 'common'])
   const { presentation } = useChatViewport()
@@ -184,6 +186,7 @@ export function InputToolbar({
         {/* Model Selector — 移动端显示在最左边 */}
         {isCompact && onModelChange && (
           <InputToolbarModelSelector
+            ref={modelSelectorRef}
             models={models}
             selectedModelKey={selectedModelKey}
             onSelect={onModelChange}

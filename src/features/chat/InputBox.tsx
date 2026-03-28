@@ -11,6 +11,7 @@ import {
 } from '../mention'
 import { SlashCommandMenu, type SlashCommandMenuHandle } from '../slash-command'
 import { InputToolbar } from './input/InputToolbar'
+import type { ModelSelectorHandle } from './ModelSelector'
 import { InputFooter } from './input/InputFooter'
 import { FloatingActions, CollapsedCapsule } from './input/InputActions'
 import { useMobileCollapse } from './input/useMobileCollapse'
@@ -62,6 +63,7 @@ export interface InputBoxProps {
   selectedModelKey?: string | null
   onModelChange?: (modelKey: string, model: ModelInfo) => void
   modelsLoading?: boolean
+  modelSelectorRef?: React.RefObject<ModelSelectorHandle | null>
   rootPath?: string
   sessionId?: string | null
   // Undo/Redo
@@ -105,6 +107,7 @@ function InputBoxComponent({
   selectedModelKey = null,
   onModelChange,
   modelsLoading = false,
+  modelSelectorRef,
   rootPath = '',
   sessionId,
   revertedText,
@@ -1060,6 +1063,7 @@ function InputBoxComponent({
                         onModelChange={onModelChange}
                         modelsLoading={modelsLoading}
                         inputContainerRef={inputContainerRef}
+                        modelSelectorRef={modelSelectorRef}
                       />
                     </div>
                   </div>

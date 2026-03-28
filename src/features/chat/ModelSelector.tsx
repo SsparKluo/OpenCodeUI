@@ -525,253 +525,253 @@ interface InputToolbarModelSelectorProps {
   constrainToRef?: React.RefObject<HTMLElement | null>
 }
 
-export const InputToolbarModelSelector = memo(function InputToolbarModelSelector({
-  models,
-  selectedModelKey,
-  onSelect,
-  isLoading = false,
-  disabled = false,
-  constrainToRef,
-}: InputToolbarModelSelectorProps) {
-  const { t } = useTranslation('chat')
-  const { presentation } = useChatViewport()
-  const [isOpen, setIsOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [highlightedIndex, setHighlightedIndex] = useState(0)
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
+export const InputToolbarModelSelector = memo(
+  forwardRef<ModelSelectorHandle, InputToolbarModelSelectorProps>(function InputToolbarModelSelector(
+    { models, selectedModelKey, onSelect, isLoading = false, disabled = false, constrainToRef },
+    ref,
+  ) {
+    const { t } = useTranslation('chat')
+    const { presentation } = useChatViewport()
+    const [isOpen, setIsOpen] = useState(false)
+    const [searchQuery, setSearchQuery] = useState('')
+    const [highlightedIndex, setHighlightedIndex] = useState(0)
+    const [refreshTrigger, setRefreshTrigger] = useState(0)
 
-  const containerRef = useRef<HTMLDivElement>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const searchInputRef = useRef<HTMLInputElement>(null)
-  const listRef = useRef<HTMLDivElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const ignoreMouseRef = useRef(false)
-  const lastMousePosRef = useRef({ x: 0, y: 0 })
+    const containerRef = useRef<HTMLDivElement>(null)
+    const triggerRef = useRef<HTMLButtonElement>(null)
+    const searchInputRef = useRef<HTMLInputElement>(null)
+    const listRef = useRef<HTMLDivElement>(null)
+    const menuRef = useRef<HTMLDivElement>(null)
+    const ignoreMouseRef = useRef(false)
+    const lastMousePosRef = useRef({ x: 0, y: 0 })
 
-  const filteredModels = useMemo(() => {
-    if (!searchQuery.trim()) return models
-    const query = searchQuery.toLowerCase()
-    const normalize = (value: unknown) => (typeof value === 'string' ? value : '').toLowerCase()
-    return models.filter(
-      m =>
-        normalize(m.name).includes(query) ||
-        normalize(m.id).includes(query) ||
-        normalize(m.family).includes(query) ||
-        normalize(m.providerName).includes(query),
-    )
-  }, [models, searchQuery])
+    const filteredModels = useMemo(() => {
+      if (!searchQuery.trim()) return models
+      const query = searchQuery.toLowerCase()
+      const normalize = (value: unknown) => (typeof value === 'string' ? value : '').toLowerCase()
+      return models.filter(
+        m =>
+          normalize(m.name).includes(query) ||
+          normalize(m.id).includes(query) ||
+          normalize(m.family).includes(query) ||
+          normalize(m.providerName).includes(query),
+      )
+    }, [models, searchQuery])
 
-  const flatList = useFlatList(models, filteredModels, searchQuery, refreshTrigger, t)
+    const flatList = useFlatList(models, filteredModels, searchQuery, refreshTrigger, t)
 
-  const itemIndices = useMemo(() => {
-    return flatList.map((item, index) => (item.type === 'item' ? index : -1)).filter(i => i !== -1)
-  }, [flatList])
+    const itemIndices = useMemo(() => {
+      return flatList.map((item, index) => (item.type === 'item' ? index : -1)).filter(i => i !== -1)
+    }, [flatList])
 
-  const selectedModel = useMemo(() => {
-    if (!selectedModelKey) return null
-    return models.find(m => getModelKey(m) === selectedModelKey) ?? null
-  }, [models, selectedModelKey])
+    const selectedModel = useMemo(() => {
+      if (!selectedModelKey) return null
+      return models.find(m => getModelKey(m) === selectedModelKey) ?? null
+    }, [models, selectedModelKey])
 
-  const displayName = selectedModel?.name || (isLoading ? '...' : t('modelSelector.model'))
+    const displayName = selectedModel?.name || (isLoading ? '...' : t('modelSelector.model'))
 
-  const openMenu = useCallback(() => {
-    if (disabled || isLoading) return
-    let targetIndex = 0
-    if (selectedModelKey) {
-      const index = flatList.findIndex(item => item.type === 'item' && getModelKey(item.data) === selectedModelKey)
-      if (index !== -1) {
-        const interactiveIndex = itemIndices.indexOf(index)
-        if (interactiveIndex !== -1) targetIndex = interactiveIndex
-      }
-    }
-    setHighlightedIndex(targetIndex)
-    setIsOpen(true)
-    setSearchQuery('')
-    ignoreMouseRef.current = true
-    setTimeout(() => {
-      ignoreMouseRef.current = false
-    }, 300)
-  }, [disabled, isLoading, selectedModelKey, flatList, itemIndices])
-
-  const closeMenu = useCallback(() => {
-    setIsOpen(false)
-    setSearchQuery('')
-  }, [])
-
-  const handleSelect = useCallback(
-    (model: ModelInfo) => {
-      const key = getModelKey(model)
-      recordModelUsage(model)
-      onSelect(key, model)
-      closeMenu()
-      setRefreshTrigger(c => c + 1)
-    },
-    [onSelect, closeMenu],
-  )
-
-  // 长按置顶
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const longPressFiredRef = useRef(false)
-
-  const handleTouchStart = useCallback((model: ModelInfo) => {
-    longPressFiredRef.current = false
-    longPressTimerRef.current = setTimeout(() => {
-      longPressFiredRef.current = true
-      toggleModelPin(model)
-      setRefreshTrigger(c => c + 1)
-      if (navigator.vibrate) navigator.vibrate(30)
-    }, 500)
-  }, [])
-
-  const handleTouchEnd = useCallback(() => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current)
-      longPressTimerRef.current = null
-    }
-  }, [])
-
-  const handleItemClick = useCallback(
-    (model: ModelInfo) => {
-      if (longPressFiredRef.current) {
-        longPressFiredRef.current = false
-        return
-      }
-      handleSelect(model)
-    },
-    [handleSelect],
-  )
-
-  useEffect(() => {
-    if (isOpen) setTimeout(() => searchInputRef.current?.focus(), 50)
-  }, [isOpen])
-
-  useEffect(() => {
-    if (!isOpen) return
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as Node
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(target) &&
-        menuRef.current &&
-        !menuRef.current.contains(target)
-      ) {
-        closeMenu()
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [isOpen, closeMenu])
-
-  useEffect(() => {
-    if (!isOpen) return
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        closeMenu()
-      }
-    }
-    document.addEventListener('keydown', handleEsc, { capture: true })
-    return () => document.removeEventListener('keydown', handleEsc, { capture: true })
-  }, [isOpen, closeMenu])
-
-  useEffect(() => {
-    if (!isOpen) return
-    requestAnimationFrame(() => {
-      const realIndex = itemIndices[highlightedIndex]
-      document.getElementById(`itms-item-${realIndex}`)?.scrollIntoView({ block: 'nearest' })
-    })
-  }, [isOpen, highlightedIndex, itemIndices])
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      e.stopPropagation()
-      switch (e.key) {
-        case 'ArrowDown':
-          e.preventDefault()
-          setHighlightedIndex(prev => {
-            const next = Math.min(prev + 1, itemIndices.length - 1)
-            document.getElementById(`itms-item-${itemIndices[next]}`)?.scrollIntoView({ block: 'nearest' })
-            return next
-          })
-          break
-        case 'ArrowUp':
-          e.preventDefault()
-          setHighlightedIndex(prev => {
-            const next = Math.max(prev - 1, 0)
-            document.getElementById(`itms-item-${itemIndices[next]}`)?.scrollIntoView({ block: 'nearest' })
-            return next
-          })
-          break
-        case 'Enter': {
-          e.preventDefault()
-          const globalIndex = itemIndices[highlightedIndex]
-          const item = flatList[globalIndex]
-          if (item && item.type === 'item') handleSelect(item.data)
-          break
+    const openMenu = useCallback(() => {
+      if (disabled || isLoading) return
+      let targetIndex = 0
+      if (selectedModelKey) {
+        const index = flatList.findIndex(item => item.type === 'item' && getModelKey(item.data) === selectedModelKey)
+        if (index !== -1) {
+          const interactiveIndex = itemIndices.indexOf(index)
+          if (interactiveIndex !== -1) targetIndex = interactiveIndex
         }
-        case 'Escape':
-          e.preventDefault()
-          closeMenu()
-          break
       }
-    },
-    [itemIndices, flatList, highlightedIndex, handleSelect, closeMenu],
-  )
+      setHighlightedIndex(targetIndex)
+      setIsOpen(true)
+      setSearchQuery('')
+      ignoreMouseRef.current = true
+      setTimeout(() => {
+        ignoreMouseRef.current = false
+      }, 300)
+    }, [disabled, isLoading, selectedModelKey, flatList, itemIndices])
 
-  return (
-    <div ref={containerRef} className="relative font-sans min-w-0 overflow-hidden">
-      <button
-        ref={triggerRef}
-        onClick={() => (isOpen ? closeMenu() : openMenu())}
-        disabled={disabled || isLoading}
-        className="flex items-center gap-1.5 px-2 py-1.5 text-sm rounded-lg transition-all duration-150 hover:bg-bg-200 active:scale-95 cursor-pointer min-w-0 overflow-hidden w-full"
-        title={selectedModel?.name || t('modelSelector.selectModel')}
-      >
-        <span className="text-xs text-text-300 truncate">{displayName}</span>
-        {!presentation.isCompact && (
-          <span className="text-text-400 shrink-0">
-            <ChevronDownIcon />
-          </span>
-        )}
-      </button>
+    const closeMenu = useCallback(() => {
+      setIsOpen(false)
+      setSearchQuery('')
+    }, [])
 
-      <DropdownMenu
-        triggerRef={triggerRef}
-        isOpen={isOpen}
-        position="top"
-        align="left"
-        width="460px"
-        minWidth="280px"
-        maxWidth="min(460px, calc(100vw - 24px))"
-        mobileFullWidth
-        constrainToRef={constrainToRef}
-        className="!p-0 overflow-hidden flex flex-col max-h-[min(360px,45vh)]"
-      >
-        <ModelListPanel
-          menuRef={menuRef}
-          searchInputRef={searchInputRef}
-          listRef={listRef}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          setHighlightedIndex={setHighlightedIndex}
-          handleKeyDown={handleKeyDown}
-          flatList={flatList}
-          itemIndices={itemIndices}
-          highlightedIndex={highlightedIndex}
-          selectedModelKey={selectedModelKey}
-          onItemClick={handleItemClick}
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-          ignoreMouseRef={ignoreMouseRef}
-          lastMousePosRef={lastMousePosRef}
-          idPrefix="itms-item"
-          maxListHeight="max-h-[min(320px,40vh)]"
-          searchPlaceholder={t('modelSelector.searchModels')}
-          noResultsText={t('modelSelector.noModelsFound')}
-          noResultsHint={t('modelSelector.tryDifferentKeyword')}
-        />
-      </DropdownMenu>
-    </div>
-  )
-})
+    useImperativeHandle(ref, () => ({ openMenu }), [openMenu])
+
+    const handleSelect = useCallback(
+      (model: ModelInfo) => {
+        const key = getModelKey(model)
+        recordModelUsage(model)
+        onSelect(key, model)
+        closeMenu()
+        setRefreshTrigger(c => c + 1)
+      },
+      [onSelect, closeMenu],
+    )
+
+    // 长按置顶
+    const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const longPressFiredRef = useRef(false)
+
+    const handleTouchStart = useCallback((model: ModelInfo) => {
+      longPressFiredRef.current = false
+      longPressTimerRef.current = setTimeout(() => {
+        longPressFiredRef.current = true
+        toggleModelPin(model)
+        setRefreshTrigger(c => c + 1)
+        if (navigator.vibrate) navigator.vibrate(30)
+      }, 500)
+    }, [])
+
+    const handleTouchEnd = useCallback(() => {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current)
+        longPressTimerRef.current = null
+      }
+    }, [])
+
+    const handleItemClick = useCallback(
+      (model: ModelInfo) => {
+        if (longPressFiredRef.current) {
+          longPressFiredRef.current = false
+          return
+        }
+        handleSelect(model)
+      },
+      [handleSelect],
+    )
+
+    useEffect(() => {
+      if (isOpen) setTimeout(() => searchInputRef.current?.focus(), 50)
+    }, [isOpen])
+
+    useEffect(() => {
+      if (!isOpen) return
+      const handleClickOutside = (e: MouseEvent) => {
+        const target = e.target as Node
+        if (
+          containerRef.current &&
+          !containerRef.current.contains(target) &&
+          menuRef.current &&
+          !menuRef.current.contains(target)
+        ) {
+          closeMenu()
+        }
+      }
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [isOpen, closeMenu])
+
+    useEffect(() => {
+      if (!isOpen) return
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          e.stopPropagation()
+          closeMenu()
+        }
+      }
+      document.addEventListener('keydown', handleEsc, { capture: true })
+      return () => document.removeEventListener('keydown', handleEsc, { capture: true })
+    }, [isOpen, closeMenu])
+
+    useEffect(() => {
+      if (!isOpen) return
+      requestAnimationFrame(() => {
+        const realIndex = itemIndices[highlightedIndex]
+        document.getElementById(`itms-item-${realIndex}`)?.scrollIntoView({ block: 'nearest' })
+      })
+    }, [isOpen, highlightedIndex, itemIndices])
+
+    const handleKeyDown = useCallback(
+      (e: React.KeyboardEvent) => {
+        e.stopPropagation()
+        switch (e.key) {
+          case 'ArrowDown':
+            e.preventDefault()
+            setHighlightedIndex(prev => {
+              const next = Math.min(prev + 1, itemIndices.length - 1)
+              document.getElementById(`itms-item-${itemIndices[next]}`)?.scrollIntoView({ block: 'nearest' })
+              return next
+            })
+            break
+          case 'ArrowUp':
+            e.preventDefault()
+            setHighlightedIndex(prev => {
+              const next = Math.max(prev - 1, 0)
+              document.getElementById(`itms-item-${itemIndices[next]}`)?.scrollIntoView({ block: 'nearest' })
+              return next
+            })
+            break
+          case 'Enter': {
+            e.preventDefault()
+            const globalIndex = itemIndices[highlightedIndex]
+            const item = flatList[globalIndex]
+            if (item && item.type === 'item') handleSelect(item.data)
+            break
+          }
+          case 'Escape':
+            e.preventDefault()
+            closeMenu()
+            break
+        }
+      },
+      [itemIndices, flatList, highlightedIndex, handleSelect, closeMenu],
+    )
+
+    return (
+      <div ref={containerRef} className="relative font-sans min-w-0 overflow-hidden">
+        <button
+          ref={triggerRef}
+          onClick={() => (isOpen ? closeMenu() : openMenu())}
+          disabled={disabled || isLoading}
+          className="flex items-center gap-1.5 px-2 py-1.5 text-sm rounded-lg transition-all duration-150 hover:bg-bg-200 active:scale-95 cursor-pointer min-w-0 overflow-hidden w-full"
+          title={selectedModel?.name || t('modelSelector.selectModel')}
+        >
+          <span className="text-xs text-text-300 truncate">{displayName}</span>
+          {!presentation.isCompact && (
+            <span className="text-text-400 shrink-0">
+              <ChevronDownIcon />
+            </span>
+          )}
+        </button>
+
+        <DropdownMenu
+          triggerRef={triggerRef}
+          isOpen={isOpen}
+          position="top"
+          align="left"
+          width="460px"
+          minWidth="280px"
+          maxWidth="min(460px, calc(100vw - 24px))"
+          mobileFullWidth
+          constrainToRef={constrainToRef}
+          className="!p-0 overflow-hidden flex flex-col max-h-[min(360px,45vh)]"
+        >
+          <ModelListPanel
+            menuRef={menuRef}
+            searchInputRef={searchInputRef}
+            listRef={listRef}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            setHighlightedIndex={setHighlightedIndex}
+            handleKeyDown={handleKeyDown}
+            flatList={flatList}
+            itemIndices={itemIndices}
+            highlightedIndex={highlightedIndex}
+            selectedModelKey={selectedModelKey}
+            onItemClick={handleItemClick}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            ignoreMouseRef={ignoreMouseRef}
+            lastMousePosRef={lastMousePosRef}
+            idPrefix="itms-item"
+            maxListHeight="max-h-[min(320px,40vh)]"
+            searchPlaceholder={t('modelSelector.searchModels')}
+            noResultsText={t('modelSelector.noModelsFound')}
+            noResultsHint={t('modelSelector.tryDifferentKeyword')}
+          />
+        </DropdownMenu>
+      </div>
+    )
+  }),
+)
