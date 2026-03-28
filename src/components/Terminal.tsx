@@ -10,6 +10,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { getPtyConnectUrl, updatePtySession } from '../api/pty'
 import { layoutStore } from '../store/layoutStore'
+import { useInputCapabilities } from '../hooks/useInputCapabilities'
 import { logger } from '../utils/logger'
 
 // ============================================
@@ -108,12 +109,6 @@ function isDarkMode(): boolean {
   if (mode === 'dark') return true
   if (mode === 'light') return false
   return window.matchMedia('(prefers-color-scheme: dark)').matches
-}
-
-// 检查是否为移动设备
-function isMobileDevice(): boolean {
-  if (typeof window === 'undefined') return false
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 }
 
 // ============================================
@@ -284,6 +279,8 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
   const mountedRef = useRef(true)
   const isPanelResizingRef = useRef(false)
   const [hasBeenActive, setHasBeenActive] = useState(isActive)
+  const { preferTouchUi, hasTouch, hasCoarsePointer } = useInputCapabilities()
+  const touchCapable = hasTouch || hasCoarsePointer
 
   const clearStickyModifier = useCallback(() => {
     stickyModifierRef.current = null
@@ -336,7 +333,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
     let disposeData: { dispose: () => void } | null = null
     let disposeTitle: { dispose: () => void } | null = null
 
-    const isMobile = isMobileDevice()
+    const touchUi = preferTouchUi
     const theme = getTerminalTheme(isDarkMode())
 
     const terminal = new XTerm({
@@ -344,16 +341,16 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
       fontFamily:
         getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim() ||
         "ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace",
-      fontSize: isMobile ? 14 : 13,
-      lineHeight: isMobile ? 1.3 : 1.2,
+      fontSize: touchUi ? 14 : 13,
+      lineHeight: touchUi ? 1.3 : 1.2,
       cursorBlink: true,
       cursorStyle: 'block',
-      smoothScrollDuration: isMobile ? 100 : 0,
+      smoothScrollDuration: touchUi ? 100 : 0,
       allowProposedApi: true,
       scrollback: 10000,
       convertEol: true,
       allowTransparency: true, // 开启透明背景
-      ...(isMobile
+      ...(touchUi
         ? {
             scrollSensitivity: 2,
             macOptionIsMeta: true,
@@ -372,7 +369,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
 
     const textarea = terminal.textarea
     const handleTextareaBlur = () => clearStickyModifier()
-    if (isMobile && textarea) {
+    if (touchUi && textarea) {
       textarea.setAttribute('autocapitalize', 'none')
       textarea.setAttribute('autocomplete', 'off')
       textarea.setAttribute('autocorrect', 'off')
@@ -493,13 +490,13 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
       terminalRef.current = null
       fitAddonRef.current = null
     }
-  }, [ptyId, directory, hasBeenActive, clearStickyModifier, sendTerminalData])
+  }, [ptyId, directory, hasBeenActive, clearStickyModifier, sendTerminalData, preferTouchUi])
 
   useEffect(() => {
     const container = containerRef.current
     const terminal = terminalRef.current
     if (!container || !terminal) return
-    const isMobile = isMobileDevice()
+    if (!touchCapable) return
 
     let touchStartY = 0
     let scrollStart = 0
@@ -572,7 +569,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
       lastTouchTime = now
 
       viewport.scrollTop = scrollStart + delta
-      if (isMobile) {
+      if (touchCapable) {
         e.preventDefault()
       }
     }
@@ -591,7 +588,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
       container.removeEventListener('touchmove', handleTouchMove)
       container.removeEventListener('touchend', handleTouchEnd)
     }
-  }, [isActive])
+  }, [isActive, touchCapable])
 
   // 处理大小变化
   useEffect(() => {
@@ -695,8 +692,6 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
     return () => window.removeEventListener('panel-resize-end', handlePanelResizeEnd)
   }, [isActive, ptyId, directory])
 
-  const isMobile = isMobileDevice()
-
   return (
     <>
       <style>{`
@@ -739,7 +734,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
         }
       `}</style>
       <div
-        className={`${isMobile ? 'flex flex-col' : ''} h-full w-full`}
+        className={`${preferTouchUi ? 'flex flex-col' : ''} h-full w-full`}
         style={{
           visibility: isActive ? 'visible' : 'hidden',
           position: isActive ? 'relative' : 'absolute',
@@ -749,13 +744,13 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
       >
         <div
           ref={containerRef}
-          className={`${isMobile ? 'flex-1 min-h-0' : 'h-full'} w-full bg-bg-100 ${isMobile ? 'no-scrollbar' : ''} ${isMobile ? (isTouchScrolling ? 'scrollbar-active' : 'scrollbar-idle') : ''}`}
+          className={`${preferTouchUi ? 'flex-1 min-h-0' : 'h-full'} w-full bg-bg-100 ${preferTouchUi ? 'no-scrollbar' : ''} ${preferTouchUi ? (isTouchScrolling ? 'scrollbar-active' : 'scrollbar-idle') : ''}`}
           style={{
-            padding: isMobile ? '0' : '4px 0 0 4px',
-            touchAction: isMobile ? 'pan-y' : 'auto',
+            padding: preferTouchUi ? '0' : '4px 0 0 4px',
+            touchAction: touchCapable ? 'pan-y' : 'auto',
           }}
           onClick={() => {
-            if (isMobile && terminalRef.current) {
+            if (preferTouchUi && terminalRef.current) {
               focusTerminal()
             }
           }}
@@ -765,7 +760,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
             }
           }}
         />
-        {isMobile && (
+        {preferTouchUi && (
           <MobileExtraKeys
             stickyModifier={stickyModifier}
             onToggleSticky={toggleStickyModifier}

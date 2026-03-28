@@ -2,12 +2,34 @@ import { useState, useCallback, useEffect, useRef, memo } from 'react'
 import { SidePanel } from './sidebar/SidePanel'
 import { ProjectDialog } from './ProjectDialog'
 import { useDirectory } from '../../hooks'
+import { useInputCapabilities } from '../../hooks/useInputCapabilities'
 import { type ApiSession } from '../../api'
 
 const MIN_WIDTH = 240
 const MAX_WIDTH = 480
 const DEFAULT_WIDTH = 288 // 18rem = 288px
 const RAIL_WIDTH = 49 // 3.05rem ≈ 49px
+const TOUCH_MIN_WIDTH = 220
+const SMALL_DESKTOP_BREAKPOINT = 1100
+
+function clampSidebarWidth(width: number, minWidth: number, maxWidth: number) {
+  return Math.min(Math.max(width, minWidth), maxWidth)
+}
+
+function getDesktopSidebarSizing(viewportWidth: number, preferTouchUi: boolean) {
+  const minWidth = preferTouchUi ? TOUCH_MIN_WIDTH : MIN_WIDTH
+  const responsiveMaxWidth =
+    viewportWidth < SMALL_DESKTOP_BREAKPOINT ? Math.floor(viewportWidth * (preferTouchUi ? 0.46 : 0.4)) : MAX_WIDTH
+  const maxWidth = clampSidebarWidth(responsiveMaxWidth, minWidth, MAX_WIDTH)
+  const responsiveDefaultWidth =
+    viewportWidth < SMALL_DESKTOP_BREAKPOINT ? Math.floor(viewportWidth * (preferTouchUi ? 0.34 : 0.3)) : DEFAULT_WIDTH
+
+  return {
+    minWidth,
+    maxWidth,
+    defaultWidth: clampSidebarWidth(responsiveDefaultWidth, minWidth, maxWidth),
+  }
+}
 
 interface SidebarProps {
   isOpen: boolean
@@ -36,8 +58,23 @@ export const Sidebar = memo(function Sidebar({
 }: SidebarProps) {
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false)
   const { addDirectory, pathInfo } = useDirectory()
+  const { preferTouchUi, hasCoarsePointer, hasTouch } = useInputCapabilities()
+  const touchCapable = preferTouchUi || hasCoarsePointer || hasTouch
   const [isMobile, setIsMobile] = useState(false)
+  const [viewportWidth, setViewportWidth] = useState(() => (typeof window === 'undefined' ? 1280 : window.innerWidth))
   const isProjectDialogVisible = isProjectDialogOpen || !!projectDialogOpen
+  const [hasCustomWidth, setHasCustomWidth] = useState(() => {
+    try {
+      return localStorage.getItem('sidebar-width') !== null
+    } catch {
+      return false
+    }
+  })
+  const {
+    minWidth: sidebarMinWidth,
+    maxWidth: sidebarMaxWidth,
+    defaultWidth: sidebarDefaultWidth,
+  } = getDesktopSidebarSizing(viewportWidth, preferTouchUi)
 
   // Resizable state
   const [width, setWidth] = useState(() => {
@@ -52,6 +89,9 @@ export const Sidebar = memo(function Sidebar({
   const sidebarRef = useRef<HTMLDivElement>(null)
   const currentWidthRef = useRef(width)
   const rafRef = useRef<number>(0)
+  const renderedWidth = hasCustomWidth
+    ? clampSidebarWidth(width, sidebarMinWidth, sidebarMaxWidth)
+    : sidebarDefaultWidth
 
   const handleAddProject = useCallback(
     (path: string) => {
@@ -74,11 +114,32 @@ export const Sidebar = memo(function Sidebar({
 
   // 检测移动端 (md breakpoint = 768px)
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768)
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
+    const checkLayout = () => {
+      const nextWidth = window.innerWidth
+      setViewportWidth(nextWidth)
+      setIsMobile(nextWidth < 768)
+    }
+
+    checkLayout()
+    window.addEventListener('resize', checkLayout)
+    return () => window.removeEventListener('resize', checkLayout)
   }, [])
+
+  const persistSidebarWidth = useCallback(
+    (nextWidth: number) => {
+      const finalWidth = clampSidebarWidth(nextWidth, sidebarMinWidth, sidebarMaxWidth)
+      setWidth(finalWidth)
+      setHasCustomWidth(true)
+      setIsResizing(false)
+      try {
+        localStorage.setItem('sidebar-width', finalWidth.toString())
+      } catch {
+        // ignore
+      }
+      return finalWidth
+    },
+    [sidebarMinWidth, sidebarMaxWidth],
+  )
 
   // Resize logic (desktop only) — 纯 DOM 操作，不触发 React re-render
   const startResizing = useCallback(
@@ -96,7 +157,7 @@ export const Sidebar = memo(function Sidebar({
       const handleMouseMove = (moveEvent: MouseEvent) => {
         if (rafRef.current) cancelAnimationFrame(rafRef.current)
         rafRef.current = requestAnimationFrame(() => {
-          const newWidth = Math.min(Math.max(moveEvent.clientX, MIN_WIDTH), MAX_WIDTH)
+          const newWidth = clampSidebarWidth(moveEvent.clientX, sidebarMinWidth, sidebarMaxWidth)
           sidebar.style.width = `${newWidth}px`
           currentWidthRef.current = newWidth
         })
@@ -110,22 +171,57 @@ export const Sidebar = memo(function Sidebar({
         document.removeEventListener('mouseup', handleMouseUp)
 
         // 拖拽结束：同步 state + 持久化
-        const finalWidth = currentWidthRef.current
-        setWidth(finalWidth)
-        setIsResizing(false)
-        localStorage.setItem('sidebar-width', finalWidth.toString())
+        persistSidebarWidth(currentWidthRef.current)
       }
 
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
     },
-    [isMobile],
+    [isMobile, persistSidebarWidth, sidebarMinWidth, sidebarMaxWidth],
+  )
+
+  const startTouchResizing = useCallback(
+    (e: React.TouchEvent) => {
+      if (isMobile || !touchCapable || e.touches.length !== 1) return
+      e.preventDefault()
+
+      const sidebar = sidebarRef.current
+      if (!sidebar) return
+
+      setIsResizing(true)
+      document.body.style.userSelect = 'none'
+
+      const handleTouchMove = (moveEvent: TouchEvent) => {
+        if (moveEvent.touches.length !== 1) return
+        moveEvent.preventDefault()
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        rafRef.current = requestAnimationFrame(() => {
+          const newWidth = clampSidebarWidth(moveEvent.touches[0].clientX, sidebarMinWidth, sidebarMaxWidth)
+          sidebar.style.width = `${newWidth}px`
+          currentWidthRef.current = newWidth
+        })
+      }
+
+      const handleTouchEnd = () => {
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        document.body.style.userSelect = ''
+        document.removeEventListener('touchmove', handleTouchMove)
+        document.removeEventListener('touchend', handleTouchEnd)
+        document.removeEventListener('touchcancel', handleTouchEnd)
+        persistSidebarWidth(currentWidthRef.current)
+      }
+
+      document.addEventListener('touchmove', handleTouchMove, { passive: false })
+      document.addEventListener('touchend', handleTouchEnd)
+      document.addEventListener('touchcancel', handleTouchEnd)
+    },
+    [isMobile, persistSidebarWidth, sidebarMinWidth, sidebarMaxWidth, touchCapable],
   )
 
   // 同步 width state → ref（isOpen 切换时 width 可能从外部改变）
   useEffect(() => {
-    currentWidthRef.current = width
-  }, [width])
+    currentWidthRef.current = renderedWidth
+  }, [renderedWidth])
 
   // 移动端遮罩点击关闭
   const handleBackdropClick = useCallback(() => {
@@ -259,7 +355,7 @@ export const Sidebar = memo(function Sidebar({
     <>
       <div
         ref={sidebarRef}
-        style={{ width: isOpen ? `${width}px` : `${RAIL_WIDTH}px` }}
+        style={{ width: isOpen ? `${renderedWidth}px` : `${RAIL_WIDTH}px` }}
         className={`
           relative flex flex-col h-full bg-bg-100 overflow-hidden shrink-0
           border-r border-border-200/50
@@ -283,12 +379,19 @@ export const Sidebar = memo(function Sidebar({
         {isOpen && (
           <div
             className={`
-              absolute top-0 right-0 w-1 h-full cursor-col-resize z-50
-              hover:bg-accent-main-100/50 transition-colors
-              ${isResizing ? 'bg-accent-main-100' : 'bg-transparent'}
+              absolute top-0 right-0 h-full cursor-col-resize z-50 touch-none bg-transparent
+              ${touchCapable ? 'w-4' : 'w-1'}
             `}
             onMouseDown={startResizing}
-          />
+            onTouchStart={startTouchResizing}
+          >
+            <div
+              aria-hidden="true"
+              className={`absolute top-0 bottom-0 right-0 transition-colors ${touchCapable ? 'w-1 rounded-full' : 'w-full'} ${
+                isResizing ? 'bg-accent-main-100' : 'bg-transparent hover:bg-accent-main-100/50'
+              }`}
+            />
+          </div>
         )}
       </div>
 

@@ -5,6 +5,7 @@ import { FolderIcon, FolderOpenIcon, SpinnerIcon } from '../../../components/Ico
 import { ExpandableSection } from '../../../components/ui'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 import { useDelayedRender, useSessions } from '../../../hooks'
+import { useInputCapabilities } from '../../../hooks/useInputCapabilities'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { useInView } from '../../../hooks/useInView'
 import { getDirectoryName, isSameDirectory } from '../../../utils'
@@ -71,6 +72,7 @@ export function FolderRecentList({
 }: FolderRecentListProps) {
   const { t } = useTranslation(['chat', 'common'])
   const isMobile = useIsMobile()
+  const { preferTouchUi } = useInputCapabilities()
   const [pendingDelete, setPendingDelete] = useState<PendingDeleteSession | null>(null)
   const allBusySessions = useBusySessions()
   const allNotifications = useNotifications()
@@ -367,6 +369,7 @@ export function FolderRecentList({
                 project={project}
                 isExpanded={!isDragging && expandedProjectIds.includes(project.id)}
                 folderStatus={folderStatusByProjectId.get(project.id) ?? null}
+                preferTouchUi={preferTouchUi}
                 selectedSessionId={selectedSessionId}
                 onToggle={() => handleToggleProject(project.id)}
                 onSelectSession={onSelectSession}
@@ -421,6 +424,7 @@ interface FolderRecentSectionProps {
   project: FolderRecentProject
   isExpanded: boolean
   folderStatus: FolderStatus | null
+  preferTouchUi: boolean
   selectedSessionId: string | null
   onToggle: () => void
   onSelectSession: (session: ApiSession) => void
@@ -445,6 +449,7 @@ function FolderRecentSection({
   project,
   isExpanded,
   folderStatus,
+  preferTouchUi,
   selectedSessionId,
   onToggle,
   onSelectSession,
@@ -583,6 +588,7 @@ function FolderRecentSection({
                       onSelect={() => onSelectSession(session)}
                       onRename={newTitle => handleRename(session.id, newTitle)}
                       onDelete={() => handleDelete(session.id)}
+                      preferTouchUi={preferTouchUi}
                       density="minimal"
                       showStats={false}
                       showDirectory={false}

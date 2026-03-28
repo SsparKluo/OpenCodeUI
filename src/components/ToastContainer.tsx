@@ -92,9 +92,9 @@ function Toast({ item, onDismiss, onClick }: { item: ToastItem; onDismiss: () =>
         )}
       </div>
 
-      {/* Close — vertically centered, mobile: always visible; PC: visible on hover */}
+      {/* Close — always visible */}
       <button
-        className="shrink-0 flex items-center justify-center w-6 h-6 rounded-md text-text-400 md:opacity-0 md:group-hover:opacity-100 hover:text-text-200 hover:bg-bg-200 transition-all duration-150 active:scale-90"
+        className="shrink-0 flex items-center justify-center w-6 h-6 rounded-md text-text-400 hover:text-text-200 hover:bg-bg-200 transition-all duration-150 active:scale-90"
         onClick={e => {
           e.stopPropagation()
           onDismiss()

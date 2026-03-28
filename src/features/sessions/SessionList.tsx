@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { SearchIcon, PencilIcon, TrashIcon, ComposeIcon } from '../../components/Icons'
 import { formatRelativeTime } from '../../utils/dateUtils'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
-import { useIsMobile } from '../../hooks'
+import { useInputCapabilities } from '../../hooks/useInputCapabilities'
 import { useSessionActiveEntry } from '../../store/activeSessionStore'
 import { notificationStore, useHasUnreadCompletedNotification } from '../../store/notificationStore'
 import type { ApiSession } from '../../api'
@@ -52,6 +52,7 @@ export function SessionList({
   showDirectory = false,
 }: SessionListProps) {
   const { t } = useTranslation(['commands', 'common', 'chat'])
+  const { preferTouchUi } = useInputCapabilities()
   const listRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -176,6 +177,7 @@ export function SessionList({
                       onSelect={() => onSelect(session)}
                       onDelete={() => setDeleteConfirm({ isOpen: true, sessionId: session.id })}
                       onRename={newTitle => onRename(session.id, newTitle)}
+                      preferTouchUi={preferTouchUi}
                       density={density}
                       showStats={showStats}
                       showDirectory={showDirectory}
@@ -196,6 +198,7 @@ export function SessionList({
                 onSelect={() => onSelect(session)}
                 onDelete={() => setDeleteConfirm({ isOpen: true, sessionId: session.id })}
                 onRename={newTitle => onRename(session.id, newTitle)}
+                preferTouchUi={preferTouchUi}
                 density={density}
                 showStats={showStats}
                 showDirectory={showDirectory}
@@ -239,6 +242,7 @@ export interface SessionListItemProps {
   onSelect: () => void
   onDelete: () => void
   onRename: (newTitle: string) => void
+  preferTouchUi: boolean
   density?: 'default' | 'compact' | 'minimal'
   showStats?: boolean
   showDirectory?: boolean
@@ -250,6 +254,7 @@ export function SessionListItem({
   onSelect,
   onDelete,
   onRename,
+  preferTouchUi,
   density = 'default',
   showStats = true,
   showDirectory = false,
@@ -275,7 +280,6 @@ export function SessionListItem({
     : null
   const hasUnreadCompletedNotification = useHasUnreadCompletedNotification(session.id)
   const itemRef = useRef<HTMLDivElement>(null)
-  const isMobile = useIsMobile()
   const isCompact = density === 'compact'
   const isMinimal = density === 'minimal'
 
@@ -315,21 +319,23 @@ export function SessionListItem({
 
   // 长按触摸手势：显示操作按钮
   const handleTouchStart = useCallback(() => {
+    if (!preferTouchUi) return
     touchMoved.current = false
     longPressTimer.current = setTimeout(() => {
       if (!touchMoved.current) {
         setShowActions(true)
       }
     }, 500)
-  }, [])
+  }, [preferTouchUi])
 
   const handleTouchMove = useCallback(() => {
+    if (!preferTouchUi) return
     touchMoved.current = true
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current)
       longPressTimer.current = null
     }
-  }, [])
+  }, [preferTouchUi])
 
   const handleTouchEnd = useCallback(() => {
     if (longPressTimer.current) {
@@ -397,9 +403,9 @@ export function SessionListItem({
     )
   }
 
-  // 移动端操作按钮是否可见：长按触发的 showActions 状态
-  // 桌面端：hover 触发
-  const actionsVisible = isMobile ? showActions : false
+  // 触控优先设备：长按触发动作按钮
+  // 鼠标/悬停设备：沿用 hover 触发
+  const actionsVisible = preferTouchUi ? showActions : false
 
   // ============================================
   // Minimal 模式 —— 文件夹视图下的紧凑单行
