@@ -2,17 +2,29 @@
  * SplitContainer — Recursive split tree renderer with draggable dividers.
  *
  * Renders a PaneNode tree: leaves are rendered via `renderLeaf`, splits are
- * rendered as flex containers with a thin draggable divider between them.
+ * rendered as CSS grid containers with a thin draggable divider between them.
+ *
+ * Performance strategy for drag resize:
+ * - Layout uses CSS grid (grid-template-columns / grid-template-rows).
+ * - During drag: modify grid-template directly on the DOM element, bypassing
+ *   React and the store entirely. rAF throttles writes to one per frame.
+ * - On pointerup: clear inline styles and commit the final ratio to the store.
+ * - Pane wrappers use `contain: layout style` to isolate internal reflow,
+ *   but do NOT use `overflow: hidden` so that ring / box-shadow borders
+ *   on child ChatPane components remain visible.
  */
 
 import { useCallback, useRef } from 'react'
 import type { PaneNode, PaneSplit } from '../../store/paneLayoutStore'
 import { paneLayoutStore } from '../../store/paneLayoutStore'
 
-/** Gap between panes in px */
+/** Visual gap between panes in px */
 const SPLIT_GAP = 6
-/** Extra hit area on each side of the divider */
+/** Extra invisible hit area on each side of the divider for easier grabbing */
 const HIT_EXTEND = 4
+/** Minimum ratio to prevent a pane from collapsing to zero */
+const MIN_RATIO = 0.1
+const MAX_RATIO = 0.9
 
 interface SplitContainerProps {
   node: PaneNode
@@ -36,6 +48,12 @@ interface SplitNodeProps {
   renderLeaf: (paneId: string, sessionId: string | null) => React.ReactNode
 }
 
+/** Build a CSS grid-template value like "49.5fr 6px 50.5fr" */
+function buildGridTemplate(ratio: number): string {
+  const r = Math.max(MIN_RATIO, Math.min(MAX_RATIO, ratio))
+  return `${(r * 100).toFixed(4)}fr ${SPLIT_GAP}px ${((1 - r) * 100).toFixed(4)}fr`
+}
+
 function SplitNode({ split, renderLeaf }: SplitNodeProps) {
   const isHorizontal = split.direction === 'horizontal'
   const containerRef = useRef<HTMLDivElement>(null)
@@ -47,22 +65,52 @@ function SplitNode({ split, renderLeaf }: SplitNodeProps) {
       if (!container) return
 
       const rect = container.getBoundingClientRect()
+      let pendingRatio: number | null = null
+      let rafId: number | null = null
 
-      const onMove = (ev: PointerEvent) => {
-        let ratio: number
+      // Notify listeners (e.g. CodePreview) that a resize is in progress
+      window.dispatchEvent(new CustomEvent('panel-resize-start'))
+
+      const applyRatio = (ratio: number) => {
+        const tpl = buildGridTemplate(ratio)
         if (isHorizontal) {
-          ratio = (ev.clientX - rect.left) / rect.width
+          container.style.gridTemplateColumns = tpl
         } else {
-          ratio = (ev.clientY - rect.top) / rect.height
+          container.style.gridTemplateRows = tpl
         }
-        paneLayoutStore.setRatio(split.id, ratio)
       }
 
-      const onUp = () => {
+      const onMove = (ev: PointerEvent) => {
+        const raw = isHorizontal ? (ev.clientX - rect.left) / rect.width : (ev.clientY - rect.top) / rect.height
+        pendingRatio = Math.max(MIN_RATIO, Math.min(MAX_RATIO, raw))
+
+        // Throttle DOM writes to one per animation frame
+        if (rafId === null) {
+          rafId = requestAnimationFrame(() => {
+            rafId = null
+            if (pendingRatio !== null) {
+              applyRatio(pendingRatio)
+            }
+          })
+        }
+      }
+
+      const onUp = (ev: PointerEvent) => {
         document.removeEventListener('pointermove', onMove)
         document.removeEventListener('pointerup', onUp)
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
+        if (rafId !== null) cancelAnimationFrame(rafId)
+
+        // Clear inline overrides — hand control back to React
+        container.style.gridTemplateColumns = ''
+        container.style.gridTemplateRows = ''
+
+        // Compute and commit the final ratio
+        const raw = isHorizontal ? (ev.clientX - rect.left) / rect.width : (ev.clientY - rect.top) / rect.height
+        paneLayoutStore.setRatio(split.id, Math.max(MIN_RATIO, Math.min(MAX_RATIO, raw)))
+
+        window.dispatchEvent(new CustomEvent('panel-resize-end'))
       }
 
       document.body.style.cursor = isHorizontal ? 'col-resize' : 'row-resize'
@@ -73,8 +121,8 @@ function SplitNode({ split, renderLeaf }: SplitNodeProps) {
     [split.id, isHorizontal],
   )
 
-  const firstGrow = Math.max(split.ratio, 0.0001)
-  const secondGrow = Math.max(1 - split.ratio, 0.0001)
+  // ---- Static layout (React-controlled, used when not dragging) ----
+  const gridTemplate = buildGridTemplate(split.ratio)
 
   const hitSize = SPLIT_GAP + HIT_EXTEND * 2
   const negMargin = -(hitSize + SPLIT_GAP) / 2
@@ -82,17 +130,21 @@ function SplitNode({ split, renderLeaf }: SplitNodeProps) {
   return (
     <div
       ref={containerRef}
-      className={`flex ${isHorizontal ? 'flex-row' : 'flex-col'} w-full h-full`}
-      style={{ gap: SPLIT_GAP }}
+      className="grid w-full h-full"
+      style={
+        isHorizontal
+          ? { gridTemplateColumns: gridTemplate, gridTemplateRows: '1fr' }
+          : { gridTemplateRows: gridTemplate, gridTemplateColumns: '1fr' }
+      }
     >
-      {/* First child */}
-      <div className="min-w-0 min-h-0 relative" style={{ flexBasis: 0, flexGrow: firstGrow, flexShrink: 1 }}>
+      {/* First child — contain: layout style isolates reflow without clipping ring borders */}
+      <div className="min-w-0 min-h-0 relative" style={{ contain: 'layout style' }}>
         <SplitContainer node={split.first} renderLeaf={renderLeaf} />
       </div>
 
-      {/* Divider — invisible hit area overlapping the gap */}
+      {/* Divider — invisible hit area overlapping the grid gap */}
       <div
-        className={`relative z-10 shrink-0 ${isHorizontal ? 'cursor-col-resize' : 'cursor-row-resize'}`}
+        className={`relative z-10 ${isHorizontal ? 'cursor-col-resize' : 'cursor-row-resize'}`}
         style={{
           [isHorizontal ? 'width' : 'height']: hitSize,
           [isHorizontal ? 'marginLeft' : 'marginTop']: negMargin,
@@ -102,7 +154,7 @@ function SplitNode({ split, renderLeaf }: SplitNodeProps) {
       />
 
       {/* Second child */}
-      <div className="min-w-0 min-h-0 relative" style={{ flexBasis: 0, flexGrow: secondGrow, flexShrink: 1 }}>
+      <div className="min-w-0 min-h-0 relative" style={{ contain: 'layout style' }}>
         <SplitContainer node={split.second} renderLeaf={renderLeaf} />
       </div>
     </div>

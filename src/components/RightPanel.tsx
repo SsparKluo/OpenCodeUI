@@ -151,8 +151,8 @@ export const RightPanel = memo(function RightPanel({ directory, sessionId }: Rig
       size={layout.rightPanel.dockedWidth || rightPanelWidth}
       minSize={layout.rightPanel.hardMinWidth}
       maxSize={layout.rightPanel.resizeMaxWidth}
-      onSizeChange={layoutStore.setRightPanelWidth}
-      onClose={layoutStore.closeRightPanel}
+      onSizeChange={w => layoutStore.setRightPanelWidth(w)}
+      onClose={() => layoutStore.closeRightPanel()}
       className="pb-[var(--safe-area-inset-bottom)]"
     >
       <PanelContainer position="right" onNewTerminal={handleNewTerminal} onCloseTerminal={handleCloseTerminal}>

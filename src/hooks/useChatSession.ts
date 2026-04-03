@@ -50,6 +50,29 @@ import type { ChatAreaHandle } from '../features/chat'
 
 const handleError = createErrorHandler('session')
 
+/**
+ * Stable empty session state singleton.
+ *
+ * When routeSessionId is null (e.g. an empty split pane), useChatSession
+ * uses this instead of creating a new object on every render.  A fresh
+ * literal `{ messages: [], ... }` would give a different reference each
+ * time, defeating React.memo on ChatArea and causing pointless re-renders
+ * of the entire message tree.
+ */
+const EMPTY_SESSION_STATE = {
+  messages: [] as import('../types/message').Message[],
+  isStreaming: false,
+  loadState: 'idle' as const,
+  revertState: null,
+  canUndo: false,
+  canRedo: false,
+  redoSteps: 0,
+  revertedContent: null,
+  hasMoreHistory: false,
+  directory: '',
+  title: null,
+} as const
+
 interface UseChatSessionOptions {
   paneId: string
   chatAreaRef: React.RefObject<ChatAreaHandle | null>
@@ -102,19 +125,7 @@ export function useChatSession({
   const routeStatus = routeSessionId ? statusMap[routeSessionId] : undefined
 
   const perSessionStateRaw = useSessionState(routeSessionId)
-  const perSessionState = perSessionStateRaw ?? {
-    messages: [] as import('../types/message').Message[],
-    isStreaming: false,
-    loadState: 'idle' as const,
-    revertState: null,
-    canUndo: false,
-    canRedo: false,
-    redoSteps: 0,
-    revertedContent: null,
-    hasMoreHistory: false,
-    directory: '',
-    title: null,
-  }
+  const perSessionState = perSessionStateRaw ?? EMPTY_SESSION_STATE
 
   const messages = perSessionState.messages
   const isStreaming = perSessionState.isStreaming

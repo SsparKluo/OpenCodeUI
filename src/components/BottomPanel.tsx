@@ -216,8 +216,8 @@ export const BottomPanel = memo(function BottomPanel({ directory }: BottomPanelP
       overlay={interaction.bottomPanelBehavior === 'overlay'}
       size={bottomPanelHeight}
       maxSize={layout.bottomPanel.maxHeight}
-      onSizeChange={layoutStore.setBottomPanelHeight}
-      onClose={layoutStore.closeBottomPanel}
+      onSizeChange={h => layoutStore.setBottomPanelHeight(h)}
+      onClose={() => layoutStore.closeBottomPanel()}
       className="pb-[var(--safe-area-inset-bottom)]"
     >
       <PanelContainer position="bottom" onNewTerminal={handleNewTerminal} onCloseTerminal={handleCloseTerminal}>
