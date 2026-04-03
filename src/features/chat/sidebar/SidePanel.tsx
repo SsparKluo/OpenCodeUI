@@ -632,6 +632,10 @@ export function SidePanel({
                   selectedSessionId={selectedSessionId}
                   expandedProjectIds={expandedRecentProjectIds}
                   onExpandedProjectIdsChange={setExpandedRecentProjectIds}
+                  onSelectProject={project => {
+                    if (currentDirectory && isSameDirectory(currentDirectory, project.worktree)) return
+                    setCurrentDirectory(project.worktree)
+                  }}
                   onSelectSession={handleSelectActive}
                   onRenameSession={handleRenameFolderSession}
                   onDeleteSession={handleDeleteFolderSession}

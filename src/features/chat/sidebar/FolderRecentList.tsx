@@ -30,6 +30,7 @@ interface FolderRecentListProps {
   selectedSessionId: string | null
   expandedProjectIds: string[]
   onExpandedProjectIdsChange: React.Dispatch<React.SetStateAction<string[]>>
+  onSelectProject: (project: FolderRecentProject) => void
   onSelectSession: (session: ApiSession) => void
   onRenameSession: (session: ApiSession, newTitle: string) => Promise<void>
   onDeleteSession: (session: ApiSession) => Promise<void>
@@ -70,6 +71,7 @@ export function FolderRecentList({
   selectedSessionId,
   expandedProjectIds,
   onExpandedProjectIdsChange,
+  onSelectProject,
   onSelectSession,
   onRenameSession,
   onDeleteSession,
@@ -388,6 +390,7 @@ export function FolderRecentList({
                 preferTouchUi={preferTouchUi}
                 showSessionDiffStats={sidebarFolderRecentsShowDiff}
                 selectedSessionId={selectedSessionId}
+                onSelectProject={() => onSelectProject(project)}
                 onToggle={() => handleToggleProject(project.id)}
                 onSelectSession={onSelectSession}
                 onRenameSession={onRenameSession}
@@ -447,6 +450,7 @@ interface FolderRecentSectionProps {
   preferTouchUi: boolean
   showSessionDiffStats: boolean
   selectedSessionId: string | null
+  onSelectProject: () => void
   onToggle: () => void
   onSelectSession: (session: ApiSession) => void
   onRenameSession: (session: ApiSession, newTitle: string) => Promise<void>
@@ -476,6 +480,7 @@ function FolderRecentSection({
   preferTouchUi,
   showSessionDiffStats,
   selectedSessionId,
+  onSelectProject,
   onToggle,
   onSelectSession,
   onRenameSession,
@@ -568,7 +573,10 @@ function FolderRecentSection({
 
         {/* 文件夹行 */}
         <button
-          onClick={onToggle}
+          onClick={() => {
+            onSelectProject()
+            onToggle()
+          }}
           className={`flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left transition-colors duration-150 hover:bg-bg-200/40 ${
             draggable || project.canReorder ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
           }`}
