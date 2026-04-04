@@ -263,7 +263,7 @@ function InputBoxComponent({
   }, [text, isCompact])
 
   // 计算
-  const inputDisabled = !!disabled || isSubmitting
+  const inputDisabled = !!disabled
   const canSend = (text.trim().length > 0 || attachments.length > 0) && !inputDisabled
 
   // ============================================
