@@ -467,6 +467,12 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
           : t('sessionChanges.noTurnChanges')
 
   const activeChangeModeMeta = changeModeMeta[changeMode]
+  const compactFileCountLabel = t('sessionChanges.fileCountCompact', { count: diffs.length })
+  const fullFileCountLabel = t('sessionChanges.fileCount', { count: diffs.length })
+  const statFadeMaskStyle = {
+    WebkitMaskImage: 'linear-gradient(to right, black 0, black calc(100% - 10px), transparent 100%)',
+    maskImage: 'linear-gradient(to right, black 0, black calc(100% - 10px), transparent 100%)',
+  } as const
 
   return (
     <div ref={containerRef} className="flex flex-col h-full">
@@ -483,18 +489,26 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
         }
       >
         {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-border-100 bg-bg-100/30 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="text-[10px] text-text-400 uppercase tracking-wider font-bold">
-              {t('sessionChanges.fileCount', { count: diffs.length })}
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-border-100 bg-bg-100/30 shrink-0 overflow-hidden">
+          <div className="min-w-0 flex flex-1 items-center gap-1.5 overflow-hidden whitespace-nowrap text-[10px] font-mono tabular-nums">
+            <span
+              className="min-w-0 max-w-[9ch] shrink overflow-hidden text-success-100"
+              title={`+${totalStats.additions}`}
+              style={statFadeMaskStyle}
+            >
+              +{totalStats.additions}
             </span>
-            <div className="flex items-center gap-2 text-[10px] font-mono">
-              <span className="text-success-100">+{totalStats.additions}</span>
+            <span
+              className="min-w-0 flex-1 overflow-hidden"
+              title={`-${totalStats.deletions} ${fullFileCountLabel}`}
+              style={statFadeMaskStyle}
+            >
               <span className="text-danger-100">-{totalStats.deletions}</span>
-            </div>
+              <span className="text-text-400"> {compactFileCountLabel}</span>
+            </span>
           </div>
 
-          <div className="ml-auto flex items-center gap-1 flex-wrap justify-end">
+          <div className="flex shrink-0 items-center gap-1">
             <button
               ref={changeMenuTriggerRef}
               type="button"
@@ -518,6 +532,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
               align="right"
               minWidth="170px"
               maxWidth="min(220px, calc(100vw - 24px))"
+              constrainToRef={containerRef}
               className="!rounded-lg !p-1"
             >
               <div ref={changeMenuRef} role="menu" aria-label={t('sessionChanges.mode')} className="space-y-px">
@@ -553,7 +568,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
             </DropdownMenu>
 
             {/* List Mode Toggle */}
-            <div className="flex items-center bg-bg-200/50 rounded overflow-hidden border border-border-200/50 mr-1">
+            <div className="flex shrink-0 items-center bg-bg-200/50 rounded overflow-hidden border border-border-200/50">
               <button
                 onClick={() => setListMode('flat')}
                 className={`px-2 py-0.5 text-[10px] transition-colors ${
@@ -575,7 +590,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
             </div>
 
             {/* View Mode Toggle */}
-            <div className="flex items-center bg-bg-200/50 rounded overflow-hidden border border-border-200/50">
+            <div className="flex shrink-0 items-center bg-bg-200/50 rounded overflow-hidden border border-border-200/50">
               <button
                 onClick={() => setViewMode('unified')}
                 className={`px-2 py-0.5 text-[10px] transition-colors ${

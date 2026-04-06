@@ -61,6 +61,7 @@
     "initializingGit": "Initializing...",
     "fileCount_one": "{{count}} file",
     "fileCount_other": "{{count}} files",
+    "fileCountCompact": "{{count}}f",
     "gitScope": "Git changes",
     "gitScopeHint": "Uncommitted files in the working tree",
     "branchScope": "Branch changes",

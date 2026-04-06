@@ -126,7 +126,7 @@ describe('SessionChangesPanel', () => {
     })
 
     expect(getSessionDiff).toHaveBeenCalledWith('session-1', '/repo')
-    expect(screen.getByText('2 files')).toBeInTheDocument()
+    expect(screen.getByText('2f')).toBeInTheDocument()
     expect(screen.getAllByText('+1').length).toBeGreaterThan(0)
     expect(screen.getAllByText('-1').length).toBeGreaterThan(0)
     expect(screen.getByTestId('diff-viewer')).toBeInTheDocument()
@@ -160,7 +160,7 @@ describe('SessionChangesPanel', () => {
 
     expect(getLastTurnDiff).toHaveBeenCalledWith('session-1', '/repo')
     expect(changeScopeStore.getMode('session-1')).toBe('turn')
-    expect(screen.getByText('1 file')).toBeInTheDocument()
+    expect(screen.getByText('1f')).toBeInTheDocument()
     expect(screen.getAllByText('turn.ts').length).toBeGreaterThan(0)
   })
 

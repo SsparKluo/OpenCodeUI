@@ -60,6 +60,7 @@
     "initGit": "初始化 Git 仓库",
     "initializingGit": "初始化中...",
     "fileCount_other": "{{count}} 个文件",
+    "fileCountCompact": "{{count}}f",
     "gitScope": "Git 变更",
     "gitScopeHint": "工作区里还没有提交的变更",
     "branchScope": "分支变更",
