@@ -15,6 +15,9 @@ import {
   TrashIcon,
   SearchIcon,
   ChevronDownIcon,
+  PencilIcon,
+  CheckIcon,
+  CloseIcon,
 } from '../../../components/Icons'
 import { useDirectory, useSessionStats, useKeybindingLabel } from '../../../hooks'
 import { useSessionContext } from '../../../contexts/useSessionContext'
@@ -90,6 +93,43 @@ export function SidePanel({
   const [projectsExpanded, setProjectsExpanded] = useState(false)
   const [sidebarTab, setSidebarTab] = useState<'recents' | 'active'>('recents')
   const [expandedRecentProjectIds, setExpandedRecentProjectIds] = useState<string[]>([])
+
+  // ---- 编辑模式状态 ----
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set())
+  const [selectedProjectIds, setSelectedProjectIds] = useState<Set<string>>(new Set())
+  // 批量删除确认弹窗
+  const [batchDeleteSessionConfirm, setBatchDeleteSessionConfirm] = useState(false)
+  const [batchRemoveProjectConfirm, setBatchRemoveProjectConfirm] = useState(false)
+  const [isBatchDeleting, setIsBatchDeleting] = useState(false)
+
+  const toggleSessionSelection = useCallback((sessionId: string) => {
+    setSelectedSessionIds(prev => {
+      const next = new Set(prev)
+      if (next.has(sessionId)) next.delete(sessionId)
+      else next.add(sessionId)
+      return next
+    })
+  }, [])
+
+  const toggleProjectSelection = useCallback((projectId: string) => {
+    setSelectedProjectIds(prev => {
+      const next = new Set(prev)
+      if (next.has(projectId)) next.delete(projectId)
+      else next.add(projectId)
+      return next
+    })
+  }, [])
+
+  const exitEditMode = useCallback(() => {
+    setIsEditMode(false)
+    setSelectedSessionIds(new Set())
+    setSelectedProjectIds(new Set())
+  }, [])
+
+  const enterEditMode = useCallback(() => {
+    setIsEditMode(true)
+  }, [])
 
   const showLabels = isExpanded || isMobile
   const newChatShortcut = useKeybindingLabel('newSession')
@@ -385,6 +425,51 @@ export function SidePanel({
     [currentDirectory, onNewSession, refresh, selectedSessionId],
   )
 
+  // ---- 批量删除 session ----
+  const handleBatchDeleteSessions = useCallback(async () => {
+    if (selectedSessionIds.size === 0) return
+    setIsBatchDeleting(true)
+
+    const needSwitchSession = selectedSessionId && selectedSessionIds.has(selectedSessionId)
+
+    // 文件夹模式下可能跨目录，需要按 session 逐个调用
+    // 普通模式下也用 sessionLookup 获取目录信息
+    const ids = Array.from(selectedSessionIds)
+    await Promise.allSettled(
+      ids.map(async id => {
+        try {
+          const s = sessionLookup.get(id)
+          if (s) {
+            await apiDeleteSession(id, s.directory)
+          } else {
+            await apiDeleteSession(id, currentDirectory)
+          }
+        } catch (e) {
+          uiErrorHandler('batch delete session', e)
+        }
+      }),
+    )
+
+    await refresh()
+    setSelectedSessionIds(new Set())
+    setBatchDeleteSessionConfirm(false)
+    setIsBatchDeleting(false)
+
+    if (needSwitchSession) {
+      onNewSession()
+    }
+  }, [selectedSessionIds, selectedSessionId, sessionLookup, currentDirectory, refresh, onNewSession])
+
+  // ---- 批量移除项目 ----
+  const handleBatchRemoveProjects = useCallback(() => {
+    if (selectedProjectIds.size === 0) return
+    for (const projectId of selectedProjectIds) {
+      removeDirectory(projectId)
+    }
+    setSelectedProjectIds(new Set())
+    setBatchRemoveProjectConfirm(false)
+  }, [selectedProjectIds, removeDirectory])
+
   useEffect(() => {
     let frameId: number | null = null
 
@@ -594,7 +679,10 @@ export function SidePanel({
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="flex items-center px-3 gap-1 shrink-0">
             <button
-              onClick={() => setSidebarTab('recents')}
+              onClick={() => {
+                setSidebarTab('recents')
+                if (sidebarTab !== 'recents') exitEditMode()
+              }}
               className={`px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider transition-colors duration-150 ${
                 sidebarTab === 'recents' ? 'text-text-100' : 'text-text-500 hover:text-text-300'
               }`}
@@ -602,7 +690,10 @@ export function SidePanel({
               {t('sidebar.recents')}
             </button>
             <button
-              onClick={() => setSidebarTab('active')}
+              onClick={() => {
+                setSidebarTab('active')
+                exitEditMode()
+              }}
               className={`px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider transition-colors duration-150 flex items-center gap-1.5 ${
                 sidebarTab === 'active' ? 'text-text-100' : 'text-text-500 hover:text-text-300'
               }`}
@@ -620,7 +711,51 @@ export function SidePanel({
                 </span>
               )}
             </button>
+            {/* 编辑按钮 — 只在 Recents tab 显示 */}
+            {sidebarTab === 'recents' && (
+              <button
+                onClick={isEditMode ? exitEditMode : enterEditMode}
+                className={`ml-auto p-1 rounded-md transition-colors duration-150 ${
+                  isEditMode
+                    ? 'text-accent-main-100 hover:bg-accent-main-100/10'
+                    : 'text-text-500 hover:text-text-300 hover:bg-bg-200/50'
+                }`}
+                title={isEditMode ? t('common:done') : t('common:edit')}
+              >
+                {isEditMode ? <CheckIcon size={14} /> : <PencilIcon size={14} />}
+              </button>
+            )}
           </div>
+
+          {/* 编辑模式批量操作条 */}
+          {isEditMode && sidebarTab === 'recents' && (
+            <div className="shrink-0 px-3 py-1.5 flex items-center gap-1.5 border-b border-border-200/30">
+              <span className="text-[10px] text-text-400 flex-1 min-w-0 truncate">
+                {selectedSessionIds.size > 0 && t('sidebar.selectedSessions', { count: selectedSessionIds.size })}
+                {selectedSessionIds.size > 0 && selectedProjectIds.size > 0 && ' / '}
+                {selectedProjectIds.size > 0 && t('sidebar.selectedProjects', { count: selectedProjectIds.size })}
+                {selectedSessionIds.size === 0 && selectedProjectIds.size === 0 && t('sidebar.selectItems')}
+              </span>
+              {selectedSessionIds.size > 0 && (
+                <button
+                  onClick={() => setBatchDeleteSessionConfirm(true)}
+                  className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium text-danger-100 bg-danger-100/10 hover:bg-danger-100/20 transition-colors"
+                >
+                  <TrashIcon size={11} />
+                  {t('sidebar.deleteSessions', { count: selectedSessionIds.size })}
+                </button>
+              )}
+              {selectedProjectIds.size > 0 && (
+                <button
+                  onClick={() => setBatchRemoveProjectConfirm(true)}
+                  className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium text-warning-100 bg-warning-100/10 hover:bg-warning-100/20 transition-colors"
+                >
+                  <CloseIcon size={11} />
+                  {t('sidebar.removeProjects', { count: selectedProjectIds.size })}
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Recents Tab */}
           {sidebarTab === 'recents' && (
@@ -643,6 +778,11 @@ export function SidePanel({
                   expandedChildSessionIds={expandedChildSessionIds}
                   inlineChildSessions={inlineChildSessions}
                   onSelectChildSession={handleSelectActive}
+                  isEditMode={isEditMode}
+                  selectedSessionIds={selectedSessionIds}
+                  selectedProjectIds={selectedProjectIds}
+                  onToggleSessionSelection={toggleSessionSelection}
+                  onToggleProjectSelection={toggleProjectSelection}
                 />
               ) : (
                 <SessionList
@@ -666,6 +806,9 @@ export function SidePanel({
                   expandedChildSessionIds={expandedChildSessionIds}
                   inlineChildSessions={inlineChildSessions}
                   onSelectChildSession={handleSelectActive}
+                  isEditMode={isEditMode}
+                  selectedSessionIds={selectedSessionIds}
+                  onToggleSessionSelection={toggleSessionSelection}
                 />
               )}
             </div>
@@ -782,6 +925,36 @@ export function SidePanel({
         description={t('sidebar.removeProjectConfirm')}
         confirmText={t('common:remove')}
         variant="danger"
+      />
+
+      {/* 批量删除会话确认弹窗 */}
+      <ConfirmDialog
+        isOpen={batchDeleteSessionConfirm}
+        onClose={() => setBatchDeleteSessionConfirm(false)}
+        onConfirm={handleBatchDeleteSessions}
+        title={t('sidebar.batchDeleteSessions', { count: selectedSessionIds.size })}
+        description={
+          <>
+            {t('sidebar.batchDeleteSessionsConfirm', { count: selectedSessionIds.size })}
+            {selectedSessionId && selectedSessionIds.has(selectedSessionId) && (
+              <div className="mt-2 text-xs text-warning-100">{t('sidebar.batchDeleteIncludesCurrent')}</div>
+            )}
+          </>
+        }
+        confirmText={t('common:delete')}
+        variant="danger"
+        isLoading={isBatchDeleting}
+      />
+
+      {/* 批量移除项目确认弹窗 */}
+      <ConfirmDialog
+        isOpen={batchRemoveProjectConfirm}
+        onClose={() => setBatchRemoveProjectConfirm(false)}
+        onConfirm={handleBatchRemoveProjects}
+        title={t('sidebar.batchRemoveProjects', { count: selectedProjectIds.size })}
+        description={t('sidebar.batchRemoveProjectsConfirm', { count: selectedProjectIds.size })}
+        confirmText={t('common:remove')}
+        variant="warning"
       />
     </div>
   )

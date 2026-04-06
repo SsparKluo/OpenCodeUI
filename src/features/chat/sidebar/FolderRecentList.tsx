@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ApiSession } from '../../../api'
-import { FolderIcon, FolderOpenIcon, GripVerticalIcon, SpinnerIcon } from '../../../components/Icons'
+import { FolderIcon, FolderOpenIcon, GripVerticalIcon, SpinnerIcon, CheckIcon } from '../../../components/Icons'
 import { ExpandableSection } from '../../../components/ui'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 import { useDelayedRender, useSessions } from '../../../hooks'
 import { useInputCapabilities } from '../../../hooks/useInputCapabilities'
-import { useIsMobile } from '../../../hooks/useIsMobile'
 import { useInView } from '../../../hooks/useInView'
 import { getDirectoryName, isSameDirectory } from '../../../utils'
 import { useLayoutStore } from '../../../store'
@@ -38,6 +37,12 @@ interface FolderRecentListProps {
   expandedChildSessionIds?: Set<string>
   inlineChildSessions?: Map<string, ApiSession[]>
   onSelectChildSession?: (session: ApiSession) => void
+  // ---- 编辑模式 ----
+  isEditMode?: boolean
+  selectedSessionIds?: Set<string>
+  selectedProjectIds?: Set<string>
+  onToggleSessionSelection?: (sessionId: string) => void
+  onToggleProjectSelection?: (projectId: string) => void
 }
 
 interface PendingDeleteSession {
@@ -51,9 +56,6 @@ interface FolderStatus {
   pulse: boolean
   count?: number
 }
-
-// 拖拽指示位置：上方 or 下方
-type DropPosition = 'above' | 'below' | null
 
 function getInitialExpandedProjectIds(projects: FolderRecentProject[], currentDirectory?: string): string[] {
   if (projects.length === 0) return []
@@ -79,29 +81,43 @@ export function FolderRecentList({
   expandedChildSessionIds,
   inlineChildSessions,
   onSelectChildSession,
+  isEditMode = false,
+  selectedSessionIds,
+  selectedProjectIds,
+  onToggleSessionSelection,
+  onToggleProjectSelection,
 }: FolderRecentListProps) {
   const { t } = useTranslation(['chat', 'common'])
-  const isMobile = useIsMobile()
   const { preferTouchUi } = useInputCapabilities()
   const { sidebarFolderRecentsShowDiff } = useLayoutStore()
   const [pendingDelete, setPendingDelete] = useState<PendingDeleteSession | null>(null)
   const allBusySessions = useBusySessions()
   const allNotifications = useNotifications()
 
-  // ---- 拖拽状态 ----
-  const [draggedId, setDraggedId] = useState<string | null>(null)
-  const [dropTarget, setDropTarget] = useState<{ id: string; position: DropPosition }>({ id: '', position: null })
-  // ref 作为拖拽 id 的真相源，避免回调闭包 stale state
+  // ---- 拖拽排序状态 ----
+  const [dragState, setDragState] = useState<{
+    draggedId: string // 正在拖拽的项目 id
+    currentOrder: string[] // 实时排序后的项目 id 列表
+  } | null>(null)
+  const folderRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const dragStartY = useRef(0)
+  const dragActive = useRef(false)
   const draggedIdRef = useRef<string | null>(null)
-  // 拖拽开始前保存展开状态，结束后恢复
   const savedExpandedRef = useRef<string[] | null>(null)
-
-  // ---- 移动端触摸拖拽 ----
-  const [touchDragId, setTouchDragId] = useState<string | null>(null)
+  /** 拖拽过程中持续更新的最终顺序，onUp 时读取 */
+  const latestOrderRef = useRef<string[]>([])
+  // 移动端长按
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const touchMovedRef = useRef(false)
-  const touchStartY = useRef(0)
-  const folderRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const touchStartYRef = useRef(0)
+  const touchDragIdRef = useRef<string | null>(null)
+  // 拖拽时用的项目 id 顺序（拖拽中实时排列，非拖拽时用 projects 原序）
+  const displayOrder = useMemo(() => {
+    if (!dragState) return projects.map(p => p.id)
+    return dragState.currentOrder
+  }, [dragState, projects])
+
+  const isDragging = !!dragState
 
   // 当 projects 列表变化时，过滤掉已不存在的展开项
   useEffect(() => {
@@ -137,54 +153,92 @@ export function FolderRecentList({
   )
 
   // ============================================
-  // 桌面端拖拽 (pointer 事件驱动)
+  // 统一拖拽逻辑 (pointer 事件，桌面 + 触摸通用)
   // ============================================
 
-  /** pointer 拖拽起始坐标，用于判断移动阈值 */
-  const pointerStartPos = useRef({ x: 0, y: 0 })
-  /** 是否已越过拖拽阈值 */
-  const pointerDragActive = useRef(false)
+  const calcNewOrder = useCallback((dragId: string, pointerY: number, baseOrder: string[]) => {
+    const items: { id: string; centerY: number }[] = []
+    for (const id of baseOrder) {
+      if (id === dragId) continue
+      const el = folderRefs.current.get(id)
+      if (!el) continue
+      const rect = el.getBoundingClientRect()
+      items.push({ id, centerY: rect.top + rect.height / 2 })
+    }
 
-  const startPointerDrag = useCallback(
+    let insertIndex = items.length
+    for (let i = 0; i < items.length; i++) {
+      if (pointerY < items[i].centerY) {
+        insertIndex = i
+        break
+      }
+    }
+
+    const withoutDragged = items.map(i => i.id)
+    withoutDragged.splice(insertIndex, 0, dragId)
+    return withoutDragged
+  }, [])
+
+  /** 提交最终排序并清理状态（桌面/移动端共用） */
+  const commitDrag = useCallback(
+    (projectId: string, originalOrder: string[]) => {
+      const finalOrder = latestOrderRef.current
+      const originalIdx = originalOrder.indexOf(projectId)
+      const newIdx = finalOrder.indexOf(projectId)
+
+      if (originalIdx !== newIdx && newIdx !== -1) {
+        const targetId = originalOrder[newIdx]
+        if (targetId) {
+          const draggedProj = projects.find(p => p.id === projectId)
+          const targetProj = projects.find(p => p.id === targetId)
+          if (draggedProj?.canReorder && targetProj?.canReorder) {
+            onReorderProject(draggedProj.worktree, targetProj.worktree)
+          }
+        }
+      }
+
+      setDragState(null)
+      if (savedExpandedRef.current) {
+        onExpandedProjectIdsChange(savedExpandedRef.current)
+        savedExpandedRef.current = null
+      }
+      dragActive.current = false
+      draggedIdRef.current = null
+      latestOrderRef.current = []
+    },
+    [projects, onReorderProject, onExpandedProjectIdsChange],
+  )
+
+  const startDrag = useCallback(
     (projectId: string, e: React.PointerEvent) => {
       const project = projects.find(p => p.id === projectId)
       if (!project?.canReorder) return
 
       e.preventDefault()
-      pointerStartPos.current = { x: e.clientX, y: e.clientY }
-      pointerDragActive.current = false
+      e.stopPropagation()
+      dragStartY.current = e.clientY
+      dragActive.current = false
+      draggedIdRef.current = projectId
+
+      const currentOrder = projects.map(p => p.id)
 
       const onMove = (moveEvent: PointerEvent) => {
-        const dx = moveEvent.clientX - pointerStartPos.current.x
-        const dy = moveEvent.clientY - pointerStartPos.current.y
-        const distance = Math.sqrt(dx * dx + dy * dy)
+        const dy = Math.abs(moveEvent.clientY - dragStartY.current)
 
-        // 移动阈值 6px，超过才进入拖拽模式
-        if (!pointerDragActive.current) {
-          if (distance < 6) return
-          pointerDragActive.current = true
-          draggedIdRef.current = projectId
-          setDraggedId(projectId)
+        if (!dragActive.current) {
+          if (dy < 4) return
+          dragActive.current = true
           savedExpandedRef.current = expandedProjectIds
           onExpandedProjectIdsChange([])
           document.body.style.cursor = 'grabbing'
           document.body.style.userSelect = 'none'
+          setDragState({ draggedId: projectId, currentOrder })
         }
 
-        // 查找 pointer 下方的文件夹
-        const pointerY = moveEvent.clientY
-        let foundTarget: { id: string; position: DropPosition } = { id: '', position: null }
-
-        for (const [id, el] of folderRefs.current.entries()) {
-          if (id === projectId) continue
-          const rect = el.getBoundingClientRect()
-          if (pointerY >= rect.top && pointerY <= rect.bottom) {
-            const midY = rect.top + rect.height / 2
-            foundTarget = { id, position: pointerY < midY ? 'above' : 'below' }
-            break
-          }
-        }
-        setDropTarget(foundTarget)
+        // 实时计算新排序
+        const newOrder = calcNewOrder(projectId, moveEvent.clientY, currentOrder)
+        latestOrderRef.current = newOrder
+        setDragState(prev => (prev ? { ...prev, currentOrder: newOrder } : null))
       }
 
       const onUp = () => {
@@ -194,42 +248,23 @@ export function FolderRecentList({
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
 
-        if (pointerDragActive.current) {
-          // 完成拖拽
-          setDropTarget(prev => {
-            const currentDragged = draggedIdRef.current
-            if (currentDragged && prev.id && prev.id !== currentDragged) {
-              const draggedProj = projects.find(p => p.id === currentDragged)
-              const targetProj = projects.find(p => p.id === prev.id)
-              if (draggedProj?.canReorder && targetProj?.canReorder) {
-                onReorderProject(draggedProj.worktree, targetProj.worktree)
-              }
-            }
-            return { id: '', position: null }
-          })
-
-          // 恢复展开状态
-          if (savedExpandedRef.current) {
-            onExpandedProjectIdsChange(savedExpandedRef.current)
-            savedExpandedRef.current = null
-          }
-          draggedIdRef.current = null
-          setDraggedId(null)
+        if (dragActive.current) {
+          commitDrag(projectId, currentOrder)
         }
-        pointerDragActive.current = false
+        dragActive.current = false
+        draggedIdRef.current = null
       }
 
       document.addEventListener('pointermove', onMove)
       document.addEventListener('pointerup', onUp)
       document.addEventListener('pointercancel', onUp)
     },
-    [projects, expandedProjectIds, onExpandedProjectIdsChange, onReorderProject],
+    [projects, expandedProjectIds, onExpandedProjectIdsChange, calcNewOrder, commitDrag],
   )
 
   // ============================================
-  // 移动端触摸拖拽
+  // 移动端触摸拖拽（长按触发）
   // ============================================
-  const touchDragIdRef = useRef<string | null>(null)
 
   const handleTouchStart = useCallback(
     (projectId: string, e: React.TouchEvent) => {
@@ -237,47 +272,49 @@ export function FolderRecentList({
       if (!project?.canReorder) return
 
       touchMovedRef.current = false
-      touchStartY.current = e.touches[0].clientY
+      touchStartYRef.current = e.touches[0].clientY
+      touchDragIdRef.current = null
 
       longPressTimer.current = setTimeout(() => {
         if (!touchMovedRef.current) {
-          // 触发拖拽模式
+          touchDragIdRef.current = projectId
+          draggedIdRef.current = projectId
+          dragActive.current = true
           savedExpandedRef.current = expandedProjectIds
           onExpandedProjectIdsChange([])
-          touchDragIdRef.current = projectId
-          setTouchDragId(projectId)
+          const currentOrder = projects.map(p => p.id)
+          latestOrderRef.current = currentOrder
+          setDragState({ draggedId: projectId, currentOrder })
         }
       }, 400)
     },
     [projects, expandedProjectIds, onExpandedProjectIdsChange],
   )
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    const dy = Math.abs(e.touches[0].clientY - touchStartY.current)
-    if (dy > 8) touchMovedRef.current = true
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      const dy = Math.abs(e.touches[0].clientY - touchStartYRef.current)
+      if (dy > 8) touchMovedRef.current = true
 
-    if (longPressTimer.current && touchMovedRef.current && !touchDragIdRef.current) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
-    }
-
-    if (!touchDragIdRef.current) return
-
-    // 找到手指下方的文件夹
-    const touchY = e.touches[0].clientY
-    let foundTarget: { id: string; position: DropPosition } = { id: '', position: null }
-
-    for (const [id, el] of folderRefs.current.entries()) {
-      if (id === touchDragIdRef.current) continue
-      const rect = el.getBoundingClientRect()
-      if (touchY >= rect.top && touchY <= rect.bottom) {
-        const midY = rect.top + rect.height / 2
-        foundTarget = { id, position: touchY < midY ? 'above' : 'below' }
-        break
+      // 长按计时中但还没激活拖拽，手指移动了就取消长按
+      if (longPressTimer.current && touchMovedRef.current && !touchDragIdRef.current) {
+        clearTimeout(longPressTimer.current)
+        longPressTimer.current = null
       }
-    }
-    setDropTarget(foundTarget)
-  }, [])
+
+      if (!touchDragIdRef.current) return
+
+      // 拖拽进行中：阻止冒泡，避免侧边栏被左右滑动关闭
+      e.stopPropagation()
+
+      const touchY = e.touches[0].clientY
+      const currentOrder = projects.map(p => p.id)
+      const newOrder = calcNewOrder(touchDragIdRef.current, touchY, currentOrder)
+      latestOrderRef.current = newOrder
+      setDragState(prev => (prev ? { ...prev, currentOrder: newOrder } : null))
+    },
+    [projects, calcNewOrder],
+  )
 
   const handleTouchEnd = useCallback(() => {
     if (longPressTimer.current) {
@@ -285,29 +322,14 @@ export function FolderRecentList({
       longPressTimer.current = null
     }
 
-    const currentTouchDrag = touchDragIdRef.current
-    if (currentTouchDrag) {
-      // 读取最新的 dropTarget
-      setDropTarget(prev => {
-        if (prev.id && prev.id !== currentTouchDrag) {
-          const draggedProject = projects.find(p => p.id === currentTouchDrag)
-          const targetProject = projects.find(p => p.id === prev.id)
-          if (draggedProject?.canReorder && targetProject?.canReorder) {
-            onReorderProject(draggedProject.worktree, targetProject.worktree)
-          }
-        }
-        return { id: '', position: null }
-      })
+    const dragId = touchDragIdRef.current
+    if (dragId) {
+      const originalOrder = projects.map(p => p.id)
+      commitDrag(dragId, originalOrder)
     }
 
-    // 恢复展开状态
-    if (savedExpandedRef.current) {
-      onExpandedProjectIdsChange(savedExpandedRef.current)
-      savedExpandedRef.current = null
-    }
     touchDragIdRef.current = null
-    setTouchDragId(null)
-  }, [projects, onReorderProject, onExpandedProjectIdsChange])
+  }, [projects, commitDrag])
 
   // 清理长按定时器
   useEffect(() => {
@@ -315,9 +337,6 @@ export function FolderRecentList({
       if (longPressTimer.current) clearTimeout(longPressTimer.current)
     }
   }, [])
-
-  const activeDragId = draggedId || touchDragId
-  const isDragging = !!activeDragId
 
   const folderStatusByProjectId = useMemo(() => {
     const map = new Map<string, FolderStatus>()
@@ -405,37 +424,46 @@ export function FolderRecentList({
           </div>
         ) : (
           <div onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
-            {projects.map(project => (
-              <FolderRecentSection
-                key={project.id}
-                project={project}
-                isExpanded={!isDragging && expandedProjectIds.includes(project.id)}
-                folderStatus={folderStatusByProjectId.get(project.id) ?? null}
-                preferTouchUi={preferTouchUi}
-                showSessionDiffStats={sidebarFolderRecentsShowDiff}
-                selectedSessionId={selectedSessionId}
-                onSelectProject={() => onSelectProject(project)}
-                onToggle={() => handleToggleProject(project.id)}
-                onSelectSession={onSelectSession}
-                onRenameSession={onRenameSession}
-                onRequestDeleteSession={setPendingDelete}
-                expandedChildSessionIds={expandedChildSessionIds}
-                inlineChildSessions={inlineChildSessions}
-                onSelectChildSession={onSelectChildSession}
-                // 桌面拖拽 (pointer 驱动)
-                canDrag={!!project.canReorder && !isMobile}
-                isDragged={activeDragId === project.id}
-                dropPosition={dropTarget.id === project.id && activeDragId !== project.id ? dropTarget.position : null}
-                onHandlePointerDown={e => startPointerDrag(project.id, e)}
-                // 移动端拖拽
-                isTouchDragging={touchDragId === project.id}
-                onTouchDragStart={e => handleTouchStart(project.id, e)}
-                registerRef={el => {
-                  if (el) folderRefs.current.set(project.id, el)
-                  else folderRefs.current.delete(project.id)
-                }}
-              />
-            ))}
+            {displayOrder.map(projectId => {
+              const project = projects.find(p => p.id === projectId)
+              if (!project) return null
+              return (
+                <FolderRecentSection
+                  key={project.id}
+                  project={project}
+                  isExpanded={!isDragging && expandedProjectIds.includes(project.id)}
+                  folderStatus={folderStatusByProjectId.get(project.id) ?? null}
+                  preferTouchUi={preferTouchUi}
+                  showSessionDiffStats={sidebarFolderRecentsShowDiff}
+                  selectedSessionId={selectedSessionId}
+                  onSelectProject={() => onSelectProject(project)}
+                  onToggle={() => handleToggleProject(project.id)}
+                  onSelectSession={onSelectSession}
+                  onRenameSession={onRenameSession}
+                  onRequestDeleteSession={setPendingDelete}
+                  expandedChildSessionIds={expandedChildSessionIds}
+                  inlineChildSessions={inlineChildSessions}
+                  onSelectChildSession={onSelectChildSession}
+                  // 拖拽
+                  canDrag={!!project.canReorder && !isEditMode}
+                  isDragged={dragState?.draggedId === project.id}
+                  onDragStart={e => startDrag(project.id, e)}
+                  onTouchDragStart={e => handleTouchStart(project.id, e)}
+                  registerRef={el => {
+                    if (el) folderRefs.current.set(project.id, el)
+                    else folderRefs.current.delete(project.id)
+                  }}
+                  // 编辑模式
+                  isEditMode={isEditMode}
+                  isProjectChecked={selectedProjectIds?.has(project.id)}
+                  onToggleProjectCheck={
+                    onToggleProjectSelection ? () => onToggleProjectSelection(project.id) : undefined
+                  }
+                  selectedSessionIds={selectedSessionIds}
+                  onToggleSessionSelection={onToggleSessionSelection}
+                />
+              )
+            })}
           </div>
         )}
       </div>
@@ -478,15 +506,18 @@ interface FolderRecentSectionProps {
   expandedChildSessionIds?: Set<string>
   inlineChildSessions?: Map<string, ApiSession[]>
   onSelectChildSession?: (session: ApiSession) => void
-  // 桌面拖拽 (pointer 驱动)
+  // 拖拽
   canDrag: boolean
   isDragged: boolean
-  dropPosition: DropPosition
-  onHandlePointerDown: (e: React.PointerEvent) => void
-  // 移动端拖拽
-  isTouchDragging: boolean
+  onDragStart: (e: React.PointerEvent) => void
   onTouchDragStart: (e: React.TouchEvent) => void
   registerRef: (el: HTMLDivElement | null) => void
+  // ---- 编辑模式 ----
+  isEditMode?: boolean
+  isProjectChecked?: boolean
+  onToggleProjectCheck?: () => void
+  selectedSessionIds?: Set<string>
+  onToggleSessionSelection?: (sessionId: string) => void
 }
 
 function FolderRecentSection({
@@ -506,11 +537,14 @@ function FolderRecentSection({
   onSelectChildSession,
   canDrag,
   isDragged,
-  dropPosition,
-  onHandlePointerDown,
-  isTouchDragging,
+  onDragStart,
   onTouchDragStart,
   registerRef,
+  isEditMode = false,
+  isProjectChecked = false,
+  onToggleProjectCheck,
+  selectedSessionIds,
+  onToggleSessionSelection,
 }: FolderRecentSectionProps) {
   const { t } = useTranslation(['chat', 'common'])
   const { ref: inViewRef, inView } = useInView({ rootMargin: '200px 0px', triggerOnce: true })
@@ -554,40 +588,44 @@ function FolderRecentSection({
 
   const projectName = project.name || getDirectoryName(project.worktree) || project.worktree
   const FolderDisplayIcon = isExpanded ? FolderOpenIcon : FolderIcon
-  const isBeingDragged = isDragged || isTouchDragging
 
   return (
     <div ref={inViewRef}>
       <div
         ref={registerRef}
-        onTouchStart={onTouchDragStart}
-        className={`relative transition-all duration-150 group/folder ${isBeingDragged ? 'opacity-30 scale-95' : ''}`}
+        onTouchStart={canDrag ? onTouchDragStart : undefined}
+        className={`relative transition-all duration-150 group/folder ${
+          isDragged
+            ? 'z-10 scale-[1.02] shadow-lg shadow-black/20 ring-1 ring-accent-main-100/30 rounded-md bg-bg-100'
+            : ''
+        }`}
       >
-        {/* 拖拽指示线 — 上方 */}
-        <div
-          className={`absolute left-2 right-2 top-0 h-0.5 rounded-full bg-accent-main-100 transition-opacity duration-100 ${
-            dropPosition === 'above' ? 'opacity-100' : 'opacity-0'
-          }`}
-        />
-
         {/* 文件夹行 */}
-        <div className="flex w-full items-center rounded-md hover:bg-bg-200/40 transition-colors duration-150">
-          {/* 拖拽把手 */}
-          {canDrag && (
+        <div
+          className={`relative flex w-full items-center rounded-md hover:bg-bg-200/40 transition-colors duration-150 ${
+            isEditMode && isProjectChecked ? 'bg-accent-main-100/10 ring-1 ring-accent-main-100/30' : ''
+          }`}
+        >
+          {/* 编辑模式：项目 checkbox */}
+          {isEditMode && (
             <span
-              onPointerDown={onHandlePointerDown}
-              className="flex items-center justify-center w-5 shrink-0 cursor-grab active:cursor-grabbing text-text-500 opacity-0 hover:opacity-100 group-hover/folder:opacity-60 transition-opacity touch-none"
-              title={t('sidebar.dragToReorder', { defaultValue: 'Drag to reorder' })}
+              onClick={e => {
+                e.stopPropagation()
+                onToggleProjectCheck?.()
+              }}
+              className={`shrink-0 flex items-center justify-center w-3.5 h-3.5 ml-2 rounded border cursor-default transition-colors ${
+                isProjectChecked ? 'bg-accent-main-100 border-accent-main-100' : 'border-text-500 hover:border-text-300'
+              }`}
             >
-              <GripVerticalIcon size={12} />
+              {isProjectChecked && <CheckIcon size={10} className="text-white" />}
             </span>
           )}
           <button
             onClick={() => {
-              onSelectProject()
+              if (!isEditMode) onSelectProject()
               onToggle()
             }}
-            className={`flex flex-1 min-w-0 items-center gap-1.5 ${canDrag ? 'pl-0' : 'pl-2'} pr-2 py-1.5 text-left cursor-default`}
+            className={`flex flex-1 min-w-0 items-center gap-1.5 ${isEditMode ? 'pl-1.5' : 'pl-2'} pr-2 py-1.5 text-left cursor-default`}
             title={project.worktree}
           >
             <FolderDisplayIcon size={15} className="shrink-0 text-text-400" />
@@ -604,14 +642,17 @@ function FolderRecentSection({
               </span>
             )}
           </button>
+          {/* 拖拽把手 — 默认 w-0 隐藏，hover 时 w-5 展开挤压圆点 */}
+          {canDrag && (
+            <span
+              onPointerDown={onDragStart}
+              className="shrink-0 flex items-center justify-center w-0 group-hover/folder:w-5 overflow-hidden cursor-grab active:cursor-grabbing text-text-500 opacity-0 group-hover/folder:opacity-60 hover:!opacity-100 transition-all duration-150 touch-none"
+              title={t('sidebar.dragToReorder', { defaultValue: 'Drag to reorder' })}
+            >
+              <GripVerticalIcon size={12} />
+            </span>
+          )}
         </div>
-
-        {/* 拖拽指示线 — 下方 */}
-        <div
-          className={`absolute left-2 right-2 bottom-0 h-0.5 rounded-full bg-accent-main-100 transition-opacity duration-100 ${
-            dropPosition === 'below' ? 'opacity-100' : 'opacity-0'
-          }`}
-        />
 
         {/* Session 列表 */}
         <ExpandableSection show={isExpanded}>
@@ -637,6 +678,11 @@ function FolderRecentSection({
                         density="minimal"
                         showStats={showSessionDiffStats}
                         showDirectory={false}
+                        isEditMode={isEditMode}
+                        isChecked={selectedSessionIds?.has(session.id)}
+                        onToggleCheck={
+                          onToggleSessionSelection ? () => onToggleSessionSelection(session.id) : undefined
+                        }
                       />
                       {onSelectChildSession &&
                         (expandedChildSessionIds?.has(session.id) || inlineChildSessions?.has(session.id)) && (
@@ -646,6 +692,9 @@ function FolderRecentSection({
                             fetchAll={expandedChildSessionIds?.has(session.id)}
                             children={inlineChildSessions?.get(session.id)}
                             onSelect={onSelectChildSession}
+                            isEditMode={isEditMode}
+                            selectedSessionIds={selectedSessionIds}
+                            onToggleSessionSelection={onToggleSessionSelection}
                           />
                         )}
                     </div>

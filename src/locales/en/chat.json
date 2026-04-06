@@ -145,7 +145,17 @@
     "moveFolderUp": "Move folder up",
     "moveFolderDown": "Move folder down",
     "noChatsInFolder": "No chats in this folder",
-    "showMoreChats": "Show more chats"
+    "showMoreChats": "Show more chats",
+    "selectedSessions": "{{count}} session(s) selected",
+    "selectedProjects": "{{count}} project(s) selected",
+    "selectItems": "Select items to manage",
+    "deleteSessions": "Delete {{count}} session(s)",
+    "removeProjects": "Remove {{count}} project(s)",
+    "batchDeleteSessions": "Delete {{count}} Session(s)",
+    "batchDeleteSessionsConfirm": "Are you sure you want to delete {{count}} session(s)? This action cannot be undone.",
+    "batchDeleteIncludesCurrent": "The currently open session is included. It will switch to a new session after deletion.",
+    "batchRemoveProjects": "Remove {{count}} Project(s)",
+    "batchRemoveProjectsConfirm": "Remove {{count}} project(s) from the list? This only removes them from the sidebar — no sessions will be deleted and no files on disk will be affected."
   },
   "activeSession": {
     "awaitingPermission": "Awaiting Permission",

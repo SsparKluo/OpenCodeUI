@@ -19,6 +19,10 @@ interface SessionChildrenSlotProps {
   onSelect: (session: ApiSession) => void
   /** 删除子 session 后如果它正好被选中，通知外部切走 */
   onDeleteSelected?: () => void
+  // ---- 编辑模式 ----
+  isEditMode?: boolean
+  selectedSessionIds?: Set<string>
+  onToggleSessionSelection?: (sessionId: string) => void
 }
 
 export function SessionChildrenSlot({
@@ -28,6 +32,9 @@ export function SessionChildrenSlot({
   children: givenChildren,
   onSelect,
   onDeleteSelected,
+  isEditMode = false,
+  selectedSessionIds,
+  onToggleSessionSelection,
 }: SessionChildrenSlotProps) {
   const { t } = useTranslation(['chat', 'common'])
   const { preferTouchUi } = useInputCapabilities()
@@ -102,6 +109,9 @@ export function SessionChildrenSlot({
             density="minimal"
             showStats={false}
             showDirectory={false}
+            isEditMode={isEditMode}
+            isChecked={selectedSessionIds?.has(child.id)}
+            onToggleCheck={onToggleSessionSelection ? () => onToggleSessionSelection(child.id) : undefined}
           />
         ))
       )}
