@@ -5,8 +5,11 @@
 
 /**
  * VCS 信息
- * 后端 schema: { branch: string } (required)
+ * 后端 schema: { branch?: string, default_branch?: string }
  */
 export interface VcsInfo {
-  branch: string
+  branch?: string
+  default_branch?: string
 }
+
+export type VcsDiffMode = 'git' | 'branch'

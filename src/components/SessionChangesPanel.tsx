@@ -12,7 +12,8 @@ import { DiffViewer, type ViewMode } from './DiffViewer'
 import { FullscreenViewer, ViewModeSwitch } from './FullscreenViewer'
 import { getCurrentProject, initGitProject } from '../api/client'
 import { getLastTurnDiff, getSessionDiff } from '../api/session'
-import type { ApiProject, FileDiff } from '../api/types'
+import { getVcsDiff, getVcsInfo } from '../api/vcs'
+import type { ApiProject, FileDiff, VcsDiffMode, VcsInfo } from '../api/types'
 import { detectLanguage } from '../utils/languageUtils'
 import { sessionErrorHandler } from '../utils'
 import { PreviewTabsBar, type PreviewTabsBarItem } from './PreviewTabsBar'
@@ -21,6 +22,8 @@ import { useVerticalSplitResize } from '../hooks/useVerticalSplitResize'
 // 常量
 const MIN_LIST_HEIGHT = 80
 const MIN_PREVIEW_HEIGHT = 120
+
+type ChangeMode = 'git' | 'branch' | 'session' | 'turn'
 
 function reconcileDiffPreviewState(diffs: FileDiff[], openFiles: string[], activeFile: string | null) {
   const availableFiles = new Set(diffs.map(diff => diff.file))
@@ -64,16 +67,19 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
   })
 
   const [project, setProject] = useState<ApiProject | null>(null)
+  const [vcsInfo, setVcsInfo] = useState<VcsInfo | null>(null)
   const [projectLoading, setProjectLoading] = useState(false)
   const [initializingGit, setInitializingGit] = useState(false)
-  const [loadingScopes, setLoadingScopes] = useState({ session: false, turn: false })
-  const [loadedScopes, setLoadedScopes] = useState({ session: false, turn: false })
+  const [loadingModes, setLoadingModes] = useState({ git: false, branch: false, session: false, turn: false })
+  const [loadedModes, setLoadedModes] = useState({ git: false, branch: false, session: false, turn: false })
+  const [gitDiffs, setGitDiffs] = useState<FileDiff[]>([])
+  const [branchDiffs, setBranchDiffs] = useState<FileDiff[]>([])
   const [sessionDiffs, setSessionDiffs] = useState<FileDiff[]>([])
   const [turnDiffs, setTurnDiffs] = useState<FileDiff[]>([])
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('unified')
   const [listMode, setListMode] = useState<'flat' | 'tree'>('tree')
-  const [changeScope, setChangeScope] = useState<'session' | 'turn'>('session')
+  const [changeMode, setChangeMode] = useState<ChangeMode>('git')
 
   // 选中的文件（显示在预览区）
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
@@ -83,16 +89,34 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
 
   const projectRequestIdRef = useRef(0)
-  const diffRequestIdRef = useRef({ session: 0, turn: 0 })
+  const diffRequestIdRef = useRef({ git: 0, branch: 0, session: 0, turn: 0 })
   const openDiffFilesRef = useRef<string[]>([])
   const selectedFileRef = useRef<string | null>(null)
 
   const isAnyResizing = isPanelResizing || isResizing
+  const changeOptions = useMemo<ChangeMode[]>(() => {
+    const options: ChangeMode[] = []
+    if (project?.vcs) options.push('git')
+    if (project?.vcs && vcsInfo?.branch && vcsInfo?.default_branch && vcsInfo.branch !== vcsInfo.default_branch) {
+      options.push('branch')
+    }
+    if (project?.vcs) {
+      options.push('session', 'turn')
+    }
+    return options
+  }, [project?.vcs, vcsInfo?.branch, vcsInfo?.default_branch])
   const diffs = useMemo(
-    () => (changeScope === 'session' ? sessionDiffs : turnDiffs),
-    [changeScope, sessionDiffs, turnDiffs],
+    () =>
+      changeMode === 'git'
+        ? gitDiffs
+        : changeMode === 'branch'
+          ? branchDiffs
+          : changeMode === 'session'
+            ? sessionDiffs
+            : turnDiffs,
+    [branchDiffs, changeMode, gitDiffs, sessionDiffs, turnDiffs],
   )
-  const loading = projectLoading || initializingGit || loadingScopes[changeScope]
+  const loading = projectLoading || initializingGit || loadingModes[changeMode]
 
   useEffect(() => {
     openDiffFilesRef.current = openDiffFiles
@@ -113,11 +137,19 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
       const nextProject = await getCurrentProject(directory)
       if (requestId !== projectRequestIdRef.current) return null
       setProject(nextProject)
+      if (nextProject.vcs) {
+        const nextVcsInfo = await getVcsInfo(directory).catch(() => null)
+        if (requestId !== projectRequestIdRef.current) return null
+        setVcsInfo(nextVcsInfo)
+      } else {
+        setVcsInfo(null)
+      }
       return nextProject
     } catch (err) {
       if (requestId !== projectRequestIdRef.current) return null
       sessionErrorHandler('load current project', err)
       setProject(null)
+      setVcsInfo(null)
       setError(t('sessionChanges.failedToLoad'))
       return null
     } finally {
@@ -127,62 +159,82 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
     }
   }, [directory, sessionId, t])
 
-  const loadDiffScope = useCallback(
-    async (scope: 'session' | 'turn', options?: { force?: boolean; project?: ApiProject | null }) => {
+  const loadDiffMode = useCallback(
+    async (mode: ChangeMode, options?: { force?: boolean; project?: ApiProject | null }) => {
       const currentProject = options?.project ?? project
       if (!sessionId || !currentProject?.vcs) return
-      if (!options?.force && loadedScopes[scope]) return
+      if (!options?.force && loadedModes[mode]) return
 
-      const requestId = ++diffRequestIdRef.current[scope]
-      setLoadingScopes(prev => ({ ...prev, [scope]: true }))
+      const requestId = ++diffRequestIdRef.current[mode]
+      setLoadingModes(prev => ({ ...prev, [mode]: true }))
       setError(null)
 
       try {
-        const data =
-          scope === 'session' ? await getSessionDiff(sessionId, directory) : await getLastTurnDiff(sessionId, directory)
+        let data: FileDiff[]
+        if (mode === 'git' || mode === 'branch') {
+          data = await getVcsDiff(mode as VcsDiffMode, directory)
+        } else if (mode === 'session') {
+          data = await getSessionDiff(sessionId, directory)
+        } else {
+          data = await getLastTurnDiff(sessionId, directory)
+        }
 
-        if (requestId !== diffRequestIdRef.current[scope]) return
+        if (requestId !== diffRequestIdRef.current[mode]) return
 
-        if (scope === 'session') {
+        if (mode === 'git') {
+          setGitDiffs(data)
+        } else if (mode === 'branch') {
+          setBranchDiffs(data)
+        } else if (mode === 'session') {
           setSessionDiffs(data)
         } else {
           setTurnDiffs(data)
         }
 
-        setLoadedScopes(prev => ({ ...prev, [scope]: true }))
+        setLoadedModes(prev => ({ ...prev, [mode]: true }))
       } catch (err) {
-        if (requestId !== diffRequestIdRef.current[scope]) return
-        sessionErrorHandler(scope === 'session' ? 'load session diff' : 'load turn diff', err)
+        if (requestId !== diffRequestIdRef.current[mode]) return
+        sessionErrorHandler(`load ${mode} diff`, err)
         setError(t('sessionChanges.failedToLoad'))
       } finally {
-        if (requestId === diffRequestIdRef.current[scope]) {
-          setLoadingScopes(prev => ({ ...prev, [scope]: false }))
+        if (requestId === diffRequestIdRef.current[mode]) {
+          setLoadingModes(prev => ({ ...prev, [mode]: false }))
         }
       }
     },
-    [directory, loadedScopes, project, sessionId, t],
+    [directory, loadedModes, project, sessionId, t],
   )
 
   useEffect(() => {
     setProject(null)
+    setVcsInfo(null)
+    setGitDiffs([])
+    setBranchDiffs([])
     setSessionDiffs([])
     setTurnDiffs([])
-    setLoadedScopes({ session: false, turn: false })
-    setLoadingScopes({ session: false, turn: false })
+    setLoadedModes({ git: false, branch: false, session: false, turn: false })
+    setLoadingModes({ git: false, branch: false, session: false, turn: false })
     setError(null)
     setOpenDiffFiles([])
     setSelectedFile(null)
     setExpandedDirs(new Set())
-    setChangeScope('session')
+    setChangeMode('git')
     resetSplitHeight()
 
     void loadProjectState()
   }, [directory, sessionId, loadProjectState, resetSplitHeight])
 
   useEffect(() => {
+    if (changeOptions.length === 0) return
+    if (changeOptions.includes(changeMode)) return
+    setChangeMode(changeOptions[0])
+  }, [changeMode, changeOptions])
+
+  useEffect(() => {
     if (!project?.vcs) return
-    void loadDiffScope(changeScope)
-  }, [changeScope, loadDiffScope, project?.vcs])
+    if (!changeOptions.includes(changeMode)) return
+    void loadDiffMode(changeMode)
+  }, [changeMode, changeOptions, loadDiffMode, project?.vcs])
 
   useEffect(() => {
     setExpandedDirs(collectExpandedDirPaths(buildChangesTree(diffs)))
@@ -202,8 +254,8 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
   const handleRefresh = useCallback(async () => {
     const nextProject = await loadProjectState()
     if (!nextProject?.vcs) return
-    await loadDiffScope(changeScope, { force: true, project: nextProject })
-  }, [changeScope, loadDiffScope, loadProjectState])
+    await loadDiffMode(changeMode, { force: true, project: nextProject })
+  }, [changeMode, loadDiffMode, loadProjectState])
 
   const handleInitGit = useCallback(async () => {
     setInitializingGit(true)
@@ -212,18 +264,22 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
     try {
       const nextProject = await initGitProject(directory)
       setProject(nextProject)
+      setVcsInfo(null)
+      setGitDiffs([])
+      setBranchDiffs([])
       setSessionDiffs([])
       setTurnDiffs([])
-      setLoadedScopes({ session: false, turn: false })
-      setLoadingScopes({ session: false, turn: false })
-      setChangeScope('session')
+      setLoadedModes({ git: false, branch: false, session: false, turn: false })
+      setLoadingModes({ git: false, branch: false, session: false, turn: false })
+      setChangeMode('git')
+      void loadProjectState()
     } catch (err) {
       sessionErrorHandler('init git project', err)
       setError(t('sessionChanges.failedToInitGit'))
     } finally {
       setInitializingGit(false)
     }
-  }, [directory, t])
+  }, [directory, loadProjectState, t])
 
   // 选中文件
   const handleSelectFile = useCallback((file: string) => {
@@ -334,6 +390,22 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
     { additions: 0, deletions: 0 },
   )
 
+  const emptyText =
+    changeMode === 'git'
+      ? t('sessionChanges.noGitChanges')
+      : changeMode === 'branch'
+        ? t('sessionChanges.noBranchChanges')
+        : changeMode === 'session'
+          ? t('sessionChanges.noChanges')
+          : t('sessionChanges.noTurnChanges')
+
+  const modeLabel = (mode: ChangeMode) => {
+    if (mode === 'git') return t('sessionChanges.gitScope')
+    if (mode === 'branch') return t('sessionChanges.branchScope')
+    if (mode === 'session') return t('sessionChanges.sessionScope')
+    return t('sessionChanges.turnScope')
+  }
+
   return (
     <div ref={containerRef} className="flex flex-col h-full">
       {/* 文件列表区 */}
@@ -361,26 +433,18 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
           </div>
 
           <div className="flex items-center gap-1">
-            <div className="flex items-center bg-bg-200/50 rounded overflow-hidden border border-border-200/50 mr-1">
-              <button
-                onClick={() => setChangeScope('session')}
-                className={`px-2 py-0.5 text-[10px] transition-colors ${
-                  changeScope === 'session' ? 'bg-bg-000 text-text-100 shadow-sm' : 'text-text-400 hover:text-text-200'
-                }`}
-                title={t('sessionChanges.sessionScope')}
-              >
-                {t('sessionChanges.sessionScope')}
-              </button>
-              <button
-                onClick={() => setChangeScope('turn')}
-                className={`px-2 py-0.5 text-[10px] transition-colors ${
-                  changeScope === 'turn' ? 'bg-bg-000 text-text-100 shadow-sm' : 'text-text-400 hover:text-text-200'
-                }`}
-                title={t('sessionChanges.turnScope')}
-              >
-                {t('sessionChanges.turnScope')}
-              </button>
-            </div>
+            <select
+              value={changeMode}
+              onChange={event => setChangeMode(event.target.value as ChangeMode)}
+              aria-label={t('sessionChanges.mode')}
+              className="h-6 rounded border border-border-200/50 bg-bg-200/50 px-2 text-[10px] text-text-200 outline-none hover:border-border-200 mr-1"
+            >
+              {changeOptions.map(mode => (
+                <option key={mode} value={mode}>
+                  {modeLabel(mode)}
+                </option>
+              ))}
+            </select>
 
             {/* List Mode Toggle */}
             <div className="flex items-center bg-bg-200/50 rounded overflow-hidden border border-border-200/50 mr-1">
@@ -443,9 +507,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
           ) : error && diffs.length === 0 ? (
             <div className="p-4 text-center text-danger-100 text-xs">{error}</div>
           ) : diffs.length === 0 ? (
-            <div className="p-4 text-center text-text-400 text-xs">
-              {changeScope === 'session' ? t('sessionChanges.noChanges') : t('sessionChanges.noTurnChanges')}
-            </div>
+            <div className="p-4 text-center text-text-400 text-xs">{emptyText}</div>
           ) : (
             <div className="py-0.5">
               {listMode === 'tree'
