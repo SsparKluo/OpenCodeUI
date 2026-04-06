@@ -19,12 +19,13 @@ import { sessionErrorHandler } from '../utils'
 import { PreviewTabsBar, type PreviewTabsBarItem } from './PreviewTabsBar'
 import { useVerticalSplitResize } from '../hooks/useVerticalSplitResize'
 import { DropdownMenu } from './ui'
+import { changeScopeStore, useSessionChangeScope, type ChangeScopeMode } from '../store/changeScopeStore'
 
 // 常量
 const MIN_LIST_HEIGHT = 80
 const MIN_PREVIEW_HEIGHT = 120
 
-type ChangeMode = 'git' | 'branch' | 'session' | 'turn'
+type ChangeMode = ChangeScopeMode
 
 function getDefaultChangeMode(options: ChangeMode[]) {
   if (options.includes('session')) return 'session'
@@ -88,8 +89,8 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('unified')
   const [listMode, setListMode] = useState<'flat' | 'tree'>('tree')
-  const [changeMode, setChangeMode] = useState<ChangeMode>('session')
   const [changeMenuOpen, setChangeMenuOpen] = useState(false)
+  const changeMode = useSessionChangeScope(sessionId)
 
   // 选中的文件（显示在预览区）
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
@@ -106,6 +107,12 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
   const changeMenuRef = useRef<HTMLDivElement>(null)
 
   const isAnyResizing = isPanelResizing || isResizing
+  const setChangeMode = useCallback(
+    (mode: ChangeMode) => {
+      changeScopeStore.setMode(sessionId, mode)
+    },
+    [sessionId],
+  )
   const changeOptions = useMemo<ChangeMode[]>(() => {
     const options: ChangeMode[] = []
     if (project?.vcs) options.push('session', 'turn', 'git')
@@ -278,7 +285,6 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
     setOpenDiffFiles([])
     setSelectedFile(null)
     setExpandedDirs(new Set())
-    setChangeMode('session')
     setChangeMenuOpen(false)
     resetSplitHeight()
 
@@ -332,7 +338,6 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
       setTurnDiffs([])
       setLoadedModes({ git: false, branch: false, session: false, turn: false })
       setLoadingModes({ git: false, branch: false, session: false, turn: false })
-      setChangeMode('session')
       setChangeMenuOpen(false)
       void loadProjectState()
     } catch (err) {

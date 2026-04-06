@@ -5,8 +5,9 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { listDirectory, getFileContent, getFileStatus, getSessionDiff } from '../api'
+import { listDirectory, getFileContent, getFileStatus, getSessionDiff, getLastTurnDiff, getVcsDiff } from '../api'
 import type { FileNode, FileContent, FileStatusItem, FileDiff } from '../api/types'
+import { useSessionChangeScope } from '../store/changeScopeStore'
 
 export interface FileTreeNode extends FileNode {
   children?: FileTreeNode[]
@@ -50,6 +51,7 @@ export interface UseFileExplorerResult {
 export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileExplorerResult {
   const { directory, autoLoad = true, sessionId } = options
   const { t } = useTranslation(['components'])
+  const changeMode = useSessionChangeScope(sessionId ?? null)
 
   // 文件树状态
   const [tree, setTree] = useState<FileTreeNode[]>([])
@@ -71,6 +73,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
 
   // 用于防止过时请求
   const loadIdRef = useRef(0)
+  const statusLoadIdRef = useRef(0)
 
   // 加载根目录
   const loadRoot = useCallback(async () => {
@@ -89,53 +92,6 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
       // 排序：目录在前，文件在后，按名称排序
       const sorted = sortNodes(nodes)
       setTree(sorted.map(n => ({ ...n, children: n.type === 'directory' ? undefined : undefined })))
-
-      // 同时加载文件状态（session diffs 为主，git status 为辅）
-      const statusMap = new Map<string, FileStatusItem>()
-
-      // 1. 先加载 git status（路径可能包含 ../ 等前缀，需要规范化）
-      try {
-        const status = await getFileStatus(directory)
-        if (loadId === loadIdRef.current) {
-          status.forEach(s => {
-            // 规范化路径：统一分隔符为 /，去掉 ../ 前缀
-            const normalized = normalizePath(s.path)
-            // 跳过包含 ../ 的路径（文件在当前目录之外）
-            if (!normalized.startsWith('../')) {
-              statusMap.set(normalized, { ...s, path: normalized })
-            }
-          })
-        }
-      } catch {
-        // 忽略文件状态加载失败
-      }
-
-      // 2. 再加载 session diffs（优先级更高，会覆盖 git status）
-      if (sessionId) {
-        try {
-          const diffs = await getSessionDiff(sessionId)
-          if (loadId === loadIdRef.current) {
-            diffs.forEach(diff => {
-              const status = getFileStatusFromDiff(diff)
-              const normalized = normalizePath(diff.file)
-              statusMap.set(normalized, {
-                path: normalized,
-                added: diff.additions,
-                removed: diff.deletions,
-                status,
-              })
-            })
-          }
-        } catch {
-          // 忽略 session diff 加载失败
-        }
-      }
-
-      if (loadId === loadIdRef.current) {
-        // 从文件状态推算所有父目录的累积状态
-        computeDirectoryStatus(statusMap)
-        setFileStatus(statusMap)
-      }
     } catch (e) {
       if (loadId === loadIdRef.current) {
         setError(e instanceof Error ? e.message : t('fileExplorer.failedToLoadFiles'))
@@ -145,7 +101,55 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
         setIsLoading(false)
       }
     }
-  }, [directory, sessionId, t])
+  }, [directory, t])
+
+  const loadStatuses = useCallback(async () => {
+    if (!directory) {
+      setFileStatus(new Map())
+      return
+    }
+
+    const loadId = ++statusLoadIdRef.current
+    const statusMap = new Map<string, FileStatusItem>()
+
+    try {
+      if (!sessionId) {
+        const status = await getFileStatus(directory)
+        if (loadId !== statusLoadIdRef.current) return
+
+        status.forEach(item => {
+          const normalized = normalizePath(item.path)
+          if (normalized.startsWith('../')) return
+          statusMap.set(normalized, { ...item, path: normalized })
+        })
+      } else {
+        const diffs =
+          changeMode === 'git' || changeMode === 'branch'
+            ? await getVcsDiff(changeMode, directory)
+            : changeMode === 'turn'
+              ? await getLastTurnDiff(sessionId, directory)
+              : await getSessionDiff(sessionId, directory)
+
+        if (loadId !== statusLoadIdRef.current) return
+
+        diffs.forEach(diff => {
+          const normalized = normalizePath(diff.file)
+          statusMap.set(normalized, {
+            path: normalized,
+            added: diff.additions,
+            removed: diff.deletions,
+            status: getFileStatusFromDiff(diff),
+          })
+        })
+      }
+
+      computeDirectoryStatus(statusMap)
+      setFileStatus(statusMap)
+    } catch {
+      if (loadId !== statusLoadIdRef.current) return
+      setFileStatus(new Map())
+    }
+  }, [changeMode, directory, sessionId])
 
   // 加载子目录
   const loadChildren = useCallback(
@@ -279,8 +283,8 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
     setExpandedPaths(new Set())
     previewCacheRef.current.clear()
     setPreviewContent(null)
-    await loadRoot()
-  }, [loadRoot])
+    await Promise.all([loadRoot(), loadStatuses()])
+  }, [loadRoot, loadStatuses])
 
   // 初始加载
   useEffect(() => {
@@ -288,6 +292,12 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
       loadRoot()
     }
   }, [autoLoad, directory, loadRoot])
+
+  useEffect(() => {
+    if (autoLoad && directory) {
+      loadStatuses()
+    }
+  }, [autoLoad, directory, loadStatuses])
 
   useEffect(() => {
     previewCacheRef.current.clear()

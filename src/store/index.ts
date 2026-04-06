@@ -20,6 +20,9 @@ export type { ChildSessionInfo } from './childSessionStore'
 
 export { layoutStore, useLayoutStore } from './layoutStore'
 
+export { changeScopeStore, useSessionChangeScope } from './changeScopeStore'
+export type { ChangeScopeMode } from './changeScopeStore'
+
 export { paneLayoutStore, usePaneLayout } from './paneLayoutStore'
 export type { PaneNode, PaneLeaf, PaneSplit, PaneLayoutSnapshot } from './paneLayoutStore'
 

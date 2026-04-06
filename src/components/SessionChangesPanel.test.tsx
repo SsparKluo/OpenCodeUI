@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionChangesPanel } from './SessionChangesPanel'
+import { changeScopeStore } from '../store/changeScopeStore'
 
 const { getCurrentProject, initGitProject, getSessionDiff, getLastTurnDiff, getVcsInfo, getVcsDiff } = vi.hoisted(
   () => ({
@@ -34,6 +35,7 @@ vi.mock('./DiffViewer', () => ({
 
 describe('SessionChangesPanel', () => {
   beforeEach(() => {
+    changeScopeStore.clearAll()
     vi.useFakeTimers()
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation(cb =>
       window.setTimeout(() => cb(performance.now()), 16),
@@ -157,6 +159,7 @@ describe('SessionChangesPanel', () => {
     })
 
     expect(getLastTurnDiff).toHaveBeenCalledWith('session-1', '/repo')
+    expect(changeScopeStore.getMode('session-1')).toBe('turn')
     expect(screen.getByText('1 file')).toBeInTheDocument()
     expect(screen.getAllByText('turn.ts').length).toBeGreaterThan(0)
   })
@@ -186,6 +189,7 @@ describe('SessionChangesPanel', () => {
     })
 
     expect(getVcsDiff).toHaveBeenCalledWith('branch', '/repo')
+    expect(changeScopeStore.getMode('session-1')).toBe('branch')
     expect(screen.getAllByText('branch.ts').length).toBeGreaterThan(0)
   })
 
