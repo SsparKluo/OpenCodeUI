@@ -1,123 +1,45 @@
-// ============================================
-// Config API Types
-// 基于 OpenAPI 规范
-// ============================================
+import type {
+  AgentConfig as SDKAgentConfig,
+  Config as SDKConfig,
+  LayoutConfig as SDKLayoutConfig,
+  LogLevel as SDKLogLevel,
+  McpLocalConfig as SDKMcpLocalConfig,
+  McpOAuthConfig as SDKMcpOAuthConfig,
+  McpRemoteConfig as SDKMcpRemoteConfig,
+  PermissionActionConfig as SDKPermissionActionConfig,
+  PermissionConfig as SDKPermissionConfig,
+  PermissionObjectConfig as SDKPermissionObjectConfig,
+  PermissionRuleConfig as SDKPermissionRuleConfig,
+  ProviderConfig as SDKProviderConfig,
+  ServerConfig as SDKServerConfig,
+} from '@opencode-ai/sdk/v2/client'
 
-import type { PermissionAction } from './permission'
-
-/**
- * 快捷键配置
- */
 export interface KeybindsConfig {
   [action: string]: string
 }
 
-/**
- * 日志级别
- */
-export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+export type LogLevel = SDKLogLevel
 
-/**
- * 服务器配置
- */
-export interface ServerConfig {
-  host?: string
-  port?: number
-}
+export type ServerConfig = SDKServerConfig
 
-/**
- * 权限动作配置
- */
-export interface PermissionActionConfig {
-  action: PermissionAction
-}
+export type PermissionActionConfig = SDKPermissionActionConfig
 
-/**
- * 权限对象配置
- */
-export interface PermissionObjectConfig {
-  [pattern: string]: PermissionActionConfig
-}
+export type PermissionObjectConfig = SDKPermissionObjectConfig
 
-/**
- * 权限规则配置
- */
-export interface PermissionRuleConfig {
-  [permission: string]: PermissionObjectConfig
-}
+export type PermissionRuleConfig = SDKPermissionRuleConfig
 
-/**
- * 权限配置
- */
-export interface PermissionConfig {
-  rules?: PermissionRuleConfig
-}
+export type PermissionConfig = SDKPermissionConfig
 
-/**
- * Agent 配置
- */
-export interface AgentConfig {
-  default?: string
-  agents?: Record<string, unknown>
-}
+export type AgentConfig = SDKAgentConfig
 
-/**
- * Provider 配置
- */
-export interface ProviderConfig {
-  default?: Record<string, string>
-  providers?: Record<string, unknown>
-}
+export type ProviderConfig = SDKProviderConfig
 
-/**
- * MCP 本地配置
- */
-export interface McpLocalConfig {
-  type: 'local'
-  command: string
-  args?: string[]
-  env?: Record<string, string>
-}
+export type McpLocalConfig = SDKMcpLocalConfig
 
-/**
- * MCP OAuth 配置
- */
-export interface McpOAuthConfig {
-  type: 'oauth'
-  url: string
-}
+export type McpOAuthConfig = SDKMcpOAuthConfig
 
-/**
- * MCP 远程配置
- */
-export interface McpRemoteConfig {
-  type: 'remote'
-  url: string
-  headers?: Record<string, string>
-}
+export type McpRemoteConfig = SDKMcpRemoteConfig
 
-/**
- * 布局配置
- */
-export interface LayoutConfig {
-  sidebar?: {
-    width?: number
-    collapsed?: boolean
-  }
-}
+export type LayoutConfig = SDKLayoutConfig
 
-/**
- * 完整配置
- */
-export interface Config {
-  keybinds?: KeybindsConfig
-  log?: {
-    level?: LogLevel
-  }
-  server?: ServerConfig
-  permission?: PermissionConfig
-  agent?: AgentConfig
-  provider?: ProviderConfig
-  mcp?: Record<string, McpLocalConfig | McpOAuthConfig | McpRemoteConfig>
-  layout?: LayoutConfig
-}
+export type Config = SDKConfig

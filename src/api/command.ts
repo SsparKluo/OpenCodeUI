@@ -38,7 +38,7 @@ async function fetchCommands(directory?: string): Promise<Command[]> {
   let apiCommands: ApiCommand[] = []
   try {
     const sdk = getSDKClient()
-    apiCommands = (unwrap(await sdk.command.list({ directory: formatPathForApi(directory) })) ?? []) as ApiCommand[]
+    apiCommands = unwrap(await sdk.command.list({ directory: formatPathForApi(directory) })) ?? []
   } catch {
     // Backend unreachable — frontend commands still available
   }

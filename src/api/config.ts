@@ -5,13 +5,14 @@
 import { getSDKClient, unwrap } from './sdk'
 import { formatPathForApi } from '../utils/directoryUtils'
 import type { Config } from '../types/api/config'
+import type { ProvidersResponse } from '../types/api/model'
 
 /**
  * 获取当前配置
  */
 export async function getConfig(directory?: string): Promise<Config> {
   const sdk = getSDKClient()
-  return unwrap(await sdk.config.get({ directory: formatPathForApi(directory) })) as Config
+  return unwrap(await sdk.config.get({ directory: formatPathForApi(directory) }))
 }
 
 /**
@@ -19,15 +20,13 @@ export async function getConfig(directory?: string): Promise<Config> {
  */
 export async function updateConfig(config: Partial<Config>, directory?: string): Promise<Config> {
   const sdk = getSDKClient()
-  return unwrap(
-    await sdk.config.update({ directory: formatPathForApi(directory), config: config as Record<string, unknown> }),
-  ) as Config
+  return unwrap(await sdk.config.update({ directory: formatPathForApi(directory), config: config as Config }))
 }
 
 /**
  * 获取 provider 配置列表
  */
-export async function getProviderConfigs(directory?: string): Promise<Record<string, unknown>> {
+export async function getProviderConfigs(directory?: string): Promise<ProvidersResponse> {
   const sdk = getSDKClient()
-  return unwrap(await sdk.config.providers({ directory: formatPathForApi(directory) })) as Record<string, unknown>
+  return unwrap(await sdk.config.providers({ directory: formatPathForApi(directory) }))
 }

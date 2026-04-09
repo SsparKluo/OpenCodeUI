@@ -1,13 +1,5 @@
-// ============================================
-// Skill API Types
-// 基于 OpenAPI 规范
-// ============================================
+import type { AppSkillsResponse } from '@opencode-ai/sdk/v2/client'
 
-export interface Skill {
-  name: string
-  description: string
-  location: string
-  content: string
-}
+export type Skill = AppSkillsResponse[number]
 
-export type SkillList = Skill[]
+export type SkillList = AppSkillsResponse
