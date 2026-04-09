@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getCommands } from './command'
 
-const getMock = vi.fn()
+const listMock = vi.fn()
 
-vi.mock('./http', () => ({
-  get: (...args: unknown[]) => getMock(...args),
-  post: vi.fn(),
+vi.mock('./sdk', () => ({
+  getSDKClient: () => ({
+    command: {
+      list: (...args: unknown[]) => listMock(...args),
+    },
+  }),
+  unwrap: (result: { data?: unknown }) => result.data,
 }))
 
 vi.mock('../store/serverStore', () => ({
@@ -16,11 +20,11 @@ vi.mock('../store/serverStore', () => ({
 
 describe('getCommands', () => {
   beforeEach(() => {
-    getMock.mockReset()
+    listMock.mockReset()
   })
 
   it('marks frontend and api commands with stable sources', async () => {
-    getMock.mockResolvedValue([{ name: 'review', description: 'Run project review' }])
+    listMock.mockResolvedValue({ data: [{ name: 'review', description: 'Run project review' }] })
 
     const commands = await getCommands('/workspace/project')
 
@@ -32,7 +36,7 @@ describe('getCommands', () => {
   })
 
   it('keeps API commands as api commands even if names overlap frontend commands', async () => {
-    getMock.mockResolvedValue([{ name: 'compact', description: 'Native compact command' }])
+    listMock.mockResolvedValue({ data: [{ name: 'compact', description: 'Native compact command' }] })
 
     const commands = await getCommands('/workspace/project-overlap')
 
