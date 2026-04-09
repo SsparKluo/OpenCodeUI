@@ -1,4 +1,5 @@
-import type { Message, Part, TextPart, ReasoningPart } from '../../types/message'
+import type { Message, Part } from '../../types/message'
+import { isVisibleReasoningPart, isVisibleTextPart } from '../../types/message'
 
 function messageHasContent(message: Message): boolean {
   if (message.parts.length === 0) {
@@ -13,9 +14,9 @@ function messageHasContent(message: Message): boolean {
   return message.parts.some(part => {
     switch (part.type) {
       case 'text':
-        return !!(part as TextPart).text?.trim() && !(part as TextPart).synthetic
+        return isVisibleTextPart(part)
       case 'reasoning':
-        return !!(part as ReasoningPart).text?.trim()
+        return isVisibleReasoningPart(part)
       case 'tool':
       case 'file':
       case 'agent':
@@ -31,11 +32,11 @@ function messageHasContent(message: Message): boolean {
 }
 
 function isVisibleThinking(part: Part): boolean {
-  return part.type === 'reasoning' && !!(part as ReasoningPart).text?.trim()
+  return isVisibleReasoningPart(part)
 }
 
 function isVisibleText(part: Part): boolean {
-  return part.type === 'text' && !!(part as TextPart).text?.trim() && !(part as TextPart).synthetic
+  return isVisibleTextPart(part)
 }
 
 function endsWithTool(msg: Message): boolean {
@@ -44,8 +45,8 @@ function endsWithTool(msg: Message): boolean {
     const p = msg.parts[i]
     if (p.type === 'snapshot' || p.type === 'patch' || p.type === 'step-start' || p.type === 'step-finish') continue
     // skip empty reasoning / empty text — they carry no visible content
-    if (p.type === 'reasoning' && !(p as ReasoningPart).text?.trim()) continue
-    if (p.type === 'text' && (!(p as TextPart).text?.trim() || (p as TextPart).synthetic)) continue
+    if (p.type === 'reasoning' && !isVisibleReasoningPart(p)) continue
+    if (p.type === 'text' && !isVisibleTextPart(p)) continue
     return p.type === 'tool'
   }
   return false

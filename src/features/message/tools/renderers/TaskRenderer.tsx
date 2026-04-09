@@ -10,6 +10,7 @@ import { sessionErrorHandler } from '../../../../utils'
 import { formatToolName } from '../../../../utils/formatUtils'
 import type { ToolRendererProps } from '../types'
 import type { Message, TextPart, ToolPart } from '../../../../types/message'
+import { isVisibleTextPart } from '../../../../types/message'
 
 const EMPTY_MESSAGES: Message[] = []
 
@@ -295,7 +296,7 @@ const SubSessionView = memo(function SubSessionView({ sessionId }: SubSessionVie
   // 过滤有内容的消息
   const visibleMessages = messages.filter((msg: Message) =>
     msg.parts.some((part: Message['parts'][0]) => {
-      if (part.type === 'text') return (part as TextPart).text?.trim()
+      if (part.type === 'text') return isVisibleTextPart(part)
       if (part.type === 'tool') return true
       if (part.type === 'reasoning') return true
       return false

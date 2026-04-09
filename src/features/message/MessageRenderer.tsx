@@ -29,17 +29,14 @@ import type {
   Message,
   Part,
   TextPart,
-  ReasoningPart,
   ToolPart,
   FilePart,
   AgentPart,
   StepFinishPart,
-  SubtaskPart,
-  RetryPart,
   CompactionPart,
   AssistantMessageInfo,
 } from '../../types/message'
-import { isToolPart } from '../../types/message'
+import { isToolPart, isVisibleReasoningPart, isVisibleTextPart } from '../../types/message'
 import { formatDuration } from '../../utils/formatUtils'
 
 interface MessageRendererProps {
@@ -472,32 +469,26 @@ const AssistantMessageView = memo(function AssistantMessageView({
             const part = item.part
             switch (part.type) {
               case 'text':
-                return <TextPartView key={part.id} part={part as TextPart} isStreaming={isStreaming} />
+                return <TextPartView key={part.id} part={part} isStreaming={isStreaming} />
               case 'reasoning': {
                 const reasoningDone = endedReasoningIds.has(part.id)
-                return (
-                  <ReasoningPartView
-                    key={part.id}
-                    part={part as ReasoningPart}
-                    isStreaming={isStreaming && !reasoningDone}
-                  />
-                )
+                return <ReasoningPartView key={part.id} part={part} isStreaming={isStreaming && !reasoningDone} />
               }
               case 'step-finish':
                 return (
                   <StepFinishPartView
                     key={part.id}
-                    part={part as StepFinishPart}
+                    part={part}
                     duration={isLastStepFinish ? duration : undefined}
                     turnDuration={isLastStepFinish ? turnDuration : undefined}
                   />
                 )
               case 'subtask':
-                return <SubtaskPartView key={part.id} part={part as SubtaskPart} />
+                return <SubtaskPartView key={part.id} part={part} />
               case 'retry':
-                return <RetryPartView key={part.id} part={part as RetryPart} />
+                return <RetryPartView key={part.id} part={part} />
               case 'compaction':
-                return <CompactionPartView key={part.id} part={part as CompactionPart} />
+                return <CompactionPartView key={part.id} part={part} />
               default:
                 return null
             }
@@ -936,11 +927,12 @@ type RenderItem =
 /** parts[from..] 跳过基础设施和空内容后，下一个有意义的 part 是否为 tool */
 function hasMoreToolsAhead(parts: Part[], from: number): boolean {
   for (let k = from; k < parts.length; k++) {
-    const t = parts[k].type
-    if (t === 'step-start' || t === 'step-finish' || t === 'snapshot' || t === 'patch') continue
-    if (t === 'text' && !(parts[k] as TextPart).text?.trim()) continue
-    if (t === 'reasoning' && !(parts[k] as ReasoningPart).text?.trim()) continue
-    return t === 'tool'
+    const part = parts[k]
+    if (part.type === 'step-start' || part.type === 'step-finish' || part.type === 'snapshot' || part.type === 'patch')
+      continue
+    if (part.type === 'text' && !isVisibleTextPart(part)) continue
+    if (part.type === 'reasoning' && !isVisibleReasoningPart(part)) continue
+    return part.type === 'tool'
   }
   return false
 }
@@ -962,18 +954,18 @@ function groupPartsForRender(parts: Part[]): RenderItem[] {
 
     // 跳过不渲染的 parts
     if (part.type === 'step-start' || part.type === 'snapshot' || part.type === 'patch') continue
-    if (part.type === 'text' && (!(part as TextPart).text?.trim() || (part as TextPart).synthetic)) continue
-    if (part.type === 'reasoning' && !(part as ReasoningPart).text?.trim()) continue
+    if (part.type === 'text' && !isVisibleTextPart(part)) continue
+    if (part.type === 'reasoning' && !isVisibleReasoningPart(part)) continue
 
     if (isToolPart(part)) {
       toolGroup.push(part)
     } else if (part.type === 'step-finish') {
       if (toolGroup.length > 0 && hasMoreToolsAhead(parts, i + 1)) {
         // 中间 step-finish：后面还有 tool，暂存不 flush
-        stepFinish = part as StepFinishPart
+        stepFinish = part
       } else if (toolGroup.length > 0) {
         // 最后一个 step-finish，结束 tool group
-        flushToolGroup(part as StepFinishPart)
+        flushToolGroup(part)
       } else {
         result.push({ type: 'single', part })
       }

@@ -328,6 +328,16 @@ export function isToolPart(part: Part): part is ToolPart {
   return part.type === 'tool'
 }
 
+/** 检查 part 是否为可见文本 */
+export function isVisibleTextPart(part: Part): part is TextPart {
+  return part.type === 'text' && !!part.text.trim() && !part.synthetic
+}
+
+/** 检查 part 是否为可见 reasoning */
+export function isVisibleReasoningPart(part: Part): part is ReasoningPart {
+  return part.type === 'reasoning' && !!part.text.trim()
+}
+
 /** 检查消息是否有可见内容 */
 export function hasVisibleContent(message: Message): boolean {
   return message.parts.some(part => {
