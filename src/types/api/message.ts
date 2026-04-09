@@ -16,6 +16,8 @@ import type {
   SubtaskPartInput as SDKSubtaskPartInput,
   TextPart as SDKTextPart,
   TextPartInput as SDKTextPartInput,
+  ToolPart as SDKToolPart,
+  ToolState as SDKToolState,
   UserMessage as SDKUserMessage,
 } from '@opencode-ai/sdk/v2/client'
 import type { ErrorInfo } from './common'
@@ -42,28 +44,9 @@ export type TextPart = SDKTextPart
 
 export type ReasoningPart = SDKReasoningPart
 
-export interface ToolState {
-  status: 'pending' | 'running' | 'completed' | 'error'
-  input?: Record<string, unknown>
-  output?: unknown
-  title?: string
-  error?: unknown
-  time?: { start: number; end?: number; compacted?: number }
-  metadata?: Record<string, unknown>
-  attachments?: FilePart[]
-  raw?: string
-}
+export type ToolState = SDKToolState
 
-export interface ToolPart {
-  id: string
-  sessionID: string
-  messageID: string
-  type: 'tool'
-  callID: string
-  tool: string
-  state: ToolState
-  metadata?: Record<string, unknown>
-}
+export type ToolPart = SDKToolPart
 
 export type FileSource = SDKFilePartSource
 

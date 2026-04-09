@@ -39,6 +39,7 @@ import type {
   CompactionPart,
   AssistantMessageInfo,
 } from '../../types/message'
+import { isToolPart } from '../../types/message'
 import { formatDuration } from '../../utils/formatUtils'
 
 interface MessageRendererProps {
@@ -459,7 +460,7 @@ const AssistantMessageView = memo(function AssistantMessageView({
               return (
                 <ToolGroup
                   key={item.parts[0].id}
-                  parts={item.parts as ToolPart[]}
+                  parts={item.parts}
                   stepFinish={item.stepFinish}
                   duration={isLastStepFinish ? duration : undefined}
                   turnDuration={isLastStepFinish ? turnDuration : undefined}
@@ -928,7 +929,9 @@ function diffPairStats(before: string, after: string): { additions: number; dele
 // Helper: Group parts for rendering
 // ============================================
 
-type RenderItem = { type: 'single'; part: Part } | { type: 'tool-group'; parts: Part[]; stepFinish?: StepFinishPart }
+type RenderItem =
+  | { type: 'single'; part: Part }
+  | { type: 'tool-group'; parts: ToolPart[]; stepFinish?: StepFinishPart }
 
 /** parts[from..] 跳过基础设施和空内容后，下一个有意义的 part 是否为 tool */
 function hasMoreToolsAhead(parts: Part[], from: number): boolean {
@@ -962,8 +965,8 @@ function groupPartsForRender(parts: Part[]): RenderItem[] {
     if (part.type === 'text' && (!(part as TextPart).text?.trim() || (part as TextPart).synthetic)) continue
     if (part.type === 'reasoning' && !(part as ReasoningPart).text?.trim()) continue
 
-    if (part.type === 'tool') {
-      toolGroup.push(part as ToolPart)
+    if (isToolPart(part)) {
+      toolGroup.push(part)
     } else if (part.type === 'step-finish') {
       if (toolGroup.length > 0 && hasMoreToolsAhead(parts, i + 1)) {
         // 中间 step-finish：后面还有 tool，暂存不 flush

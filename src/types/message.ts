@@ -323,6 +323,11 @@ export function isAssistantMessage(info: MessageInfo): info is AssistantMessageI
   return info.role === 'assistant'
 }
 
+/** 检查 part 是否为工具调用 */
+export function isToolPart(part: Part): part is ToolPart {
+  return part.type === 'tool'
+}
+
 /** 检查消息是否有可见内容 */
 export function hasVisibleContent(message: Message): boolean {
   return message.parts.some(part => {
