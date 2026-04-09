@@ -1,89 +1,27 @@
-// ============================================
-// Model & Provider API Types
-// 基于 OpenAPI 规范
-// ============================================
+import type {
+  Model as SDKModel,
+  Provider as SDKProvider,
+  ProviderAuthAuthorization as SDKProviderAuthAuthorization,
+  ProviderAuthMethod as SDKProviderAuthMethod,
+} from '@opencode-ai/sdk/v2/client'
 
-/**
- * 模型能力 - 输入输出支持
- */
-export interface ModelIOCapabilities {
-  text: boolean
-  audio: boolean
-  image: boolean
-  video: boolean
-  pdf: boolean
-}
+export type ModelIOCapabilities = SDKModel['capabilities']['input']
 
-/**
- * 模型能力
- */
-export interface ModelCapabilities {
-  temperature: boolean
-  reasoning: boolean
-  attachment: boolean
-  toolcall: boolean
-  input: ModelIOCapabilities
-  output: ModelIOCapabilities
-}
+export type ModelCapabilities = SDKModel['capabilities']
 
-/**
- * 模型限制
- */
-export interface ModelLimit {
-  context: number
-  output: number
-}
+export type ModelLimit = SDKModel['limit']
 
-/**
- * 模型状态
- */
-export type ModelStatus = 'active' | 'disabled' | 'unavailable'
+export type ModelStatus = SDKModel['status']
 
-/**
- * 模型实体
- */
-export interface Model {
-  id: string
-  providerID: string
-  name: string
-  family: string
-  status: ModelStatus
-  limit: ModelLimit
-  capabilities: ModelCapabilities
-  variants?: Record<string, Record<string, unknown>>
-}
+export type Model = SDKModel
 
-/**
- * Provider 实体
- */
-export interface Provider {
-  id: string
-  name: string
-  source: string
-  models: Record<string, Model>
-}
+export type Provider = SDKProvider
 
-/**
- * Provider 列表响应
- */
 export interface ProvidersResponse {
   providers: Provider[]
   default: Record<string, string>
 }
 
-/**
- * Provider 认证方法
- */
-export interface ProviderAuthMethod {
-  type: 'oauth' | 'api_key' | 'custom'
-  name: string
-}
+export type ProviderAuthMethod = SDKProviderAuthMethod
 
-/**
- * Provider 认证授权信息
- */
-export interface ProviderAuthAuthorization {
-  id: string
-  name: string
-  providerID: string
-}
+export type ProviderAuthAuthorization = SDKProviderAuthAuthorization
