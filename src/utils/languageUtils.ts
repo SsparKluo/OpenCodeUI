@@ -1,10 +1,8 @@
 // Language normalization helpers
 
-import { bundledLanguages } from 'shiki'
+import { isSupportedLanguage } from '../lib/shiki'
 
-export function isSupportedLanguage(lang: string): boolean {
-  return lang in bundledLanguages
-}
+export { isSupportedLanguage }
 
 export function normalizeLanguage(lang: string): string {
   if (!lang) return 'text'

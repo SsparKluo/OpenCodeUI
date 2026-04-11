@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { codeToHtml, codeToTokens, type BundledTheme } from 'shiki'
+import { codeToHtml, codeToTokens } from '../lib/shiki'
+import type { BundledTheme } from 'shiki/themes'
 import { normalizeLanguage } from '../utils/languageUtils'
 import { THEME_SWITCH_DISABLE_MS } from '../constants'
 
 export type HighlightTokens = Awaited<ReturnType<typeof codeToTokens>>['tokens']
-type CodeToHtmlOptions = Parameters<typeof codeToHtml>[1]
-type CodeToTokensOptions = Parameters<typeof codeToTokens>[1]
 
 type IdleWindowApi = {
   requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
@@ -119,7 +118,7 @@ async function highlightWithCache(
     }
 
     try {
-      const html = await codeToHtml(code, { lang: lang as CodeToHtmlOptions['lang'], theme })
+      const html = await codeToHtml(code, { lang, theme })
       htmlCache.set(cacheKey, html)
       return html
     } catch {
@@ -133,7 +132,7 @@ async function highlightWithCache(
     }
 
     try {
-      const result = await codeToTokens(code, { lang: lang as CodeToTokensOptions['lang'], theme })
+      const result = await codeToTokens(code, { lang, theme })
       tokensCache.set(cacheKey, result.tokens)
       return result.tokens
     } catch {

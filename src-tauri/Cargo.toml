@@ -31,7 +31,7 @@ tauri-plugin-log = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 
 [build-dependencies]
@@ -39,6 +39,7 @@ tauri-build = { version = "2", features = [] }
 
 [profile.release]
 strip = true
-lto = "thin"
+lto = true
 panic = "abort"
 codegen-units = 1
+opt-level = "s"

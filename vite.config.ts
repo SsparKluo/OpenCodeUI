@@ -19,7 +19,10 @@ export default defineConfig({
           if (!id.includes('node_modules')) return
 
           if (id.includes('@xterm/')) return 'vendor-terminal'
-          if (id.includes('shiki')) return 'vendor-shiki'
+          // shiki core + engine + themes → 一个小 chunk；
+          // 语言 grammar（@shikijs/langs/*）由 dynamic import 自动拆分
+          if ((id.includes('shiki') || id.includes('@shikijs/')) && !id.includes('@shikijs/langs'))
+            return 'vendor-shiki'
           if (id.includes('streamdown') || id.includes('remend')) return 'vendor-markdown'
 
           if (id.includes('@tauri-apps/')) return 'vendor-tauri'
