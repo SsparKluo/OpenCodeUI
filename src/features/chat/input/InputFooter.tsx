@@ -348,7 +348,7 @@ function TodoSwapPanel({
       ref={ref}
       style={style}
       data-state={open ? 'open' : 'closed'}
-      className="todo-swap-panel absolute glass-alt border border-border-200/60 rounded-2xl shadow-lg overflow-hidden z-50"
+      className="todo-swap-panel absolute glass-alt border border-border-200/60 rounded-2xl shadow-lg overflow-hidden z-50 leading-normal"
     >
       {children}
     </div>
