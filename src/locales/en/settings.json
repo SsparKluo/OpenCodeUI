@@ -15,7 +15,9 @@
     "service": "Service",
     "serviceDesc": "Local opencode service management",
     "shortcuts": "Shortcuts",
-    "shortcutsDesc": "Customize keyboard shortcuts for faster workflows"
+    "shortcutsDesc": "Customize keyboard shortcuts for faster workflows",
+    "about": "About",
+    "aboutDesc": "Version info, update checks, and release links"
   },
   "groups": {
     "core": "Core",
@@ -228,6 +230,25 @@
     "envVarsDesc": "Passed to the opencode serve process (e.g. HTTPS_PROXY, API keys)",
     "keyPlaceholder": "KEY",
     "valuePlaceholder": "value"
+  },
+  "about": {
+    "title": "About & Updates",
+    "versionCardTitle": "Version",
+    "versionCardDesc": "Check whether a newer OpenCodeUI release is available and jump to the download page.",
+    "currentVersion": "Current Version",
+    "latestVersion": "Latest Release",
+    "unknownVersion": "Unknown",
+    "statusIdle": "Check for updates to see whether a newer version is available.",
+    "statusChecking": "Checking GitHub releases...",
+    "statusUpToDate": "You are already on the latest version.",
+    "statusUpdateAvailable": "A newer version is available: {{version}}",
+    "statusError": "Failed to check for updates: {{error}}",
+    "publishedAt": "Published: {{date}}",
+    "checkNow": "Check for Updates",
+    "viewUpdate": "View Update",
+    "openReleases": "Open Releases Page",
+    "toastTitle": "New version available: {{version}}",
+    "toastBody": "Click to open About and view the release page."
   },
   "keybindings": {
     "title": "Keyboard Shortcuts",

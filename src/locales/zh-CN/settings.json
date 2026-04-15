@@ -15,7 +15,9 @@
     "service": "服务",
     "serviceDesc": "本地 opencode 服务管理",
     "shortcuts": "快捷键",
-    "shortcutsDesc": "自定义键盘快捷键以加速工作流"
+    "shortcutsDesc": "自定义键盘快捷键以加速工作流",
+    "about": "关于",
+    "aboutDesc": "版本信息、更新检查和发布页入口"
   },
   "groups": {
     "core": "核心",
@@ -228,6 +230,25 @@
     "envVarsDesc": "传递给 opencode serve 进程（如 HTTPS_PROXY、API 密钥）",
     "keyPlaceholder": "KEY",
     "valuePlaceholder": "值"
+  },
+  "about": {
+    "title": "关于和更新",
+    "versionCardTitle": "版本",
+    "versionCardDesc": "检查是否有新的 OpenCodeUI 发布版本，并直接跳到下载页面。",
+    "currentVersion": "当前版本",
+    "latestVersion": "最新发布",
+    "unknownVersion": "未知",
+    "statusIdle": "点击检查更新，看看是否已经有新版本。",
+    "statusChecking": "正在检查 GitHub 发布版本...",
+    "statusUpToDate": "你已经在使用最新版本。",
+    "statusUpdateAvailable": "发现新版本：{{version}}",
+    "statusError": "检查更新失败：{{error}}",
+    "publishedAt": "发布时间：{{date}}",
+    "checkNow": "检查更新",
+    "viewUpdate": "查看更新",
+    "openReleases": "打开发布页",
+    "toastTitle": "发现新版本：{{version}}",
+    "toastBody": "点击打开关于页，并查看发布页面。"
   },
   "keybindings": {
     "title": "键盘快捷键",

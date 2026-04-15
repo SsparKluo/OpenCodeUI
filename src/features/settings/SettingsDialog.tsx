@@ -1,11 +1,21 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Dialog } from '../../components/ui/Dialog'
-import { SunIcon, GlobeIcon, SettingsIcon, KeyboardIcon, CloseIcon, BellIcon, PlugIcon } from '../../components/Icons'
+import {
+  SunIcon,
+  GlobeIcon,
+  SettingsIcon,
+  KeyboardIcon,
+  CloseIcon,
+  BellIcon,
+  PlugIcon,
+  DownloadIcon,
+} from '../../components/Icons'
 import { useIsMobile } from '../../hooks'
 import { isTauri } from '../../utils/tauri'
 import { KeybindingsSection } from './KeybindingsSection'
 import { AppearanceSettings } from './components/AppearanceSettings'
+import { AboutSettings } from './components/AboutSettings'
 import { ChatSettings } from './components/ChatSettings'
 import { NotificationSettings } from './components/NotificationSettings'
 import { ServiceSettings } from './components/ServiceSettings'
@@ -15,7 +25,7 @@ import { ServersSettings } from './components/ServersSettings'
 // Types
 // ============================================
 
-type SettingsTab = 'appearance' | 'chat' | 'notifications' | 'service' | 'servers' | 'keybindings'
+export type SettingsTab = 'appearance' | 'chat' | 'notifications' | 'service' | 'servers' | 'keybindings' | 'about'
 
 interface SettingsDialogProps {
   isOpen: boolean
@@ -34,9 +44,10 @@ const TAB_ICONS: Record<SettingsTab, React.ReactNode> = {
   notifications: <BellIcon size={15} />,
   service: <PlugIcon size={15} />,
   keybindings: <KeyboardIcon size={15} />,
+  about: <DownloadIcon size={15} />,
 }
 
-const TAB_IDS: SettingsTab[] = ['servers', 'chat', 'appearance', 'notifications', 'service', 'keybindings']
+const TAB_IDS: SettingsTab[] = ['servers', 'chat', 'appearance', 'notifications', 'service', 'keybindings', 'about']
 
 const TAB_LABEL_KEYS: Record<SettingsTab, string> = {
   servers: 'tabs.servers',
@@ -45,6 +56,7 @@ const TAB_LABEL_KEYS: Record<SettingsTab, string> = {
   notifications: 'tabs.notifications',
   service: 'tabs.service',
   keybindings: 'tabs.shortcuts',
+  about: 'tabs.about',
 }
 
 const TAB_DESC_KEYS: Record<SettingsTab, string> = {
@@ -54,11 +66,12 @@ const TAB_DESC_KEYS: Record<SettingsTab, string> = {
   notifications: 'tabs.notificationsDesc',
   service: 'tabs.serviceDesc',
   keybindings: 'tabs.shortcutsDesc',
+  about: 'tabs.aboutDesc',
 }
 
 const GROUP_DEFS: { labelKey: string; tabs: SettingsTab[] }[] = [
   { labelKey: 'groups.core', tabs: ['servers', 'chat', 'appearance', 'notifications'] },
-  { labelKey: 'groups.advanced', tabs: ['service', 'keybindings'] },
+  { labelKey: 'groups.advanced', tabs: ['service', 'keybindings', 'about'] },
 ]
 
 // ============================================
@@ -79,6 +92,8 @@ function TabContent({ tab }: { tab: SettingsTab }) {
       return <ServersSettings />
     case 'keybindings':
       return <KeybindingsSection />
+    case 'about':
+      return <AboutSettings />
     default:
       return null
   }
