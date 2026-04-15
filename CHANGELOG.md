@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.5.2] - 2026-04-15
+
+- test: fix streamed event mock typing (92627ee)
+- fix: preserve UTF-8 text in streamed markdown updates (8d89ce4)
+- feat: add release update checks with about entry (closes #33) (e29a842)
+- fix: preserve files and changes panel state across tab switches (closes #63) (3d57dc9)
+- fix: allow pin toggle on selected model in desktop model selector (96e0ab2)
+- fix: remove mobile 16px font-size override so input matches message stream (9e1eb6e)
+
 ## [v0.5.1] - 2026-04-13
 
 - feat: show agent and model name in step finish info (closes #61) (7299319)
