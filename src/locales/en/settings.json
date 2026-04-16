@@ -6,6 +6,8 @@
   "tabs": {
     "servers": "Servers",
     "serversDesc": "Backend connections and fast active endpoint switching",
+    "models": "Models",
+    "modelsDesc": "Choose which models stay available in the selector",
     "chat": "Chat",
     "chatDesc": "Reasoning style, path display, and conversation behavior",
     "appearance": "Appearance",
@@ -107,6 +109,17 @@
     "showResponseTime": "Show message response time",
     "totalDuration": "Total Duration",
     "showTurnElapsed": "Show full turn elapsed time"
+  },
+  "models": {
+    "visibility": "Model Visibility",
+    "visibilityDesc": "Disable models you do not want to appear in the selector. Disabled models stay hidden across sessions on this server.",
+    "searchPlaceholder": "Search models",
+    "clearSearch": "Clear search",
+    "keepOneEnabled": "At least one model stays enabled so the chat can still send messages.",
+    "loading": "Loading models...",
+    "empty": "No models available on the current server",
+    "noResults": "No models match the current search",
+    "providerCount": "{{count}} models"
   },
   "appearance": {
     "themePresets": "Theme Presets",

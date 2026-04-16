@@ -517,6 +517,15 @@ export const ModelSelector = memo(
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
         e.stopPropagation()
+
+        if (itemIndices.length === 0) {
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            closeMenu()
+          }
+          return
+        }
+
         switch (e.key) {
           case 'ArrowDown':
             e.preventDefault()

@@ -6,6 +6,8 @@
   "tabs": {
     "servers": "服务器",
     "serversDesc": "后端连接和快速切换活跃端点",
+    "models": "模型",
+    "modelsDesc": "控制哪些模型保留在选择器里",
     "chat": "对话",
     "chatDesc": "推理风格、路径显示和对话行为",
     "appearance": "外观",
@@ -107,6 +109,17 @@
     "showResponseTime": "显示消息响应时间",
     "totalDuration": "总耗时",
     "showTurnElapsed": "显示完整轮次耗时"
+  },
+  "models": {
+    "visibility": "模型可见性",
+    "visibilityDesc": "禁用你不想出现在选择器里的模型。禁用状态会按当前服务器保存。",
+    "searchPlaceholder": "搜索模型",
+    "clearSearch": "清空搜索",
+    "keepOneEnabled": "至少保留一个启用模型，这样对话还能继续发送消息。",
+    "loading": "正在加载模型...",
+    "empty": "当前服务器没有可用模型",
+    "noResults": "没有匹配当前搜索的模型",
+    "providerCount": "{{count}} 个模型"
   },
   "appearance": {
     "themePresets": "主题预设",

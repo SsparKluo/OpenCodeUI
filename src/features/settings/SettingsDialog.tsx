@@ -5,6 +5,7 @@ import {
   SunIcon,
   GlobeIcon,
   SettingsIcon,
+  CpuIcon,
   KeyboardIcon,
   CloseIcon,
   BellIcon,
@@ -17,6 +18,7 @@ import { KeybindingsSection } from './KeybindingsSection'
 import { AppearanceSettings } from './components/AppearanceSettings'
 import { AboutSettings } from './components/AboutSettings'
 import { ChatSettings } from './components/ChatSettings'
+import { ModelsSettings } from './components/ModelsSettings'
 import { NotificationSettings } from './components/NotificationSettings'
 import { ServiceSettings } from './components/ServiceSettings'
 import { ServersSettings } from './components/ServersSettings'
@@ -25,7 +27,15 @@ import { ServersSettings } from './components/ServersSettings'
 // Types
 // ============================================
 
-export type SettingsTab = 'appearance' | 'chat' | 'notifications' | 'service' | 'servers' | 'keybindings' | 'about'
+export type SettingsTab =
+  | 'appearance'
+  | 'chat'
+  | 'models'
+  | 'notifications'
+  | 'service'
+  | 'servers'
+  | 'keybindings'
+  | 'about'
 
 interface SettingsDialogProps {
   isOpen: boolean
@@ -40,6 +50,7 @@ interface SettingsDialogProps {
 const TAB_ICONS: Record<SettingsTab, React.ReactNode> = {
   servers: <GlobeIcon size={15} />,
   chat: <SettingsIcon size={15} />,
+  models: <CpuIcon size={15} />,
   appearance: <SunIcon size={15} />,
   notifications: <BellIcon size={15} />,
   service: <PlugIcon size={15} />,
@@ -47,11 +58,21 @@ const TAB_ICONS: Record<SettingsTab, React.ReactNode> = {
   about: <DownloadIcon size={15} />,
 }
 
-const TAB_IDS: SettingsTab[] = ['servers', 'chat', 'appearance', 'notifications', 'service', 'keybindings', 'about']
+const TAB_IDS: SettingsTab[] = [
+  'servers',
+  'models',
+  'chat',
+  'appearance',
+  'notifications',
+  'service',
+  'keybindings',
+  'about',
+]
 
 const TAB_LABEL_KEYS: Record<SettingsTab, string> = {
   servers: 'tabs.servers',
   chat: 'tabs.chat',
+  models: 'tabs.models',
   appearance: 'tabs.appearance',
   notifications: 'tabs.notifications',
   service: 'tabs.service',
@@ -62,6 +83,7 @@ const TAB_LABEL_KEYS: Record<SettingsTab, string> = {
 const TAB_DESC_KEYS: Record<SettingsTab, string> = {
   servers: 'tabs.serversDesc',
   chat: 'tabs.chatDesc',
+  models: 'tabs.modelsDesc',
   appearance: 'tabs.appearanceDesc',
   notifications: 'tabs.notificationsDesc',
   service: 'tabs.serviceDesc',
@@ -70,7 +92,7 @@ const TAB_DESC_KEYS: Record<SettingsTab, string> = {
 }
 
 const GROUP_DEFS: { labelKey: string; tabs: SettingsTab[] }[] = [
-  { labelKey: 'groups.core', tabs: ['servers', 'chat', 'appearance', 'notifications'] },
+  { labelKey: 'groups.core', tabs: ['servers', 'models', 'chat', 'appearance', 'notifications'] },
   { labelKey: 'groups.advanced', tabs: ['service', 'keybindings', 'about'] },
 ]
 
@@ -84,6 +106,8 @@ function TabContent({ tab }: { tab: SettingsTab }) {
       return <AppearanceSettings />
     case 'chat':
       return <ChatSettings />
+    case 'models':
+      return <ModelsSettings />
     case 'notifications':
       return <NotificationSettings />
     case 'service':
