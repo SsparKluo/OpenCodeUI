@@ -145,6 +145,7 @@
     "customCssHelp": "使用自定义 CSS 覆盖字体、颜色和样式。",
     "customCssSpecificityHelp": "可覆盖字体、颜色与样式；如需提高优先级，请使用 <1>:root:root</1>。",
     "loadTemplate": "加载模板",
+    "importCss": "导入 CSS",
     "display": "显示",
     "displayDesc": "控制颜色模式和布局",
     "colorMode": "颜色模式",

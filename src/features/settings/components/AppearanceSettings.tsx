@@ -14,6 +14,9 @@ const PRESET_PREVIEW_COLORS: Record<string, { bg: string; accent: string; text: 
   eucalyptus: { bg: '#f0f3f0', accent: '#4d9e82', text: '#1e2e28' },
   claude: { bg: '#f3f0eb', accent: '#e87c2a', text: '#2d2a26' },
   breeze: { bg: '#f3f5f7', accent: '#2ba5a5', text: '#212d36' },
+  sakura: { bg: '#fdf2f4', accent: '#e85a8b', text: '#2d1f24' },
+  ocean: { bg: '#f0f5fa', accent: '#2b6cb0', text: '#1a2433' },
+  obsidian: { bg: '#fcfcfc', accent: '#262626', text: '#1a1a1a' },
   custom: { bg: '#f0f0f0', accent: '#888888', text: '#333333' },
 }
 
@@ -134,14 +137,17 @@ function FontScaleSlider({
 function CustomCSSEditor({
   value,
   onChange,
+  onImportFile,
   t,
 }: {
   value: string
   onChange: (css: string) => void
+  onImportFile: (css: string) => void
   t: (key: string) => string
 }) {
   const [localValue, setLocalValue] = useState(value)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setLocalValue(value)
@@ -151,6 +157,19 @@ function CustomCSSEditor({
     setLocalValue(newVal)
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => onChange(newVal), 400)
+  }
+
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = event => {
+      const css = event.target?.result as string
+      setLocalValue(css)
+      onImportFile(css)
+    }
+    reader.readAsText(file)
+    e.target.value = ''
   }
 
   const template = `/* ====== One Dark Inspired Theme Template ====== */
@@ -330,14 +349,23 @@ function CustomCSSEditor({
             }}
           />
         </div>
-        {!localValue.trim() && (
+        <div className="flex items-center gap-1.5">
+          <input ref={fileInputRef} type="file" accept=".css" onChange={handleFileImport} className="hidden" />
           <button
-            onClick={() => handleChange(template)}
-            className="text-[length:var(--fs-xxs)] text-accent-main-100 hover:text-accent-main-200 transition-colors px-1.5 py-0.5 rounded hover:bg-bg-200/50 shrink-0"
+            onClick={() => fileInputRef.current?.click()}
+            className="text-[10px] text-accent-main-100 hover:text-accent-main-200 transition-colors px-1.5 py-0.5 rounded hover:bg-bg-200/50 shrink-0"
           >
-            {t('appearance.loadTemplate')}
+            {t('appearance.importCss')}
           </button>
-        )}
+          {!localValue.trim() && (
+            <button
+              onClick={() => handleChange(template)}
+              className="text-[10px] text-accent-main-100 hover:text-accent-main-200 transition-colors px-1.5 py-0.5 rounded hover:bg-bg-200/50 shrink-0"
+            >
+              {t('appearance.loadTemplate')}
+            </button>
+          )}
+        </div>
       </div>
       <textarea
         value={localValue}
@@ -409,7 +437,7 @@ export function AppearanceSettings() {
 
       <SettingsSection title={t('appearance.customCss')}>
         <p className="text-[length:var(--fs-sm)] text-text-400">{t('appearance.customCssDesc')}</p>
-        <CustomCSSEditor value={customCSS} onChange={setCustomCSS} t={t} />
+        <CustomCSSEditor value={customCSS} onChange={setCustomCSS} onImportFile={setCustomCSS} t={t} />
       </SettingsSection>
 
       <SettingsSection title={t('appearance.display')}>

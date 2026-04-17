@@ -145,6 +145,7 @@
     "customCssHelp": "Override fonts, colors, and styles with custom CSS.",
     "customCssSpecificityHelp": "Override fonts, colors, and styles. Use <1>:root:root</1> for higher specificity.",
     "loadTemplate": "Load Template",
+    "importCss": "Import CSS",
     "display": "Display",
     "displayDesc": "Control color mode and layout",
     "colorMode": "Color Mode",
