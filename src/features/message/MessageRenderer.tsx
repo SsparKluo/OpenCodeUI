@@ -545,7 +545,7 @@ interface ToolGroupProps {
 }
 
 /** 用户需要阅读/交互的工具：沉浸模式下这些工具完成后保持展开 */
-const READABLE_TOOL_PATTERNS = /bash|sh|cmd|terminal|shell|write|save|edit|replace|patch|todo|question|ask/i
+const READABLE_TOOL_PATTERNS = /bash|\bsh\b|cmd|terminal|shell|write|save|edit|replace|patch|todo|question|ask/i
 
 function isReadableTool(toolName: string): boolean {
   return READABLE_TOOL_PATTERNS.test(toolName.toLowerCase())
@@ -759,7 +759,20 @@ function formatTokens(
   return `${total} ${t('tokens')}`
 }
 
-type ToolSummaryCategory = 'execute' | 'write' | 'edit' | 'read' | 'search' | 'list' | 'network' | 'task' | 'todo' | 'question' | 'skill' | 'think' | 'other'
+type ToolSummaryCategory =
+  | 'execute'
+  | 'write'
+  | 'edit'
+  | 'read'
+  | 'search'
+  | 'list'
+  | 'network'
+  | 'task'
+  | 'todo'
+  | 'question'
+  | 'skill'
+  | 'think'
+  | 'other'
 
 type ToolSummaryPhase = 'done' | 'active' | 'failed'
 
@@ -849,7 +862,10 @@ function buildDescriptiveToolStepsSummary(
   let isFirstContent = true
   for (const seg of segments) {
     if (seg.text === sep) continue
-    if (isFirstContent) { isFirstContent = false; continue }
+    if (isFirstContent) {
+      isFirstContent = false
+      continue
+    }
     seg.text = seg.text.charAt(0).toLowerCase() + seg.text.slice(1)
   }
 
@@ -887,17 +903,10 @@ function getToolSummaryCategory(toolName: string): ToolSummaryCategory {
   ) {
     return 'execute'
   }
-  if (
-    lower.includes('write') ||
-    lower.includes('save')
-  ) {
+  if (lower.includes('write') || lower.includes('save')) {
     return 'write'
   }
-  if (
-    lower.includes('edit') ||
-    lower.includes('replace') ||
-    lower.includes('patch')
-  ) {
+  if (lower.includes('edit') || lower.includes('replace') || lower.includes('patch')) {
     return 'edit'
   }
   if (
