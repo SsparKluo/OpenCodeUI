@@ -107,7 +107,7 @@ const DropZoneVisual = memo(function DropZoneVisual({ zone }: { zone: DropZone }
   return (
     <div className="pointer-events-none absolute inset-0 z-30">
       <div
-        className="absolute rounded-md border-2 border-accent-main-100 bg-accent-main-100/15 transition-[left,top,width,height] duration-150 ease-out"
+        className="absolute rounded-lg border-2 border-accent-main-100 bg-accent-main-100/15 transition-[left,top,width,height] duration-150 ease-out"
         style={highlightStyle}
       />
     </div>
