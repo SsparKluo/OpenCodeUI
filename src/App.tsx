@@ -543,7 +543,7 @@ function App() {
     >
       <DesktopTitlebar />
       <ChatViewportProvider value={chatViewport}>
-        <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="relative flex min-h-0 flex-1 overflow-hidden">
           <Sidebar
             isOpen={sidebarExpanded}
             selectedSessionId={paneLayout.focusedSessionId}
@@ -581,6 +581,7 @@ function App() {
 
             <RightPanel directory={focusedDirectory} sessionId={paneLayout.focusedSessionId} />
           </div>
+          <ToastContainer onOpenAbout={openAboutSettings} />
         </div>
 
         <Suspense fallback={null}>
@@ -591,8 +592,6 @@ function App() {
             commands={commands}
           />
         </Suspense>
-
-        <ToastContainer onOpenAbout={openAboutSettings} />
 
         <Suspense fallback={null}>
           <CloseServiceDialog
