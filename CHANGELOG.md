@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.5.7] - 2026-04-19
+
+- fix: anchor toasts to the content area beneath desktop titlebar (fe15280)
+
 ## [v0.5.6] - 2026-04-19
 
 - chore: sync Tauri app icons from web opencode.svg (f792218)
