@@ -6,7 +6,14 @@ import { getApiBaseUrl, getAuthHeader } from './http'
 import { createSseTextParser } from './sse'
 import { normalizeTodoItems } from './todo'
 import { isTauri } from '../utils/tauri'
-import type { EventCallbacks, EventType, GlobalEvent, SessionErrorPayload, TodoUpdatedPayload } from './types'
+import type {
+  EventCallbacks,
+  EventType,
+  GlobalEvent,
+  ServerConnectedPayload,
+  SessionErrorPayload,
+  TodoUpdatedPayload,
+} from './types'
 import { EventTypes } from '../types/api/event'
 
 // ============================================
@@ -33,7 +40,9 @@ const connectionListeners = new Set<(info: ConnectionInfo) => void>()
 
 function updateConnectionState(update: Partial<ConnectionInfo>) {
   connectionInfo = { ...connectionInfo, ...update }
-  connectionListeners.forEach(fn => fn(connectionInfo))
+  connectionListeners.forEach(fn => {
+    fn(connectionInfo)
+  })
 }
 
 export function getConnectionInfo(): ConnectionInfo {
@@ -96,7 +105,9 @@ function broadcastReconnected(reason: 'network' | 'server-switch') {
     return
   }
   lastReconnectedBroadcast = now
-  allSubscribers.forEach(cb => cb.onReconnected?.(reason))
+  allSubscribers.forEach(cb => {
+    cb.onReconnected?.(reason)
+  })
 }
 
 /**
@@ -282,7 +293,9 @@ async function connectViaTauri() {
             state: 'error',
             error: errorMsg,
           })
-          allSubscribers.forEach(cb => cb.onError?.(new Error(errorMsg)))
+          allSubscribers.forEach(cb => {
+            cb.onError?.(new Error(errorMsg))
+          })
           scheduleReconnect()
           break
         }
@@ -303,7 +316,9 @@ async function connectViaTauri() {
         state: 'error',
         error: errorMsg,
       })
-      allSubscribers.forEach(cb => cb.onError?.(new Error(errorMsg)))
+      allSubscribers.forEach(cb => {
+        cb.onError?.(new Error(errorMsg))
+      })
       scheduleReconnect()
     })
   } catch (error) {
@@ -334,6 +349,11 @@ function connectViaBrowser() {
   })
     .then(async response => {
       isConnecting = false
+
+      if (myGeneration !== connectionGeneration) {
+        await response.body?.cancel?.().catch(() => {})
+        return
+      }
 
       if (!response.ok) {
         throw new Error(`Failed to subscribe: ${response.status}`)
@@ -371,6 +391,11 @@ function connectViaBrowser() {
         }
 
         const { done, value } = await reader.read()
+        if (myGeneration !== connectionGeneration) {
+          reader.cancel().catch(() => {})
+          break
+        }
+
         if (done) {
           if (import.meta.env.DEV) {
             console.log('[SSE] Stream ended, reconnecting...')
@@ -405,7 +430,9 @@ function connectViaBrowser() {
         error: error.message || 'Connection failed',
       })
       // 通知所有订阅者出错
-      allSubscribers.forEach(cb => cb.onError?.(error))
+      allSubscribers.forEach(cb => {
+        cb.onError?.(error)
+      })
       scheduleReconnect()
     })
 }
@@ -718,9 +745,19 @@ function handleEventForSubscriber(payload: GlobalEvent['payload'], callbacks: Ev
       } satisfies TodoUpdatedPayload)
       break
     }
+    case EventTypes.SERVER_CONNECTED:
+      callbacks.onServerConnected?.(normalizeServerConnected(payload.properties))
+      break
     default:
       // 忽略其他事件类型
       break
+  }
+}
+
+function normalizeServerConnected(properties: unknown): ServerConnectedPayload {
+  if (!isRecord(properties)) return {}
+  return {
+    timestamp: properties.timestamp,
   }
 }
 

@@ -67,6 +67,20 @@ function createFetchResponse(chunks: Uint8Array[]): Pick<Response, 'ok' | 'body'
   }
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+function createEventChunk(payload: object): Uint8Array[] {
+  return [encoder.encode(`data: ${JSON.stringify({ directory: 'global', payload })}\n\n`)]
+}
+
 describe('subscribeToEvents', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -119,5 +133,85 @@ describe('subscribeToEvents', () => {
     })
 
     expect(received).toBe('𠮷😀')
+  })
+
+  it('dispatches server.connected payloads with timestamp', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      createFetchResponse(
+        createEventChunk({
+          type: EventTypes.SERVER_CONNECTED,
+          properties: { timestamp: '2026-04-22T15:00:00.000Z' },
+        }),
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { subscribeToEvents } = await import('./events')
+
+    const received = await new Promise<unknown>((resolve, reject) => {
+      const unsubscribe = subscribeToEvents({
+        onServerConnected(data) {
+          unsubscribe()
+          resolve(data.timestamp)
+        },
+        onError(error) {
+          unsubscribe()
+          reject(error)
+        },
+      })
+    })
+
+    expect(received).toBe('2026-04-22T15:00:00.000Z')
+  })
+
+  it('ignores stale server.connected events from an old browser SSE generation after reconnect', async () => {
+    const firstFetch = createDeferred<Pick<Response, 'ok' | 'body'>>()
+    const secondFetch = createDeferred<Pick<Response, 'ok' | 'body'>>()
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => firstFetch.promise)
+      .mockImplementationOnce(() => secondFetch.promise)
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { subscribeToEvents, reconnectSSE } = await import('./events')
+    const received: string[] = []
+
+    const unsubscribe = subscribeToEvents({
+      onServerConnected(data) {
+        if (typeof data.timestamp === 'string') {
+          received.push(data.timestamp)
+        }
+      },
+    })
+
+    reconnectSSE()
+
+    secondFetch.resolve(
+      createFetchResponse(
+        createEventChunk({
+          type: EventTypes.SERVER_CONNECTED,
+          properties: { timestamp: 'new-server-time' },
+        }),
+      ),
+    )
+
+    await vi.waitFor(() => {
+      expect(received).toEqual(['new-server-time'])
+    })
+
+    firstFetch.resolve(
+      createFetchResponse(
+        createEventChunk({
+          type: EventTypes.SERVER_CONNECTED,
+          properties: { timestamp: 'stale-server-time' },
+        }),
+      ),
+    )
+
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(received).toEqual(['new-server-time'])
+    unsubscribe()
   })
 })

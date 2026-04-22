@@ -65,6 +65,10 @@ export type WorktreeFailedPayload = SDKEventWorktreeFailed['properties']
 
 export type VcsBranchUpdatedPayload = SDKEventVcsBranchUpdated['properties']
 
+export interface ServerConnectedPayload {
+  timestamp?: unknown
+}
+
 // ============================================
 // Global Event Type
 // ============================================
@@ -152,6 +156,7 @@ export interface EventCallbacks {
   onPartUpdated?: (part: Part) => void
   onPartDelta?: (data: PartDeltaPayload) => void
   onPartRemoved?: (data: PartRemovedPayload) => void
+  onServerConnected?: (data: ServerConnectedPayload) => void
   onSessionCreated?: (session: Session) => void
   onSessionUpdated?: (session: Session) => void
   onSessionDeleted?: (sessionId: string) => void

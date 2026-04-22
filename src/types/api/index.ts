@@ -107,6 +107,7 @@ export type {
   GlobalEvent,
   EventType,
   EventCallbacks,
+  ServerConnectedPayload,
   SessionIdlePayload,
   SessionErrorPayload,
   SessionStatusPayload,
