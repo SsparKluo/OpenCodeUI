@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.5.11] - 2026-04-26
+
+- fix: defer desktop windows until the first frame is ready (1b1e186)
+- fix: remove titlebar separator that misaligns with sidebar border (ed14752)
+- fix: prevent overlay sidebars from being obscured by desktop titlebar (8b20d80)
+- feat: add titlebar actions — back/forward, open project, settings, new window (65abc23)
+- fix: keep fullscreen viewers below desktop chrome (40e1ef4)
+
 ## [v0.5.10] - 2026-04-26
 
 - feat: add manual terminal labels and restore state (b42a90d)
