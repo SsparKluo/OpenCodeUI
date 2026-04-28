@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.5.17] - 2026-04-28
+
+- fix: keep session actions tied to visible focus (0e16597)
+- ci: update GitHub artifact actions (d9e49c6)
+
 ## [v0.5.16] - 2026-04-28
 
 - fix: hide session actions after mouse selection (1d6b4be)
