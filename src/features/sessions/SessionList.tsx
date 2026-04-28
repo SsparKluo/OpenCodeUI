@@ -467,17 +467,6 @@ export function SessionListItem({
     onSelect()
   }
 
-  const handleRowButtonClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation()
-    handleClick()
-
-    // Mouse clicks should not leave the row in a persistent focus-within state,
-    // otherwise action buttons stay visible after simple selection.
-    if (e.detail > 0) {
-      e.currentTarget.blur()
-    }
-  }
-
   const handleCheckClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     onToggleCheck?.({ shiftKey: e.shiftKey })
@@ -618,11 +607,14 @@ export function SessionListItem({
             type="button"
             draggable={isDraggable}
             onDragStart={handleDragStart}
-            onClick={handleRowButtonClick}
+            onClick={e => {
+              e.stopPropagation()
+              handleClick()
+            }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
-            className="flex min-w-0 flex-1 items-center gap-1.5 bg-transparent border-none p-0 text-left"
+            className="peer flex min-w-0 flex-1 items-center gap-1.5 bg-transparent border-none p-0 text-left"
           >
             <div
               className={`flex min-w-0 flex-1 items-center gap-1.5 transition-[padding] duration-200 ${
@@ -667,7 +659,7 @@ export function SessionListItem({
             className={`absolute right-2 z-10 shrink-0 flex items-center gap-0.5 transition-opacity duration-150 ${
               actionsVisible
                 ? 'opacity-100 pointer-events-auto'
-                : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto'
+                : 'opacity-0 group-hover:opacity-100 peer-focus-visible:opacity-100 focus-within:opacity-100 pointer-events-none group-hover:pointer-events-auto peer-focus-visible:pointer-events-auto focus-within:pointer-events-auto'
             }`}
           >
             <button
@@ -782,11 +774,14 @@ export function SessionListItem({
           type="button"
           draggable={isDraggable}
           onDragStart={handleDragStart}
-          onClick={handleRowButtonClick}
+          onClick={e => {
+            e.stopPropagation()
+            handleClick()
+          }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          className="flex min-w-0 flex-1 items-start bg-transparent border-none p-0 text-left"
+          className="peer flex min-w-0 flex-1 items-start bg-transparent border-none p-0 text-left"
         >
           <div
             className={`flex-1 min-w-0 transition-[padding] duration-200 ${showActions ? 'pr-[60px]' : 'pr-1 group-hover:pr-[60px]'}`}
@@ -862,7 +857,7 @@ export function SessionListItem({
           className={`absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 transition-all duration-200 z-10 ${
             actionsVisible
               ? 'opacity-100 pointer-events-auto'
-              : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto'
+              : 'opacity-0 group-hover:opacity-100 peer-focus-visible:opacity-100 focus-within:opacity-100 pointer-events-none group-hover:pointer-events-auto peer-focus-visible:pointer-events-auto focus-within:pointer-events-auto'
           }`}
         >
           <button
