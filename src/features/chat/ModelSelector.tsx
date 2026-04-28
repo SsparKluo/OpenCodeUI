@@ -261,7 +261,7 @@ const ModelListPanel = memo(function ModelListPanel({
                     onTouchEnd={onTouchEnd}
                     onTouchMove={onTouchEnd}
                     title={`${model.name} · ${model.providerName}${model.contextLimit ? ` · ${formatContext(model.contextLimit)}` : ''}`}
-                    className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md bg-transparent border-none p-0 text-left outline-none focus-visible:outline-none"
+                    className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md bg-transparent border-none p-0 text-left text-[length:var(--fs-base)] outline-none focus-visible:outline-none"
                   >
                     {/* Left: name + capability icons */}
                     <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
