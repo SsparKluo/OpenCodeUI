@@ -140,6 +140,13 @@ export function InputToolbar({
     focusables[nextIndex]?.focus()
   }, [])
 
+  const isFocusableElement = useCallback((target: EventTarget | null) => {
+    if (!(target instanceof Element)) return false
+    return Boolean(
+      target.closest('button, [href], input:not([type="hidden"]), textarea, select, [tabindex]:not([tabindex="-1"])'),
+    )
+  }, [])
+
   const handleMenuKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>, menu: HTMLDivElement | null, onClose: () => void, trigger: HTMLButtonElement | null) => {
       const items = Array.from(menu?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"], button') ?? [])
@@ -231,41 +238,31 @@ export function InputToolbar({
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (
+        agentMenuOpen &&
         agentMenuRef.current &&
         !agentMenuRef.current.contains(e.target as Node) &&
         !agentTriggerRef.current?.contains(e.target as Node)
       ) {
-        const target = e.target as HTMLElement | null
-        const isFocusableTarget =
-          !!target &&
-          target.matches(
-            'button, [href], input:not([type="hidden"]), textarea, select, [tabindex]:not([tabindex="-1"])',
-          )
         setAgentMenuOpen(false)
-        if (!isFocusableTarget) {
+        if (!isFocusableElement(e.target)) {
           agentTriggerRef.current?.focus()
         }
       }
       if (
+        variantMenuOpen &&
         variantMenuRef.current &&
         !variantMenuRef.current.contains(e.target as Node) &&
         !variantTriggerRef.current?.contains(e.target as Node)
       ) {
-        const target = e.target as HTMLElement | null
-        const isFocusableTarget =
-          !!target &&
-          target.matches(
-            'button, [href], input:not([type="hidden"]), textarea, select, [tabindex]:not([tabindex="-1"])',
-          )
         setVariantMenuOpen(false)
-        if (!isFocusableTarget) {
+        if (!isFocusableElement(e.target)) {
           variantTriggerRef.current?.focus()
         }
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [agentMenuOpen, variantMenuOpen, isFocusableElement])
 
   useEffect(() => {
     if (!agentMenuOpen) return

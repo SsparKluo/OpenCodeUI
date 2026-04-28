@@ -227,11 +227,26 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
       if (changeOptions.length === 0) return
 
       const currentIndex = changeOptions.findIndex(mode => changeMenuOptionRefs.current[mode] === document.activeElement)
+      const siblingControls = Array.from(changeMenuTriggerRef.current?.parentElement?.querySelectorAll<HTMLButtonElement>('button') ?? [])
+      const triggerIndex = siblingControls.findIndex(button => button === changeMenuTriggerRef.current)
+      const focusSiblingControl = (direction: 1 | -1) => {
+        const nextControl = siblingControls[triggerIndex + direction]
+        ;(nextControl ?? changeMenuTriggerRef.current)?.focus()
+      }
 
       if (event.key === 'Escape') {
         event.preventDefault()
         setChangeMenuOpen(false)
         changeMenuTriggerRef.current?.focus()
+        return
+      }
+
+      if (event.key === 'Tab') {
+        event.preventDefault()
+        setChangeMenuOpen(false)
+        window.setTimeout(() => {
+          focusSiblingControl(event.shiftKey ? -1 : 1)
+        }, 0)
         return
       }
 

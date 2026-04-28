@@ -415,6 +415,13 @@ export const ModelSelector = memo(
       focusables[currentIndex + direction]?.focus()
     }, [])
 
+    const isFocusableElement = useCallback((target: EventTarget | null) => {
+      if (!(target instanceof Element)) return false
+      return Boolean(
+        target.closest('button, [href], input:not([type="hidden"]), textarea, select, [tabindex]:not([tabindex="-1"])'),
+      )
+    }, [])
+
     const displayName =
       trigger === 'header'
         ? selectedModel?.name || t('modelSelector.selectModel')
@@ -543,18 +550,12 @@ export const ModelSelector = memo(
           menuRef.current &&
           !menuRef.current.contains(target)
         ) {
-          const targetElement = target as HTMLElement | null
-          const isFocusableTarget =
-            !!targetElement &&
-            targetElement.matches(
-              'button, [href], input:not([type="hidden"]), textarea, select, [tabindex]:not([tabindex="-1"])',
-            )
-          closeMenu({ focusTrigger: !isFocusableTarget })
+          closeMenu({ focusTrigger: !isFocusableElement(target) })
         }
       }
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [isOpen, closeMenu])
+    }, [isOpen, closeMenu, isFocusableElement])
 
     useEffect(() => {
       if (!isOpen) return
