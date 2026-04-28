@@ -110,6 +110,7 @@ export function InputToolbar({
   const variantTriggerRef = useRef<HTMLButtonElement>(null)
   const variantMenuRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const toolbarRef = useRef<HTMLDivElement>(null)
   const agentMenuFocusRef = useRef<'selected' | 'first' | 'last'>('selected')
   const variantMenuFocusRef = useRef<'selected' | 'first' | 'last'>('selected')
   const agentMenuId = 'input-toolbar-agent-menu'
@@ -124,6 +125,20 @@ export function InputToolbar({
     const selectedItem = menu.querySelector<HTMLButtonElement>('[role="menuitemradio"][aria-checked="true"]')
     const target = mode === 'first' ? items[0] : mode === 'last' ? items[items.length - 1] : selectedItem ?? items[0]
     target?.focus()
+  }, [])
+
+  const focusToolbarRelative = useCallback((trigger: HTMLButtonElement | null, direction: 1 | -1) => {
+    if (!trigger || !toolbarRef.current) return
+
+    const focusables = Array.from(
+      toolbarRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([type="file"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    )
+    const currentIndex = focusables.findIndex(item => item === trigger)
+    if (currentIndex === -1) return
+    const nextIndex = currentIndex + direction
+    focusables[nextIndex]?.focus()
   }, [])
 
   const handleMenuKeyDown = useCallback(
@@ -160,10 +175,14 @@ export function InputToolbar({
         onClose()
         trigger?.focus()
       } else if (event.key === 'Tab') {
+        event.preventDefault()
         onClose()
+        window.setTimeout(() => {
+          focusToolbarRelative(trigger, event.shiftKey ? -1 : 1)
+        }, 0)
       }
     },
-    [],
+    [focusToolbarRelative],
   )
 
   // 文件选择器（Tauri 原生 / 浏览器 fallback）
@@ -251,7 +270,7 @@ export function InputToolbar({
   const currentAgent = agents.find(a => a.name === selectedAgent)
 
   return (
-    <div className="flex items-center justify-between px-3 pb-3 relative">
+    <div ref={toolbarRef} className="flex items-center justify-between px-3 pb-3 relative">
       {/* Left side: Model (mobile) + Agent + Variant selectors */}
       <div className={`flex items-center min-w-0 ${isCompact ? 'gap-1' : 'gap-2'}`}>
         {/* Model Selector — 移动端显示在最左边 */}

@@ -60,9 +60,9 @@ vi.mock('../../../components/ui', () => ({
   }) => {
     const selectionProps =
       selectionRole === 'menuitemradio'
-        ? { role: selectionRole, 'aria-checked': selected }
+        ? { role: selectionRole, 'aria-checked': selected, tabIndex: selected ? 0 : -1 }
         : selectionRole === 'option'
-          ? { role: selectionRole, 'aria-selected': selected }
+          ? { role: selectionRole, 'aria-selected': selected, tabIndex: selected ? 0 : -1 }
           : {}
 
     return (
@@ -178,6 +178,34 @@ describe('InputToolbar file selection', () => {
       expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
       expect(trigger).toHaveAttribute('aria-expanded', 'true')
       expect(screen.getByRole('menuitemradio', { name: 'Build' })).toHaveFocus()
+    })
+  })
+
+  it('closes the agent menu on Tab and moves focus to the next toolbar control', async () => {
+    render(
+      <InputToolbar
+        agents={[
+          { name: 'build', description: 'Build things', mode: 'primary' },
+          { name: 'plan', description: 'Plan work', mode: 'primary' },
+        ] as any}
+        selectedAgent="build"
+        onAgentChange={vi.fn()}
+        fileCapabilities={{ image: false, pdf: false, audio: false, video: false }}
+        canSend={true}
+        onFilesSelected={vi.fn()}
+        onSend={vi.fn()}
+      />,
+    )
+
+    const trigger = screen.getByTitle('build: Build things')
+    fireEvent.click(trigger)
+
+    const selectedItem = await screen.findByRole('menuitemradio', { name: 'Build' })
+    fireEvent.keyDown(selectedItem, { key: 'Tab' })
+
+    await waitFor(() => {
+      expect(trigger).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.getByRole('button', { name: 'Send message' })).toHaveFocus()
     })
   })
 })

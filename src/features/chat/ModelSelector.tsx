@@ -131,7 +131,6 @@ interface ModelListPanelProps {
   lastMousePosRef: React.RefObject<{ x: number; y: number }>
   idPrefix: string
   listboxId: string
-  isOpen: boolean
   maxListHeight: string
   searchPlaceholder: string
   noResultsText: string
@@ -163,7 +162,6 @@ const ModelListPanel = memo(function ModelListPanel({
   lastMousePosRef,
   idPrefix,
   listboxId,
-  isOpen,
   maxListHeight,
   searchPlaceholder,
   noResultsText,
@@ -190,8 +188,6 @@ const ModelListPanel = memo(function ModelListPanel({
             onKeyDown={handleSearchKeyDown}
             placeholder={searchPlaceholder}
             aria-label={searchPlaceholder}
-            aria-controls={listboxId}
-            aria-expanded={isOpen}
             autoComplete="off"
             className="flex-1 bg-transparent border-none outline-none text-[length:var(--fs-base)] text-text-100 placeholder:text-text-400"
           />
@@ -251,6 +247,8 @@ const ModelListPanel = memo(function ModelListPanel({
                 >
                   <button
                     id={`${idPrefix}-${index}`}
+                    data-model-key={itemKey}
+                    data-focus-target="item"
                     type="button"
                     onClick={() => onItemClick(model)}
                     onFocus={() => {
@@ -295,6 +293,8 @@ const ModelListPanel = memo(function ModelListPanel({
                   {!preferTouchUi && (
                     <button
                       type="button"
+                      data-model-key={itemKey}
+                      data-focus-target="pin"
                       onClick={e => onTogglePin(e, model)}
                       onFocus={() => {
                         if (interactiveIndex !== -1) setHighlightedIndex(interactiveIndex)
@@ -370,6 +370,7 @@ export const ModelSelector = memo(
     const lastMousePosRef = useRef({ x: 0, y: 0 })
     const openFocusTargetRef = useRef<'search' | 'list'>('search')
     const openHighlightedIndexRef = useRef(0)
+    const pendingFocusRestoreRef = useRef<{ modelKey: string; target: 'item' | 'pin' } | null>(null)
 
     const idPrefix = trigger === 'header' ? 'ms-item' : 'ms-tb-item'
     const listboxId = `${idPrefix}-listbox`
@@ -451,6 +452,7 @@ export const ModelSelector = memo(
 
     const handleTogglePin = useCallback((e: React.MouseEvent, model: ModelInfo) => {
       e.stopPropagation()
+      pendingFocusRestoreRef.current = { modelKey: getModelKey(model), target: 'pin' }
       toggleModelPin(model)
       setRefreshTrigger(c => c + 1)
     }, [])
@@ -553,6 +555,31 @@ export const ModelSelector = memo(
       })
     }, [isOpen, highlightedIndex, itemIndices, idPrefix])
 
+    useEffect(() => {
+      if (!isOpen || !pendingFocusRestoreRef.current) return
+
+      const { modelKey, target } = pendingFocusRestoreRef.current
+      const itemIndex = flatList.findIndex(item => item.type === 'item' && getModelKey(item.data) === modelKey)
+      if (itemIndex === -1) {
+        pendingFocusRestoreRef.current = null
+        return
+      }
+
+      const interactiveIndex = itemIndices.indexOf(itemIndex)
+      if (interactiveIndex !== -1) {
+        setHighlightedIndex(interactiveIndex)
+      }
+
+      const timerId = window.setTimeout(() => {
+        const selector = `button[data-focus-target="${target}"][data-model-key="${modelKey}"]`
+        const focusTarget = document.querySelector<HTMLElement>(selector)
+        focusTarget?.focus()
+        pendingFocusRestoreRef.current = null
+      }, 0)
+
+      return () => clearTimeout(timerId)
+    }, [isOpen, flatList, itemIndices])
+
     // ---- Keyboard navigation ----
 
     const handleSearchKeyDown = useCallback(
@@ -570,11 +597,11 @@ export const ModelSelector = memo(
         switch (e.key) {
           case 'ArrowDown':
             e.preventDefault()
-            focusItemAtInteractiveIndex(Math.min(highlightedIndex + 1, itemIndices.length - 1))
+            focusItemAtInteractiveIndex(highlightedIndex)
             break
           case 'ArrowUp':
             e.preventDefault()
-            focusItemAtInteractiveIndex(Math.max(highlightedIndex - 1, 0))
+            focusItemAtInteractiveIndex(highlightedIndex)
             break
           case 'Enter': {
             e.preventDefault()
@@ -669,9 +696,7 @@ export const ModelSelector = memo(
             }
           }}
           disabled={disabled || isLoading}
-          aria-haspopup="dialog"
           aria-expanded={isOpen}
-          aria-controls={isOpen ? listboxId : undefined}
           className="group flex items-center gap-2 px-2 py-1.5 text-text-200 rounded-lg hover:bg-bg-200 hover:text-text-100 transition-all duration-150 active:scale-95 cursor-pointer text-[length:var(--fs-base)]"
           title={displayName}
         >
@@ -691,9 +716,7 @@ export const ModelSelector = memo(
             }
           }}
           disabled={disabled || isLoading}
-          aria-haspopup="dialog"
           aria-expanded={isOpen}
-          aria-controls={isOpen ? listboxId : undefined}
           className="flex items-center px-2 py-1.5 text-[length:var(--fs-base)] rounded-lg transition-all duration-150 hover:bg-bg-200 active:scale-95 cursor-pointer min-w-0 overflow-hidden w-full"
           title={selectedModel?.name || t('modelSelector.selectModel')}
         >
@@ -750,7 +773,6 @@ export const ModelSelector = memo(
             lastMousePosRef={lastMousePosRef}
             idPrefix={idPrefix}
             listboxId={listboxId}
-            isOpen={isOpen}
             maxListHeight={listMaxH}
             searchPlaceholder={t('modelSelector.searchModels')}
             noResultsText={t('modelSelector.noModelsFound')}
