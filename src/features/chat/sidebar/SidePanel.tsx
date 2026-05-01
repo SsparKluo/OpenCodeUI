@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState, useEffect, useRef, type ReactNode } fro
 import { useTranslation } from 'react-i18next'
 import { SessionList } from '../../sessions'
 import { FolderRecentList } from './FolderRecentList'
+import { getProjectGroupIdentity } from './projectGrouping'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 import { ActiveSessionItem } from './ActiveSessionItem'
 import { NotificationItem } from './NotificationItem'
@@ -21,7 +22,13 @@ import {
   CloseIcon,
   SpinnerIcon,
 } from '../../../components/Icons'
-import { useDirectory, useSessionStats, useKeybindingLabel, useGitWorkspaceCatalog, useVcsInfo } from '../../../hooks'
+import {
+  useDirectory,
+  useSessionStats,
+  useKeybindingLabel,
+  useGitWorkspaceCatalog,
+  useVcsInfo,
+} from '../../../hooks'
 import { useSessionContext } from '../../../contexts/useSessionContext'
 import { useLayoutStore, useMessageStore, childSessionStore } from '../../../store'
 import { useBusySessions, useBusyCount } from '../../../store/activeSessionStore'
@@ -394,7 +401,7 @@ export function SidePanel({
       for (const directory of directories) {
         const normalizedDirectory = normalizeToForwardSlash(directory.path)
         const meta = gitWorkspaceCatalog.get(normalizedDirectory)
-        const projectId = meta?.isGit ? meta.rootDirectory : normalizedDirectory
+        const { projectId, workspaceDirectories } = getProjectGroupIdentity(normalizedDirectory, meta)
         const existing = groups.get(projectId)
 
         if (existing) {
@@ -413,7 +420,7 @@ export function SidePanel({
           canReorder: true,
           memberDirectories: [directory.path],
           reorderPath: directory.path,
-          workspaceDirectories: meta?.isGit ? meta.workspaces : undefined,
+          workspaceDirectories,
         })
       }
 
@@ -471,7 +478,7 @@ export function SidePanel({
     if (groupedProject) return groupedProject
 
     const meta = gitWorkspaceCatalog.get(normalizedCurrentDirectory!)
-    const projectId = meta?.isGit ? meta.rootDirectory : normalizedCurrentDirectory!
+    const { projectId, workspaceDirectories } = getProjectGroupIdentity(normalizedCurrentDirectory!, meta)
     const found = findProjectGroupForDirectory(folderProjectGroups, projectId)
     if (found) return found
 
@@ -481,7 +488,7 @@ export function SidePanel({
       name: getDirectoryName(projectId),
       canReorder: false,
       memberDirectories: [],
-      workspaceDirectories: meta?.isGit ? meta.workspaces : undefined,
+      workspaceDirectories,
     }
   }, [currentDirectory, folderProjectGroups, gitWorkspaceCatalog, globalProject, normalizedCurrentDirectory])
 
