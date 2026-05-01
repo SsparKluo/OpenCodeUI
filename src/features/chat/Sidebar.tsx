@@ -9,6 +9,8 @@ function clampSidebarWidth(width: number, minWidth: number, maxWidth: number) {
   return Math.min(Math.max(width, minWidth), maxWidth)
 }
 
+const SIDEBAR_TRANSITION_MS = 300
+
 interface SidebarProps {
   isOpen: boolean
   selectedSessionId: string | null
@@ -46,6 +48,7 @@ export const Sidebar = memo(function Sidebar({
   const sidebarRef = useRef<HTMLDivElement>(null)
   const currentWidthRef = useRef(layout.sidebar.openWidth)
   const rafRef = useRef<number>(0)
+  const transitionResizeTimerRef = useRef<number | null>(null)
 
   const handleAddProject = useCallback(
     (path: string) => {
@@ -173,12 +176,30 @@ export const Sidebar = memo(function Sidebar({
   }, [isOverlay, isOpen, onClose])
 
   const handleToggle = useCallback(() => {
+    if (!isOverlay) {
+      if (transitionResizeTimerRef.current !== null) window.clearTimeout(transitionResizeTimerRef.current)
+      window.dispatchEvent(new CustomEvent('panel-resize-start'))
+      transitionResizeTimerRef.current = window.setTimeout(() => {
+        transitionResizeTimerRef.current = null
+        window.dispatchEvent(new CustomEvent('panel-resize-end'))
+      }, SIDEBAR_TRANSITION_MS + 50)
+    }
+
     if (isOpen) {
       onClose()
     } else {
       onOpen()
     }
-  }, [isOpen, onClose, onOpen])
+  }, [isOverlay, isOpen, onClose, onOpen])
+
+  useEffect(() => {
+    return () => {
+      if (transitionResizeTimerRef.current !== null) {
+        window.clearTimeout(transitionResizeTimerRef.current)
+        window.dispatchEvent(new CustomEvent('panel-resize-end'))
+      }
+    }
+  }, [])
 
   const handleSelectSession = useCallback(
     (session: ApiSession) => {
