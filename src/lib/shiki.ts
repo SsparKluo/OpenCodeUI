@@ -81,23 +81,24 @@ function cssVarToHex(name: string, fallback: string): string {
 }
 
 export function createAdaptiveShikiTheme(isDark: boolean): CustomShikiTheme {
+  // GitHub/Primer-like syntax colors, kept as a custom theme so code highlighting still follows
+  // app theme revisions and can be tuned without giving up Shiki token fidelity.
   const syntax = {
-    comment: cssVarToHex('--text-400', isDark ? '#808080' : '#8a8a8a'),
-    regexp: cssVarToHex('--text-200', isDark ? '#d4d4d4' : '#3a3a3a'),
-    string: isDark ? '#00ceb9' : '#006656',
-    keyword: cssVarToHex('--accent-secondary-100', isDark ? '#9d7cd8' : '#6f42c1'),
-    primitive: isDark ? '#ffba92' : '#fb4804',
-    operator: cssVarToHex('--text-400', isDark ? '#9a9a9a' : '#525252'),
-    variable: cssVarToHex('--text-100', isDark ? '#eeeeee' : '#1a1a1a'),
-    property: isDark ? '#ff9ae2' : '#ed6dc8',
-    type: isDark ? '#ecf58c' : '#596600',
-    constant: isDark ? '#93e9f6' : '#007b80',
-    punctuation: cssVarToHex('--text-300', isDark ? '#b8b8b8' : '#555555'),
-    object: cssVarToHex('--text-100', isDark ? '#eeeeee' : '#1a1a1a'),
-    info: isDark ? '#93e9f6' : '#0092a8',
-    success: cssVarToHex('--success-100', isDark ? '#7fd88f' : '#3d9a57'),
-    warning: cssVarToHex('--warning-100', isDark ? '#e5c07b' : '#b0851f'),
-    critical: cssVarToHex('--danger-100', isDark ? '#e06c75' : '#d1383d'),
+    comment: cssVarToHex('--text-400', isDark ? '#8b949e' : '#6e7781'),
+    regexp: isDark ? '#a5d6ff' : '#0a3069',
+    string: isDark ? '#a5d6ff' : '#0a3069',
+    keyword: isDark ? '#ff7b72' : '#cf222e',
+    primitive: isDark ? '#79c0ff' : '#0550ae',
+    operator: cssVarToHex('--text-300', isDark ? '#c9d1d9' : '#24292f'),
+    variable: cssVarToHex('--text-100', isDark ? '#c9d1d9' : '#24292f'),
+    property: isDark ? '#79c0ff' : '#0550ae',
+    type: isDark ? '#ffa657' : '#953800',
+    constant: isDark ? '#79c0ff' : '#0550ae',
+    punctuation: cssVarToHex('--text-300', isDark ? '#c9d1d9' : '#24292f'),
+    info: isDark ? '#d2a8ff' : '#8250df',
+    success: isDark ? '#7ee787' : '#116329',
+    warning: isDark ? '#ffa657' : '#953800',
+    critical: isDark ? '#ff7b72' : '#cf222e',
   }
 
   return {
