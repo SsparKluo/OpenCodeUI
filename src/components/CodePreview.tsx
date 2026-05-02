@@ -160,6 +160,7 @@ function codePreviewTheme(lineHeight: number): Extension {
       color: 'hsl(var(--text-100))',
       backgroundColor: 'transparent',
       fontSize: 'var(--fs-code)',
+      position: 'relative',
     },
     '.cm-editor': {
       height: '100%',
@@ -224,18 +225,21 @@ function codePreviewTheme(lineHeight: number): Extension {
       pointerEvents: 'none',
     },
     '.cm-panels-top': {
+      position: 'absolute',
       borderBottom: '0',
-      top: '0.6rem',
-      left: 'auto',
-      right: '0.85rem',
-      maxWidth: 'calc(100% - 1.7rem)',
+      inset: '0',
+      zIndex: '20',
+      overflow: 'visible',
     },
     '.cm-code-search': {
+      position: 'absolute',
+      top: '0.55rem',
+      right: '0.75rem',
       display: 'flex',
       alignItems: 'center',
       gap: '0.2rem',
       width: 'max-content',
-      maxWidth: '100%',
+      maxWidth: 'calc(100% - 1.5rem)',
       minHeight: '2.45rem',
       padding: '0.28rem 0.36rem',
       border: '1px solid hsl(var(--border-100) / 0.45)',
@@ -250,8 +254,8 @@ function codePreviewTheme(lineHeight: number): Extension {
     '.cm-code-search-inputWrap': {
       position: 'relative',
       minWidth: '10rem',
-      width: '16rem',
-      maxWidth: 'min(16rem, 38vw)',
+      width: 'clamp(10rem, 28vw, 16rem)',
+      maxWidth: '100%',
     },
     '.cm-code-search-input': {
       width: '100%',
@@ -323,18 +327,24 @@ function codePreviewTheme(lineHeight: number): Extension {
       color: 'hsl(var(--accent-main-100))',
     },
     '@media (max-width: 640px)': {
-      '.cm-panels-top': {
+      '.cm-code-search': {
         top: '0.45rem',
         right: '0.45rem',
-        maxWidth: 'calc(100% - 0.9rem)',
-      },
-      '.cm-code-search': {
         flexWrap: 'wrap',
         justifyContent: 'flex-end',
+        maxWidth: 'calc(100% - 0.9rem)',
       },
       '.cm-code-search-inputWrap': {
-        width: 'calc(100vw - 2.4rem)',
+        width: 'calc(100vw - 2.1rem)',
         maxWidth: 'none',
+      },
+    },
+    '@media (min-width: 641px) and (max-width: 900px)': {
+      '.cm-code-search-inputWrap': {
+        width: '11rem',
+      },
+      '.cm-code-search-count': {
+        minWidth: '3.8rem',
       },
     },
   })
