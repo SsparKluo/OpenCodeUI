@@ -450,11 +450,14 @@ export const ChatArea = memo(
             {/* Shim: flex-1 占满剩余空间，消息不满一屏时推到视觉顶部 */}
             <div className="flex-1" />
 
-            {/* Bottom spacing (视觉底部) */}
+            {/* Bottom spacing (视觉底部)：
+             * 预留一块高 = inputBoxHeight + GAP 的空区，让最后一条消息不被贴底的 InputBox 遮住。
+             * GAP 控制消息底部 (fork/copy 按钮一行) 到输入胶囊顶部的空白，
+             * 实际可见 gap = GAP + 消息卡 py-3 (12px)。默认 16px → 总 28px 视觉距离。 */}
             <div
               className="shrink-0"
               style={{
-                height: bottomPadding > 0 ? `${bottomPadding + 48}px` : '256px',
+                height: bottomPadding > 0 ? `${bottomPadding + 16}px` : '256px',
               }}
             />
 

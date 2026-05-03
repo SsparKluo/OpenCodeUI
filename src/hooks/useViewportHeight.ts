@@ -20,24 +20,56 @@ export function useViewportHeight() {
       window.addEventListener('resize', updateAppHeight)
       return () => window.removeEventListener('resize', updateAppHeight)
     }
+    // Browser/PWA: 用 visualViewport 检测键盘。
+    //
+    // 陷阱：iOS PWA standalone 下 window.innerHeight 包含 home indicator 区域，
+    // 而 visualViewport.height 不包含。没键盘时两者差值 ≈ safe-area-inset-bottom（~34px），
+    // 会被误判为“键盘弹出”。需减掉这部分才是真实键盘高度。
+    // 不减的后果：#root 多出 34px padding-bottom + InputBox 自身又读一次
+    // var(--safe-area-inset-bottom) → 双倍 safe-area 间距。
+    //
+    // env(safe-area-inset-bottom) 在 CSS 自定义属性里不会被 getComputedStyle 解析为像素，
+    // 用临时 probe 元素把它赋给实际 padding 属性才能获得解析后的 px 值。
+    let safeAreaBottomPx = 0
+    const measureSafeAreaBottom = () => {
+      const probe = document.createElement('div')
+      probe.style.cssText =
+        'position:fixed;left:-9999px;top:0;width:0;height:0;' +
+        'padding-bottom:env(safe-area-inset-bottom,0px);' +
+        'visibility:hidden;pointer-events:none'
+      document.body.appendChild(probe)
+      safeAreaBottomPx = parseFloat(getComputedStyle(probe).paddingBottom) || 0
+      document.body.removeChild(probe)
+    }
+    measureSafeAreaBottom()
 
-    // Browser/PWA: 用 visualViewport 检测键盘
     const updateViewport = () => {
       const viewport = window.visualViewport
       if (!viewport) return
-      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
-      root.style.setProperty('--keyboard-inset-bottom', `${Math.round(inset)}px`)
+      const rawInset = window.innerHeight - viewport.height - viewport.offsetTop
+      // 减掉 safe-area phantom，剩下的才是真实键盘高度。
+      const keyboardInset = Math.max(0, rawInset - safeAreaBottomPx)
+      root.style.setProperty('--keyboard-inset-bottom', `${Math.round(keyboardInset)}px`)
     }
+
+    // 旋转设备 / 窗口 resize 时 safe-area 可能变化，重测一次。
+    const handleWindowResize = () => {
+      measureSafeAreaBottom()
+      updateViewport()
+    }
+
     updateViewport()
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', updateViewport)
       window.visualViewport.addEventListener('scroll', updateViewport)
     }
+    window.addEventListener('resize', handleWindowResize)
     return () => {
       if (window.visualViewport) {
         window.visualViewport.removeEventListener('resize', updateViewport)
         window.visualViewport.removeEventListener('scroll', updateViewport)
       }
+      window.removeEventListener('resize', handleWindowResize)
     }
   }, [])
 }

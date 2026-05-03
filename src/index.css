@@ -50,28 +50,32 @@ body,
   background: hsl(var(--bg-100));
 }
 
-/* PWA 全屏模式 / Tauri 原生 app 适配 - 只在 #root 上应用 safe area */
-@media (display-mode: standalone) {
-  #root {
-    padding-top: var(--safe-area-inset-top);
-    padding-left: var(--safe-area-inset-left);
-    padding-right: var(--safe-area-inset-right);
-    /* 不在这里加 padding-bottom，让 InputBox 自己处理 */
-  }
+/* Safe-area padding 应用在 #root 上：浏览器、PWA、Tauri 共用同一份 env()。
+ * 非 PWA 浏览器场景下 env() 自然返回 0，不会产生副作用；Tauri 走原生 setPadding，
+ * 由下方 .tauri-app #root 显式重置为 0，避免与原生层叠加产生双倍 padding。
+ * 不在这里加 padding-bottom——贴底组件 (InputBox / BottomPanel / SidebarFooter)
+ * 自己读取 var(--safe-area-inset-bottom) 处理底边距，避免和键盘 inset 冲突。 */
+#root {
+  padding-top: var(--safe-area-inset-top);
+  padding-left: var(--safe-area-inset-left);
+  padding-right: var(--safe-area-inset-right);
+}
 
-  /* PWA standalone 底部兜底：
-   * 部分 iOS 设备（如有物理 Home 键的 iPhone 8）env(safe-area-inset-bottom) 为 0，
-   * 但 Safari standalone 仍会在底部叠加系统 UI 横条，遮住贴底内容。
-   * 用 max() 取 safe-area 和最小保底值的较大者，确保 InputFooter 不被遮挡。 */
+/* PWA standalone 底部兜底：
+ * 部分 iOS 设备（如有物理 Home 键的 iPhone 8）env(safe-area-inset-bottom) 为 0，
+ * 但 Safari standalone 仍会在底部叠加系统 UI 横条，遮住贴底内容。
+ * 用 max() 取 safe-area 和最小保底值的较大者，确保 InputFooter 不被遮挡。 */
+@media (display-mode: standalone) {
   :root:not(.tauri-app) {
     --safe-area-inset-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
   }
 }
 
-/* Tauri 原生 app：原生层 MainActivity.kt 已经通过 setPadding 处理了安全区域和键盘 */
-/* safe area padding 由原生层管理，CSS 侧不再重复处理 */
+/* Tauri 原生 app：原生 MainActivity.kt 通过 setPadding 处理 safe-area 和键盘。
+ * 用更高优先级 (.tauri-app + #root) 显式 padding:0 覆盖上面的 #root 规则，
+ * 防止 CSS env() 与原生 setPadding 双重叠加。 */
 .tauri-app #root {
-  /* 原生已 setPadding，这里不再加 padding */
+  padding: 0;
 }
 
 /* ============================================

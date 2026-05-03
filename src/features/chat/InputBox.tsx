@@ -888,9 +888,17 @@ function InputBoxComponent({
     if (a.agentName) excludeValues.add(a.agentName)
   })
 
+  // 底部 padding 计算：
+  // - isCollapsed (收起态 / 移动端「回复胶囊」)：
+  //   公式 max(12, env)。Safari env()=0 → 12px breathing；PWA env()=34 → 34px，
+  //   胶囊底部刚好贴 safe-area 顶部，避免 env+12 叠加出现的「多一截」间距。
+  // - 展开态：Footer (h-8 = 2rem) 已是一个天然的视觉缓冲，只需补足 safe-area
+  //   超出 Footer 的部分。这避免 PWA 下 Footer + 完整 safe-area 叠加出现
+  //   「双倍 safe-area」的视觉 gap。
+  //   公式：max(0, env - 2rem) → 总缓冲 = Footer + padding = max(32px, env)
   const bottomDockPadding = isCollapsed
-    ? 'calc(var(--safe-area-inset-bottom, 0px) + 12px)'
-    : 'var(--safe-area-inset-bottom, 0px)'
+    ? 'max(12px, var(--safe-area-inset-bottom, 0px))'
+    : 'max(0px, calc(var(--safe-area-inset-bottom, 0px) - 2rem))'
 
   return (
     <div className="w-full">
