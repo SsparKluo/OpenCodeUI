@@ -32,10 +32,11 @@ export function CodeMirrorReadonly({
 }: CodeMirrorReadonlyProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
+  const constrainedHeight = maxHeight !== undefined
 
   const extensions = useMemo(
-    () => createReadonlyCodeMirrorExtensions({ wordWrap, lineHeight, showLineNumbers, extraExtensions }),
-    [wordWrap, lineHeight, showLineNumbers, extraExtensions],
+    () => createReadonlyCodeMirrorExtensions({ wordWrap, lineHeight, showLineNumbers, maxHeight, extraExtensions }),
+    [wordWrap, lineHeight, showLineNumbers, maxHeight, extraExtensions],
   )
 
   useEffect(() => {
@@ -73,12 +74,11 @@ export function CodeMirrorReadonly({
 
   return (
     <div
-      className={`h-full min-h-0 w-full overflow-hidden font-mono text-[length:var(--fs-code)] ${className}`}
+      className={`${constrainedHeight ? 'w-full overflow-hidden' : 'h-full min-h-0 w-full overflow-hidden'} font-mono text-[length:var(--fs-code)] ${className}`}
       data-resizing={isResizing ? 'true' : undefined}
       onKeyDownCapture={handleKeyDownCapture}
-      style={maxHeight !== undefined ? { maxHeight } : undefined}
     >
-      <div ref={hostRef} className="h-full min-h-0" />
+      <div ref={hostRef} className={constrainedHeight ? '' : 'h-full min-h-0'} />
     </div>
   )
 }

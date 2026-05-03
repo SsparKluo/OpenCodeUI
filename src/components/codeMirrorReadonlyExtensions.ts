@@ -32,11 +32,13 @@ export function createReadonlyCodeMirrorExtensions({
   wordWrap,
   lineHeight,
   showLineNumbers = true,
+  maxHeight,
   extraExtensions = [],
 }: {
   wordWrap: boolean
   lineHeight: number
   showLineNumbers?: boolean
+  maxHeight?: number
   extraExtensions?: Extension[]
 }): Extension[] {
   const extensions: Extension[] = [
@@ -47,7 +49,7 @@ export function createReadonlyCodeMirrorExtensions({
     search({ top: true, createPanel: createCodeMirrorSearchPanel }),
     highlightSelectionMatches(),
     shikiDecorationsField,
-    readonlyCodeMirrorTheme(lineHeight),
+    readonlyCodeMirrorTheme(lineHeight, maxHeight),
     ...extraExtensions,
   ]
 
@@ -94,12 +96,14 @@ function buildShikiDecorations(state: EditorState, tokens: HighlightTokens | nul
   return Decoration.set(ranges, true)
 }
 
-function readonlyCodeMirrorTheme(lineHeight: number): Extension {
+function readonlyCodeMirrorTheme(lineHeight: number, maxHeight?: number): Extension {
+  const fillContainer = maxHeight === undefined
+
   return EditorView.theme({
-    '&': { height: '100%', color: 'hsl(var(--text-100))', backgroundColor: 'transparent', fontSize: 'var(--fs-code)', position: 'relative' },
-    '.cm-editor': { height: '100%' },
-    '.cm-scroller': { height: '100%', overflow: 'auto', fontFamily: 'var(--font-mono)', lineHeight: `${lineHeight}px` },
-    '.cm-content': { padding: '0', minHeight: '100%', caretColor: 'hsl(var(--accent-main-100))' },
+    '&': { color: 'hsl(var(--text-100))', backgroundColor: 'transparent', fontSize: 'var(--fs-code)', position: 'relative', ...(fillContainer ? { height: '100%' } : {}) },
+    '.cm-editor': fillContainer ? { height: '100%' } : {},
+    '.cm-scroller': { overflow: 'auto', fontFamily: 'var(--font-mono)', lineHeight: `${lineHeight}px`, ...(fillContainer ? { height: '100%' } : { maxHeight: `${maxHeight}px` }) },
+    '.cm-content': { padding: '0', caretColor: 'hsl(var(--accent-main-100))', ...(fillContainer ? { minHeight: '100%' } : {}) },
     '.cm-cursor': { borderLeftColor: 'hsl(var(--accent-main-100))', borderLeftWidth: '2px' },
     '.cm-line': { padding: '0 1rem 0 0.75rem', minHeight: `${lineHeight}px` },
     '.cm-gutters': {
