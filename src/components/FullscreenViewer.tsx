@@ -14,7 +14,7 @@
  *   </FullscreenViewer>
  */
 
-import { memo, type ReactNode } from 'react'
+import { memo, useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DESKTOP_FULLSCREEN_LAYER_Z_INDEX, DESKTOP_TITLEBAR_HEIGHT } from '../constants'
 import { usesCustomDesktopTitlebar } from '../utils/tauri'
@@ -40,6 +40,8 @@ export interface FullscreenViewerProps {
   showHeader?: boolean
   /** z-index，默认 100 */
   zIndex?: number
+  /** 延后一帧挂载 children，避免重内容阻塞全屏打开动画 */
+  deferContent?: boolean
 }
 
 // ============================================
@@ -55,6 +57,7 @@ export const FullscreenViewer = memo(function FullscreenViewer({
   headerRight,
   showHeader = true,
   zIndex,
+  deferContent = false,
 }: FullscreenViewerProps) {
   const { t } = useTranslation('common')
   const isDesktopChrome = usesCustomDesktopTitlebar()
@@ -100,11 +103,30 @@ export const FullscreenViewer = memo(function FullscreenViewer({
         )}
 
         {/* Content: 填满剩余空间 */}
-        <div className="flex-1 min-h-0">{children}</div>
+        <div className="flex-1 min-h-0">{deferContent ? isOpen && <DeferredFullscreenContent>{children}</DeferredFullscreenContent> : children}</div>
       </div>
     </ModalShell>
   )
 })
+
+function DeferredFullscreenContent({ children }: { children: ReactNode }) {
+  const [shouldRender, setShouldRender] = useState(false)
+
+  useEffect(() => {
+    let firstFrameId: number | null = null
+    let secondFrameId: number | null = null
+    firstFrameId = requestAnimationFrame(() => {
+      secondFrameId = requestAnimationFrame(() => setShouldRender(true))
+    })
+
+    return () => {
+      if (firstFrameId !== null) cancelAnimationFrame(firstFrameId)
+      if (secondFrameId !== null) cancelAnimationFrame(secondFrameId)
+    }
+  }, [])
+
+  return shouldRender ? children : null
+}
 
 // ============================================
 // ViewModeSwitch - 独立的 diff 视图模式切换

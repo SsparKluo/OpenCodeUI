@@ -6,7 +6,7 @@ import { clsx } from 'clsx'
 import { detectLanguage } from '../utils/languageUtils'
 import { extractContentFromUnifiedDiff } from '../utils/diffUtils'
 import { FullscreenViewer, ViewModeSwitch } from './FullscreenViewer'
-import { DiffViewer, type ViewMode } from './DiffViewer'
+import { DiffViewer, useDiffViewerData, type ViewMode } from './DiffViewer'
 
 interface DiffViewProps {
   /** Unified diff format string */
@@ -78,6 +78,8 @@ export const DiffView = memo(function DiffView({
     return explicitLanguage || detectLanguage(filePath)
   }, [filePath, explicitLanguage])
 
+  const diffViewerData = useDiffViewerData(content?.before ?? '', content?.after ?? '', language)
+
   const stats = useMemo(() => {
     if (!content) return { additions: 0, deletions: 0 }
     return computeDiffStats(content.before, content.after)
@@ -144,6 +146,7 @@ export const DiffView = memo(function DiffView({
             language={language}
             viewMode="unified"
             maxHeight={maxHeight}
+            data={diffViewerData}
           />
         </div>
       </div>
@@ -161,8 +164,9 @@ export const DiffView = memo(function DiffView({
             </div>
           }
           headerRight={<ViewModeSwitch viewMode={fullscreenViewMode} onChange={setFullscreenViewMode} />}
+          deferContent
         >
-          <DiffViewer before={content.before} after={content.after} language={language} viewMode={fullscreenViewMode} />
+          <DiffViewer before={content.before} after={content.after} language={language} viewMode={fullscreenViewMode} data={diffViewerData} />
         </FullscreenViewer>
       )}
     </div>

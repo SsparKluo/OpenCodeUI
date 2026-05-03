@@ -8,7 +8,7 @@ import { memo, useState, useEffect, useCallback, useRef, useMemo, useId } from '
 import { useTranslation } from 'react-i18next'
 import { RetryIcon, ChevronRightIcon, MaximizeIcon, ClockIcon, GitBranchIcon, GitDiffIcon, LayersIcon } from './Icons'
 import { getMaterialIconUrl } from '../utils/materialIcons'
-import { DiffViewer, type ViewMode } from './DiffViewer'
+import { DiffViewer, useDiffViewerData, type ViewMode } from './DiffViewer'
 import { FullscreenViewer, ViewModeSwitch } from './FullscreenViewer'
 import { getCurrentProject, initGitProject } from '../api/client'
 import { getLastTurnDiff, getSessionDiff } from '../api/session'
@@ -894,6 +894,7 @@ const DiffPreviewPanel = memo(function DiffPreviewPanel({
     if (diff.before !== undefined && diff.after !== undefined) return { before: diff.before, after: diff.after }
     return { before: '', after: '' }
   }, [diff.patch, diff.before, diff.after])
+  const diffViewerData = useDiffViewerData(before, after, language, isResizing)
   const { t } = useTranslation(['components', 'common'])
   const [fullscreenOpen, setFullscreenOpen] = useState(false)
   const [fullscreenViewMode, setFullscreenViewMode] = useState<ViewMode>(viewMode)
@@ -951,7 +952,7 @@ const DiffPreviewPanel = memo(function DiffPreviewPanel({
 
       {/* Diff Content - DiffViewer 自带滚动 */}
       <div className="flex-1 min-h-0">
-        <DiffViewer before={before} after={after} language={language} viewMode={viewMode} isResizing={isResizing} />
+        <DiffViewer before={before} after={after} language={language} viewMode={viewMode} isResizing={isResizing} data={diffViewerData} />
       </div>
 
       <FullscreenViewer
@@ -965,8 +966,9 @@ const DiffPreviewPanel = memo(function DiffPreviewPanel({
           </div>
         }
         headerRight={<ViewModeSwitch viewMode={fullscreenViewMode} onChange={setFullscreenViewMode} />}
+        deferContent
       >
-        <DiffViewer before={before} after={after} language={language} viewMode={fullscreenViewMode} />
+        <DiffViewer before={before} after={after} language={language} viewMode={fullscreenViewMode} data={diffViewerData} />
       </FullscreenViewer>
     </div>
   )

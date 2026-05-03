@@ -42,6 +42,15 @@ export interface DiffViewerProps {
   maxHeight?: number
   isResizing?: boolean
   wordWrap?: boolean
+  data?: DiffViewerData
+}
+
+export interface DiffViewerData {
+  beforeTokens: HighlightTokens | null
+  afterTokens: HighlightTokens | null
+  pairedLines: PairedLine[]
+  unifiedLines: UnifiedLine[]
+  lineNumberWidth: number
 }
 
 export type LineType = 'add' | 'delete' | 'context' | 'empty'
@@ -429,19 +438,9 @@ function CollapsedBar({
 // Main Component
 // ============================================
 
-export const DiffViewer = memo(function DiffViewer({
-  before,
-  after,
-  language = 'text',
-  viewMode = 'split',
-  maxHeight,
-  isResizing = false,
-  wordWrap,
-}: DiffViewerProps) {
-  const { diffStyle, codeWordWrap, codeFontScale } = useSyncExternalStore(themeStore.subscribe, themeStore.getSnapshot)
-  const resolvedWordWrap = wordWrap ?? codeWordWrap
-  const lineHeight = codeLineHeight(codeFontScale)
-  const shouldHighlight = !isResizing && language !== 'text'
+// eslint-disable-next-line react-refresh/only-export-components -- DiffViewer consumers share this data with fullscreen instances.
+export function useDiffViewerData(before: string, after: string, language = 'text', isResizing = false, enabled = true): DiffViewerData {
+  const shouldHighlight = enabled && !isResizing && language !== 'text'
   const { output: beforeTokens } = useSyntaxHighlight(before, {
     lang: language,
     mode: 'tokens',
@@ -453,9 +452,42 @@ export const DiffViewer = memo(function DiffViewer({
     enabled: shouldHighlight,
   })
   const skipWordDiff = isResizing
-  const pairedLines = useMemo(() => computePairedLines(before, after, skipWordDiff), [before, after, skipWordDiff])
-  const unifiedLines = useMemo(() => computeUnifiedLines(before, after), [before, after])
-  const lineNumberWidth = useDiffLineNumberWidth(before, after)
+  const pairedLines = useMemo(() => (enabled ? computePairedLines(before, after, skipWordDiff) : []), [before, after, enabled, skipWordDiff])
+  const unifiedLines = useMemo(() => (enabled ? computeUnifiedLines(before, after) : []), [before, after, enabled])
+  const lineNumberWidth = useDiffLineNumberWidth(enabled ? before : '', enabled ? after : '')
+
+  return useMemo(
+    () => ({ beforeTokens, afterTokens, pairedLines, unifiedLines, lineNumberWidth }),
+    [afterTokens, beforeTokens, lineNumberWidth, pairedLines, unifiedLines],
+  )
+}
+
+export const DiffViewer = memo(function DiffViewer({
+  data,
+  ...props
+}: DiffViewerProps) {
+  if (data) return <DiffViewerContent {...props} data={data} />
+  return <DiffViewerWithData {...props} />
+})
+
+function DiffViewerWithData({ before, after, language = 'text', isResizing = false, ...props }: DiffViewerProps) {
+  const data = useDiffViewerData(before, after, language, isResizing)
+  return <DiffViewerContent before={before} after={after} language={language} isResizing={isResizing} {...props} data={data} />
+}
+
+const DiffViewerContent = memo(function DiffViewerContent({
+  before,
+  after,
+  viewMode = 'split',
+  maxHeight,
+  isResizing = false,
+  wordWrap,
+  data,
+}: DiffViewerProps & { data: DiffViewerData }) {
+  const { diffStyle, codeWordWrap, codeFontScale } = useSyncExternalStore(themeStore.subscribe, themeStore.getSnapshot)
+  const resolvedWordWrap = wordWrap ?? codeWordWrap
+  const lineHeight = codeLineHeight(codeFontScale)
+  const resolvedData = data
 
   // 纯增加或纯删除时，split 模式另一边是空的没意义，自动降级为 unified
   const isAddOnly = !before.trim()
@@ -466,10 +498,10 @@ export const DiffViewer = memo(function DiffViewer({
     if (resolvedWordWrap) {
       return (
         <WrappedSplitDiffView
-          beforeTokens={beforeTokens}
-          afterTokens={afterTokens}
-          pairedLines={pairedLines}
-          lineNumberWidth={lineNumberWidth}
+          beforeTokens={resolvedData.beforeTokens}
+          afterTokens={resolvedData.afterTokens}
+          pairedLines={resolvedData.pairedLines}
+          lineNumberWidth={resolvedData.lineNumberWidth}
           isResizing={isResizing}
           maxHeight={maxHeight}
           diffStyle={diffStyle}
@@ -480,10 +512,10 @@ export const DiffViewer = memo(function DiffViewer({
 
     return (
       <SplitDiffView
-        beforeTokens={beforeTokens}
-        afterTokens={afterTokens}
-        pairedLines={pairedLines}
-        lineNumberWidth={lineNumberWidth}
+        beforeTokens={resolvedData.beforeTokens}
+        afterTokens={resolvedData.afterTokens}
+        pairedLines={resolvedData.pairedLines}
+        lineNumberWidth={resolvedData.lineNumberWidth}
         isResizing={isResizing}
         maxHeight={maxHeight}
         diffStyle={diffStyle}
@@ -495,10 +527,10 @@ export const DiffViewer = memo(function DiffViewer({
   if (resolvedWordWrap) {
     return (
       <WrappedUnifiedDiffView
-        beforeTokens={beforeTokens}
-        afterTokens={afterTokens}
-        lines={unifiedLines}
-        lineNumberWidth={lineNumberWidth}
+        beforeTokens={resolvedData.beforeTokens}
+        afterTokens={resolvedData.afterTokens}
+        lines={resolvedData.unifiedLines}
+        lineNumberWidth={resolvedData.lineNumberWidth}
         isResizing={isResizing}
         maxHeight={maxHeight}
         diffStyle={diffStyle}
@@ -509,10 +541,10 @@ export const DiffViewer = memo(function DiffViewer({
 
   return (
     <UnifiedDiffView
-      beforeTokens={beforeTokens}
-      afterTokens={afterTokens}
-      lines={unifiedLines}
-      lineNumberWidth={lineNumberWidth}
+      beforeTokens={resolvedData.beforeTokens}
+      afterTokens={resolvedData.afterTokens}
+      lines={resolvedData.unifiedLines}
+      lineNumberWidth={resolvedData.lineNumberWidth}
       isResizing={isResizing}
       maxHeight={maxHeight}
       diffStyle={diffStyle}

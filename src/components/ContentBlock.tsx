@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next'
 import { diffLines } from 'diff'
 import { ChevronDownIcon, ChevronRightIcon, MaximizeIcon } from './Icons'
 import { CopyButton } from './ui'
-import { DiffViewer, type ViewMode } from './DiffViewer'
+import { DiffViewer, useDiffViewerData, type ViewMode } from './DiffViewer'
 import { CodePreview } from './CodePreview'
 import { detectLanguage } from '../utils/languageUtils'
 import { FullscreenViewer, ViewModeSwitch } from './FullscreenViewer'
@@ -130,6 +130,7 @@ export const ContentBlock = memo(function ContentBlock({
     if (typeof diff === 'object') return diff
     return extractContentFromUnifiedDiff(diff)
   }, [diff])
+  const diffViewerData = useDiffViewerData(resolvedDiff?.before ?? '', resolvedDiff?.after ?? '', lang, false, isDiff)
 
   // 自动响应式切换 diff view mode
   useEffect(() => {
@@ -262,6 +263,7 @@ export const ContentBlock = memo(function ContentBlock({
                   language={lang}
                   viewMode={diffViewMode}
                   maxHeight={maxHeight}
+                  data={diffViewerData}
                 />
               ) : content?.trim() ? (
                 <CodePreview code={content} language={lang} maxHeight={maxHeight} />
@@ -286,12 +288,14 @@ export const ContentBlock = memo(function ContentBlock({
             )
           }
           headerRight={<ViewModeSwitch viewMode={fullscreenDiffViewMode} onChange={setFullscreenDiffViewMode} />}
+          deferContent
         >
           <DiffViewer
             before={resolvedDiff.before}
             after={resolvedDiff.after}
             language={lang}
             viewMode={fullscreenDiffViewMode}
+            data={diffViewerData}
           />
         </FullscreenViewer>
       ) : content?.trim() ? (
