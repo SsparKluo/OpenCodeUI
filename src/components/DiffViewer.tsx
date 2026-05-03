@@ -9,7 +9,7 @@
  * 不再按文件大小、行数、字符数降级高亮或 diff
  */
 
-import { memo, useMemo, useRef, useState, useEffect, useCallback, useSyncExternalStore } from 'react'
+import { memo, useMemo, useRef, useState, useEffect, useCallback, useSyncExternalStore, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import { diffLines, diffWords } from 'diff'
 import { useSyntaxHighlight, type HighlightTokens } from '../hooks/useSyntaxHighlight'
@@ -263,9 +263,17 @@ function getContentBgClass(type: LineType): string {
   return getLineBgClass(type)
 }
 
+function getEmptyBufferBackgroundStyle(rowIndex: number, lineHeight: number, xOffset = 0): CSSProperties {
+  return { backgroundPosition: `${5 + xOffset}px ${-(rowIndex * lineHeight)}px` }
+}
+
+function getEmptyBufferRowStyle(rowIndex: number, lineHeight: number, xOffset = 0): CSSProperties {
+  return { height: lineHeight, ...getEmptyBufferBackgroundStyle(rowIndex, lineHeight, xOffset) }
+}
+
 function getLineNumberColumnWidth(maxLineNo: number): number {
   const digits = String(Math.max(1, maxLineNo)).length
-  return Math.max(32, digits * 8 + 16)
+  return Math.max(44, digits * 8 + 28)
 }
 
 function getLineCount(text: string): number {
@@ -284,10 +292,11 @@ function useDiffLineNumberWidth(before: string, after: string): number {
   )
 }
 
-function LineNumberCell({ lineNo, width }: { lineNo?: number; width: number }) {
+function LineNumberCell({ lineNo, width, type }: { lineNo?: number; width: number; type?: LineType }) {
+  const toneClass = type === 'add' || type === 'delete' ? 'text-text-300' : 'text-text-400'
   return (
     <div
-      className="shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60"
+      className={`shrink-0 pl-4 pr-3 text-right text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none ${toneClass}`}
       style={{ width }}
     >
       {lineNo}
@@ -295,25 +304,30 @@ function LineNumberCell({ lineNo, width }: { lineNo?: number; width: number }) {
   )
 }
 
-function EmptyContentBuffer({ height }: { height: number }) {
-  return <div className="diff-empty-content-buffer min-w-full" style={{ height }} />
+function DiffMarkerCell({ type }: { type: LineType }) {
+  return (
+    <div className="w-5 shrink-0 text-center text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none">
+      {type === 'add' && <span className="text-success-100">+</span>}
+      {type === 'delete' && <span className="text-danger-100">−</span>}
+    </div>
+  )
+}
+
+function EmptyContentBuffer({ height, rowIndex, xOffset = 0 }: { height: number; rowIndex: number; xOffset?: number }) {
+  return <div className="diff-empty-content-buffer min-w-full" style={getEmptyBufferRowStyle(rowIndex, height, xOffset)} />
 }
 
 /** Change bar 样式 — 行号左侧的 3px 竖条，add 实心 / delete 虚线 */
 function getChangeBarProps(type: LineType): { className: string; style?: React.CSSProperties } {
   switch (type) {
     case 'add':
-      return { className: 'w-[3px] shrink-0 bg-success-100' }
+      return { className: 'w-1 shrink-0 bg-success-100' }
     case 'delete':
       return {
-        className: 'w-[3px] shrink-0',
-        style: {
-          background:
-            'repeating-linear-gradient(to bottom, var(--color-danger-100) 0px, var(--color-danger-100) 2px, transparent 2px, transparent 4px)',
-        },
+        className: 'diff-change-bar-delete w-1 shrink-0',
       }
     default:
-      return { className: 'w-[3px] shrink-0' }
+      return { className: 'w-1 shrink-0' }
   }
 }
 
@@ -353,12 +367,16 @@ function getSeparatorDirections({ isFirst, isLast, chunked }: { isFirst?: boolea
 function CollapsedExpandButton({
   directions,
   onExpand,
+  width,
 }: {
   directions: ExpandDirection[]
   onExpand?: (direction: ExpandDirection) => void
+  width?: number
 }) {
+  const buttonWidth = width !== undefined && directions.length > 0 ? width / directions.length : undefined
+
   return (
-    <div data-separator-wrapper="" className="diff-separator-button-group">
+    <div data-separator-wrapper="" className="diff-separator-button-group" style={width !== undefined ? { width, flexBasis: width } : undefined}>
       {directions.map(direction => (
         <button
           key={direction}
@@ -368,6 +386,7 @@ function CollapsedExpandButton({
           data-expand-down={direction === 'down' ? '' : undefined}
           data-expand-both={direction === 'both' ? '' : undefined}
           className="diff-separator-button"
+          style={buttonWidth !== undefined ? { width: buttonWidth, minWidth: 0, flexBasis: buttonWidth } : undefined}
           title={direction === 'up' ? 'Expand upward' : direction === 'down' ? 'Expand downward' : 'Expand hidden lines'}
           onClick={() => onExpand?.(direction)}
         >
@@ -395,9 +414,31 @@ function CollapsedLabel({
   return (
     <div className="diff-separator-content-row" style={{ height }}>
       {leadingDirections.length > 0 && <CollapsedExpandButton directions={leadingDirections} onExpand={onExpand} />}
-      <button type="button" data-separator-content="" className="diff-separator-content" onClick={() => onExpand?.('both')}>
-        <span data-unmodified-lines="">{t('diffViewer.linesUnchanged', { count })}</span>
-      </button>
+      <div data-separator-content="" className="diff-separator-content">
+        <button type="button" data-unmodified-lines="" className="diff-separator-text-button" onClick={() => onExpand?.('both')}>
+          {t('diffViewer.linesUnchanged', { count })}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function CollapsedLabelOverlay({
+  count,
+  t,
+  onExpand,
+  height,
+  left,
+}: {
+  count: number
+  t: (key: string, opts?: Record<string, unknown>) => string
+  onExpand?: (direction: ExpandDirection) => void
+  height: number
+  left: number
+}) {
+  return (
+    <div className="diff-separator-label-overlay" style={{ height, left }}>
+      <CollapsedLabel count={count} t={t} onExpand={onExpand} height={height} />
     </div>
   )
 }
@@ -416,6 +457,7 @@ function CollapsedBar({
   chunked,
   onExpand,
   height = 24,
+  lineNumberAreaWidth,
 }: {
   count: number
   t: (key: string, opts?: Record<string, unknown>) => string
@@ -424,11 +466,12 @@ function CollapsedBar({
   chunked?: boolean
   onExpand?: (direction: ExpandDirection) => void
   height?: number
+  lineNumberAreaWidth?: number
 }) {
   const directions = getSeparatorDirections({ isFirst, isLast, chunked })
   return (
     <div data-separator="line-info" data-expand-index="" className="diff-separator-surface" style={{ height }}>
-      <CollapsedExpandButton directions={directions} onExpand={onExpand} />
+      <CollapsedExpandButton directions={directions} onExpand={onExpand} width={lineNumberAreaWidth} />
       <CollapsedLabel count={count} t={t} onExpand={onExpand} height={height} />
     </div>
   )
@@ -591,7 +634,7 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
   }
 
   const useChangeBars = diffStyle === 'changeBars'
-  const gutterWidth = useChangeBars ? lineNumberWidth + 3 : lineNumberWidth + 20
+  const gutterWidth = useChangeBars ? lineNumberWidth + 4 : lineNumberWidth + 20
 
   const visibleRows: React.ReactNode[] = []
   for (let i = startIndex; i < endIndex; i++) {
@@ -607,6 +650,7 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
             isLast={item.isLast}
             chunked={item.chunked}
             onExpand={direction => handleExpand(item.id, direction)}
+            lineNumberAreaWidth={lineNumberWidth}
           />
         </div>,
       )
@@ -614,24 +658,25 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
     }
 
     const pair = item as PairedLine
+    const leftEmptyStyle = pair.left.type === 'empty' ? getEmptyBufferBackgroundStyle(i, lineHeight) : undefined
+    const rightEmptyStyle = pair.right.type === 'empty' ? getEmptyBufferBackgroundStyle(i, lineHeight) : undefined
     visibleRows.push(
       <div key={i} ref={el => measureRef(i, el)} className="flex items-stretch">
         {/* Left panel */}
         <div
           className={`flex-1 flex items-stretch min-w-0 border-r border-border-100/30 ${getContentBgClass(pair.left.type)}`}
+          style={leftEmptyStyle}
         >
           <div className="shrink-0" style={{ width: gutterWidth }}>
             {useChangeBars ? (
               <div className="flex items-stretch h-full">
                 <div {...getChangeBarProps(pair.left.type)} />
-                <LineNumberCell lineNo={pair.left.lineNo} width={lineNumberWidth} />
+                <LineNumberCell lineNo={pair.left.lineNo} width={lineNumberWidth} type={pair.left.type} />
               </div>
             ) : (
               <div className="flex h-full">
-                <LineNumberCell lineNo={pair.left.lineNo} width={lineNumberWidth} />
-                <div className="w-5 shrink-0 text-center text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none">
-                  {pair.left.type === 'delete' && <span className="text-danger-100">−</span>}
-                </div>
+                <LineNumberCell lineNo={pair.left.lineNo} width={lineNumberWidth} type={pair.left.type} />
+                <DiffMarkerCell type={pair.left.type} />
               </div>
             )}
           </div>
@@ -645,19 +690,17 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
         </div>
 
         {/* Right panel */}
-        <div className={`flex-1 flex items-stretch min-w-0 ${getContentBgClass(pair.right.type)}`}>
+        <div className={`flex-1 flex items-stretch min-w-0 ${getContentBgClass(pair.right.type)}`} style={rightEmptyStyle}>
           <div className="shrink-0" style={{ width: gutterWidth }}>
             {useChangeBars ? (
               <div className="flex items-stretch h-full">
                 <div {...getChangeBarProps(pair.right.type)} />
-                <LineNumberCell lineNo={pair.right.lineNo} width={lineNumberWidth} />
+                <LineNumberCell lineNo={pair.right.lineNo} width={lineNumberWidth} type={pair.right.type} />
               </div>
             ) : (
               <div className="flex h-full">
-                <LineNumberCell lineNo={pair.right.lineNo} width={lineNumberWidth} />
-                <div className="w-5 shrink-0 text-center text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none">
-                  {pair.right.type === 'add' && <span className="text-success-100">+</span>}
-                </div>
+                <LineNumberCell lineNo={pair.right.lineNo} width={lineNumberWidth} type={pair.right.type} />
+                <DiffMarkerCell type={pair.right.type} />
               </div>
             )}
           </div>
@@ -863,7 +906,7 @@ const SplitDiffView = memo(function SplitDiffView({
 
   // 渲染可见行 — 分别生成 gutter 和 content
   const useChangeBars = diffStyle === 'changeBars'
-  const gutterWidth = useChangeBars ? lineNumberWidth + 3 : lineNumberWidth + 20
+  const gutterWidth = useChangeBars ? lineNumberWidth + 4 : lineNumberWidth + 20
 
   const leftGutterRows: React.ReactNode[] = []
   const leftContentRows: React.ReactNode[] = []
@@ -875,19 +918,25 @@ const SplitDiffView = memo(function SplitDiffView({
 
     if (isCollapsed(item)) {
       const directions = getSeparatorDirections(item)
-      const contentOffset = Math.max(0, directions.length * 32 - gutterWidth)
-      const labelInset = Math.max(lineNumberWidth, contentOffset)
       leftGutterRows.push(
         <div
           key={i}
           data-separator="line-info"
           data-expand-index=""
-          className="diff-separator-surface overflow-visible"
+          className="diff-separator-surface relative overflow-visible"
           style={{ height: lineHeight }}
         >
           <CollapsedExpandButton
             directions={directions}
             onExpand={direction => handleExpand(item.id, direction)}
+            width={lineNumberWidth}
+          />
+          <CollapsedLabelOverlay
+            count={item.count}
+            t={t}
+            onExpand={direction => handleExpand(item.id, direction)}
+            height={lineHeight}
+            left={lineNumberWidth}
           />
         </div>,
       )
@@ -896,16 +945,10 @@ const SplitDiffView = memo(function SplitDiffView({
           key={i}
           data-separator="line-info"
           data-expand-index=""
-          className="diff-separator-surface relative"
-          style={{ height: lineHeight, paddingLeft: labelInset }}
+          className="diff-separator-surface"
+          style={{ height: lineHeight }}
         >
-          {contentOffset > 0 && (
-            <div
-              className="pointer-events-none absolute top-0 bottom-0 w-0.5 bg-bg-100"
-              style={{ left: contentOffset - 2 }}
-            />
-          )}
-          <CollapsedLabel count={item.count} t={t} onExpand={direction => handleExpand(item.id, direction)} height={lineHeight} />
+          <CollapsedContinuation height={lineHeight} />
         </div>,
       )
       rightGutterRows.push(
@@ -930,24 +973,26 @@ const SplitDiffView = memo(function SplitDiffView({
     }
 
     const pair = item as PairedLine
+    const leftGutterClass = pair.left.type === 'empty' ? 'diff-empty-content-buffer' : getGutterBgClass(pair.left.type)
+    const rightGutterClass = pair.right.type === 'empty' ? 'diff-empty-content-buffer' : getGutterBgClass(pair.right.type)
+    const leftGutterStyle = getEmptyBufferRowStyle(i, lineHeight)
+    const rightGutterStyle = getEmptyBufferRowStyle(i, lineHeight)
 
     // Left gutter
     leftGutterRows.push(
       useChangeBars ? (
         <div
           key={i}
-          className={`flex items-stretch ${getGutterBgClass(pair.left.type)}`}
-          style={{ height: lineHeight }}
+          className={`flex items-stretch ${leftGutterClass}`}
+          style={pair.left.type === 'empty' ? leftGutterStyle : { height: lineHeight }}
         >
           <div {...getChangeBarProps(pair.left.type)} />
-          <LineNumberCell lineNo={pair.left.lineNo} width={lineNumberWidth} />
+          <LineNumberCell lineNo={pair.left.lineNo} width={lineNumberWidth} type={pair.left.type} />
         </div>
       ) : (
-        <div key={i} className={`flex ${getGutterBgClass(pair.left.type)}`} style={{ height: lineHeight }}>
-          <LineNumberCell lineNo={pair.left.lineNo} width={lineNumberWidth} />
-          <div className="w-5 shrink-0 text-center text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none">
-            {pair.left.type === 'delete' && <span className="text-danger-100">−</span>}
-          </div>
+        <div key={i} className={`flex ${leftGutterClass}`} style={pair.left.type === 'empty' ? leftGutterStyle : { height: lineHeight }}>
+          <LineNumberCell lineNo={pair.left.lineNo} width={lineNumberWidth} type={pair.left.type} />
+          <DiffMarkerCell type={pair.left.type} />
         </div>
       ),
     )
@@ -959,7 +1004,7 @@ const SplitDiffView = memo(function SplitDiffView({
         className={`pr-2 leading-[var(--fs-code-line-height)] text-[length:var(--fs-code)] whitespace-pre ${pair.left.type === 'empty' ? '' : getContentBgClass(pair.left.type)}`}
         style={{ height: lineHeight }}
       >
-        {pair.left.type === 'empty' ? <EmptyContentBuffer height={lineHeight} /> : <LineContent line={pair.left} tokens={beforeTokens} />}
+        {pair.left.type === 'empty' ? <EmptyContentBuffer height={lineHeight} rowIndex={i} xOffset={-gutterWidth} /> : <LineContent line={pair.left} tokens={beforeTokens} />}
       </div>,
     )
 
@@ -968,18 +1013,16 @@ const SplitDiffView = memo(function SplitDiffView({
       useChangeBars ? (
         <div
           key={i}
-          className={`flex items-stretch ${getGutterBgClass(pair.right.type)}`}
-          style={{ height: lineHeight }}
+          className={`flex items-stretch ${rightGutterClass}`}
+          style={pair.right.type === 'empty' ? rightGutterStyle : { height: lineHeight }}
         >
           <div {...getChangeBarProps(pair.right.type)} />
-          <LineNumberCell lineNo={pair.right.lineNo} width={lineNumberWidth} />
+          <LineNumberCell lineNo={pair.right.lineNo} width={lineNumberWidth} type={pair.right.type} />
         </div>
       ) : (
-        <div key={i} className={`flex ${getGutterBgClass(pair.right.type)}`} style={{ height: lineHeight }}>
-          <LineNumberCell lineNo={pair.right.lineNo} width={lineNumberWidth} />
-          <div className="w-5 shrink-0 text-center text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none">
-            {pair.right.type === 'add' && <span className="text-success-100">+</span>}
-          </div>
+        <div key={i} className={`flex ${rightGutterClass}`} style={pair.right.type === 'empty' ? rightGutterStyle : { height: lineHeight }}>
+          <LineNumberCell lineNo={pair.right.lineNo} width={lineNumberWidth} type={pair.right.type} />
+          <DiffMarkerCell type={pair.right.type} />
         </div>
       ),
     )
@@ -991,7 +1034,7 @@ const SplitDiffView = memo(function SplitDiffView({
         className={`pr-2 leading-[var(--fs-code-line-height)] text-[length:var(--fs-code)] whitespace-pre ${pair.right.type === 'empty' ? '' : getContentBgClass(pair.right.type)}`}
         style={{ height: lineHeight }}
       >
-        {pair.right.type === 'empty' ? <EmptyContentBuffer height={lineHeight} /> : <LineContent line={pair.right} tokens={afterTokens} />}
+        {pair.right.type === 'empty' ? <EmptyContentBuffer height={lineHeight} rowIndex={i} xOffset={-gutterWidth} /> : <LineContent line={pair.right} tokens={afterTokens} />}
       </div>,
     )
   }
@@ -1205,7 +1248,7 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
   }
 
   const useChangeBars = diffStyle === 'changeBars'
-  const GUTTER_WIDTH = useChangeBars ? lineNumberWidth * 2 + 3 : lineNumberWidth * 2 + 20
+  const GUTTER_WIDTH = useChangeBars ? lineNumberWidth * 2 + 4 : lineNumberWidth * 2 + 20
 
   const gutterRows: React.ReactNode[] = []
   const contentRows: React.ReactNode[] = []
@@ -1220,18 +1263,26 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
           key={i}
           data-separator="line-info"
           data-expand-index=""
-          className="diff-separator-surface"
+          className="diff-separator-surface relative overflow-visible"
           style={{ height: lineHeight }}
         >
           <CollapsedExpandButton
             directions={directions}
             onExpand={direction => handleExpand(item.id, direction)}
+            width={lineNumberWidth * 2}
+          />
+          <CollapsedLabelOverlay
+            count={item.count}
+            t={t}
+            onExpand={direction => handleExpand(item.id, direction)}
+            height={lineHeight}
+            left={lineNumberWidth * 2}
           />
         </div>,
       )
       contentRows.push(
         <div key={i} data-separator="line-info" data-expand-index="" className="diff-separator-surface" style={{ height: lineHeight }}>
-          <CollapsedLabel count={item.count} t={t} onExpand={direction => handleExpand(item.id, direction)} height={lineHeight} />
+          <CollapsedContinuation height={lineHeight} />
         </div>,
       )
       continue
@@ -1253,17 +1304,14 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
       useChangeBars ? (
         <div key={i} className={`flex items-stretch ${getGutterBgClass(line.type)}`} style={{ height: lineHeight }}>
           <div {...getChangeBarProps(line.type)} />
-          <LineNumberCell lineNo={line.oldLineNo} width={lineNumberWidth} />
-          <LineNumberCell lineNo={line.newLineNo} width={lineNumberWidth} />
+          <LineNumberCell lineNo={line.oldLineNo} width={lineNumberWidth} type={line.type} />
+          <LineNumberCell lineNo={line.newLineNo} width={lineNumberWidth} type={line.type} />
         </div>
       ) : (
         <div key={i} className={`flex ${getGutterBgClass(line.type)}`} style={{ height: lineHeight }}>
-          <LineNumberCell lineNo={line.oldLineNo} width={lineNumberWidth} />
-          <LineNumberCell lineNo={line.newLineNo} width={lineNumberWidth} />
-          <div className="w-5 shrink-0 text-center text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none">
-            {line.type === 'add' && <span className="text-success-100">+</span>}
-            {line.type === 'delete' && <span className="text-danger-100">−</span>}
-          </div>
+          <LineNumberCell lineNo={line.oldLineNo} width={lineNumberWidth} type={line.type} />
+          <LineNumberCell lineNo={line.newLineNo} width={lineNumberWidth} type={line.type} />
+          <DiffMarkerCell type={line.type} />
         </div>
       ),
     )
@@ -1291,7 +1339,7 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
       <div style={{ height: totalHeight, position: 'relative' }}>
         <div className="absolute top-0 left-0 right-0 flex" style={{ transform: `translateY(${offsetY}px)` }}>
           {/* Gutter: 固定宽度，不水平滚动 */}
-          <div className="shrink-0 overflow-hidden" style={{ width: GUTTER_WIDTH }}>
+          <div className="shrink-0 overflow-visible" style={{ width: GUTTER_WIDTH }}>
             {gutterRows}
           </div>
 
@@ -1357,7 +1405,7 @@ const WrappedUnifiedDiffView = memo(function WrappedUnifiedDiffView({
   }
 
   const useChangeBars = diffStyle === 'changeBars'
-  const gutterWidth = useChangeBars ? lineNumberWidth * 2 + 3 : lineNumberWidth * 2 + 20
+  const gutterWidth = useChangeBars ? lineNumberWidth * 2 + 4 : lineNumberWidth * 2 + 20
 
   const visibleRows: React.ReactNode[] = []
   for (let i = startIndex; i < endIndex; i++) {
@@ -1373,6 +1421,7 @@ const WrappedUnifiedDiffView = memo(function WrappedUnifiedDiffView({
             isLast={item.isLast}
             chunked={item.chunked}
             onExpand={direction => handleExpand(item.id, direction)}
+            lineNumberAreaWidth={lineNumberWidth * 2}
           />
         </div>,
       )
@@ -1397,19 +1446,16 @@ const WrappedUnifiedDiffView = memo(function WrappedUnifiedDiffView({
             {useChangeBars ? (
               <div className="flex items-stretch h-full">
                 <div {...getChangeBarProps(line.type)} />
-                <LineNumberCell lineNo={line.oldLineNo} width={lineNumberWidth} />
-                <LineNumberCell lineNo={line.newLineNo} width={lineNumberWidth} />
+                <LineNumberCell lineNo={line.oldLineNo} width={lineNumberWidth} type={line.type} />
+                <LineNumberCell lineNo={line.newLineNo} width={lineNumberWidth} type={line.type} />
               </div>
             ) : (
               <div className="flex h-full">
-                <LineNumberCell lineNo={line.oldLineNo} width={lineNumberWidth} />
-                <LineNumberCell lineNo={line.newLineNo} width={lineNumberWidth} />
-                <div className="w-5 shrink-0 text-center text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none">
-                {line.type === 'add' && <span className="text-success-100">+</span>}
-                {line.type === 'delete' && <span className="text-danger-100">−</span>}
+                <LineNumberCell lineNo={line.oldLineNo} width={lineNumberWidth} type={line.type} />
+                <LineNumberCell lineNo={line.newLineNo} width={lineNumberWidth} type={line.type} />
+                <DiffMarkerCell type={line.type} />
               </div>
-            </div>
-          )}
+            )}
         </div>
 
         <div

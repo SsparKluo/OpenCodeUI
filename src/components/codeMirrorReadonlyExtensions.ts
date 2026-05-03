@@ -108,7 +108,7 @@ function readonlyCodeMirrorTheme(lineHeight: number, maxHeight?: number): Extens
     '.cm-line': { padding: '0 1rem 0 0.75rem', minHeight: `${lineHeight}px` },
     '.cm-gutters': {
       backgroundColor: 'hsl(var(--bg-100))',
-      color: 'hsl(var(--text-500))',
+      color: 'hsl(var(--text-400))',
       borderRight: '1px solid hsl(var(--border-100) / 0.35)',
       zIndex: '3',
     },

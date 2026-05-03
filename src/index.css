@@ -817,7 +817,8 @@ body {
 }
 
 .diff-separator-button,
-.diff-separator-content {
+.diff-separator-content,
+.diff-separator-text-button {
   display: flex;
   align-items: center;
   height: 100%;
@@ -874,20 +875,38 @@ body {
   height: 100%;
 }
 
+.diff-separator-label-overlay {
+  position: absolute;
+  top: 0;
+  right: -100vw;
+  z-index: 2;
+}
+
+.diff-separator-label-overlay .diff-separator-content-row {
+  width: auto;
+  max-width: min(60vw, 40rem);
+}
+
 .diff-separator-content {
   flex: 1 1 auto;
   justify-content: flex-start;
   min-width: 0;
   overflow: hidden;
   padding: 0 1ch;
+}
+
+.diff-separator-text-button {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
   cursor: pointer;
 }
 
-.diff-separator-content:hover {
+.diff-separator-text-button:hover {
   text-decoration: underline;
 }
 
-.diff-separator-content [data-unmodified-lines] {
+.diff-separator-text-button[data-unmodified-lines] {
   display: block;
   overflow: hidden;
   min-width: 0;
@@ -914,6 +933,13 @@ body {
     hsl(var(--border-200) / 0.48) calc(3px * 1.414),
     hsl(var(--border-200) / 0.48) calc(4px * 1.414)
   );
+}
+
+.diff-change-bar-delete {
+  background-image: linear-gradient(0deg, hsl(var(--danger-bg) / 0.45) 50%, hsl(var(--danger-100)) 50%);
+  background-repeat: repeat;
+  background-size: 2px 2px;
+  background-size: calc(1lh / round(1lh / 2px)) calc(1lh / round(1lh / 2px));
 }
 
 @media (prefers-reduced-motion: reduce) {
