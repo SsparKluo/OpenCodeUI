@@ -643,7 +643,25 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
   )
 
   const { containerRef, totalHeight, startIndex, endIndex, offsetY, handleScroll, measureRef } =
-    useDynamicVirtualScroll({ lineCount: displayLines.length, isResizing, estimateLineHeight: lineHeight, estimateHeight: estimateRowHeight })
+    useDynamicVirtualScroll({
+      lineCount: displayLines.length,
+      isResizing,
+      estimateLineHeight: lineHeight,
+      estimateHeight: estimateRowHeight,
+    })
+
+  const measureWrappedRowRef = useCallback(
+    (index: number, el: HTMLDivElement | null) => {
+      measureRef(index, el)
+      if (!el) return
+
+      const rowTop = offsetY + el.offsetTop
+      for (const buffer of el.querySelectorAll<HTMLElement>('.diff-empty-content-buffer')) {
+        buffer.style.backgroundPosition = `5px ${-rowTop}px`
+      }
+    },
+    [measureRef, offsetY],
+  )
 
   if (pairedLines.length === 0) {
     return (
@@ -659,7 +677,7 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
 
     if (isCollapsed(item)) {
       visibleRows.push(
-        <div key={`c-${i}`} ref={el => measureRef(i, el)}>
+        <div key={`c-${i}`} ref={el => measureWrappedRowRef(i, el)}>
           <CollapsedBar
             count={item.count}
             t={t}
@@ -668,6 +686,7 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
             chunked={item.chunked}
             onExpand={direction => handleExpand(item.id, direction)}
             lineNumberAreaWidth={lineNumberWidth}
+            height={lineHeight}
           />
         </div>,
       )
@@ -678,7 +697,7 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
     const leftEmptyStyle = pair.left.type === 'empty' ? getEmptyBufferBackgroundStyle(0) : undefined
     const rightEmptyStyle = pair.right.type === 'empty' ? getEmptyBufferBackgroundStyle(0) : undefined
     visibleRows.push(
-      <div key={i} ref={el => measureRef(i, el)} className="flex items-stretch">
+      <div key={i} ref={el => measureWrappedRowRef(i, el)} className="flex items-stretch">
         {/* Left panel */}
         <div
           className={`flex-1 flex items-stretch min-w-0 border-r border-border-100/30 ${getContentBgClass(pair.left.type)}`}
@@ -1431,7 +1450,12 @@ const WrappedUnifiedDiffView = memo(function WrappedUnifiedDiffView({
   )
 
   const { containerRef, totalHeight, startIndex, endIndex, offsetY, handleScroll, measureRef } =
-    useDynamicVirtualScroll({ lineCount: displayLines.length, isResizing, estimateLineHeight: lineHeight, estimateHeight: estimateRowHeight })
+    useDynamicVirtualScroll({
+      lineCount: displayLines.length,
+      isResizing,
+      estimateLineHeight: lineHeight,
+      estimateHeight: estimateRowHeight,
+    })
 
   if (lines.length === 0) {
     return (
@@ -1456,6 +1480,7 @@ const WrappedUnifiedDiffView = memo(function WrappedUnifiedDiffView({
             chunked={item.chunked}
             onExpand={direction => handleExpand(item.id, direction)}
             lineNumberAreaWidth={lineNumberWidth * 2}
+            height={lineHeight}
           />
         </div>,
       )
