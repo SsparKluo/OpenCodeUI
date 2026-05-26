@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
-  computeAnchorRestoreScrollDelta,
-} from './ChatArea'
-import {
   buildChatPages,
   buildExpandedPageSelection,
   buildPageRenderSegments,
   buildTurnDurationMap,
+  computeAnchorRestoreScrollDelta,
   computeExpandedPageRange,
+  findPageToPremeasure,
   findMessageSequenceOffset,
   reconcileStableChatPages,
 } from './chatPageModel'
@@ -290,6 +289,52 @@ describe('buildPageRenderSegments', () => {
       { kind: 'collapsed', key: 'collapsed:page-1:page-2', height: 230 },
       { kind: 'expanded', key: 'page-3', page: pages[3], measuredHeight: 130 },
     ])
+  })
+})
+
+describe('findPageToPremeasure', () => {
+  const pages = [
+    { key: 'page-0', rows: [], messageIds: ['m0'], estimatedHeight: 100 },
+    { key: 'page-1', rows: [], messageIds: ['m1'], estimatedHeight: 110 },
+    { key: 'page-2', rows: [], messageIds: ['m2'], estimatedHeight: 120 },
+    { key: 'page-3', rows: [], messageIds: ['m3'], estimatedHeight: 130 },
+    { key: 'page-4', rows: [], messageIds: ['m4'], estimatedHeight: 140 },
+  ]
+
+  it('premeasures the next older page when scrolling toward history', () => {
+    expect(
+      findPageToPremeasure({
+        pages,
+        expandedPageRange: { startIndex: 2, endIndex: 2 },
+        measuredPageHeights: {},
+        direction: 'older',
+        radius: 2,
+      }),
+    ).toBe(pages[3])
+  })
+
+  it('premeasures the next newer page when scrolling back toward latest messages', () => {
+    expect(
+      findPageToPremeasure({
+        pages,
+        expandedPageRange: { startIndex: 2, endIndex: 2 },
+        measuredPageHeights: {},
+        direction: 'newer',
+        radius: 2,
+      }),
+    ).toBe(pages[1])
+  })
+
+  it('falls back to the opposite side when the preferred side is already measured', () => {
+    expect(
+      findPageToPremeasure({
+        pages,
+        expandedPageRange: { startIndex: 2, endIndex: 2 },
+        measuredPageHeights: { 'page-3': 130, 'page-4': 140 },
+        direction: 'older',
+        radius: 2,
+      }),
+    ).toBe(pages[1])
   })
 })
 

@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components -- exports shared helper with component */
 // ============================================
 // ChatArea - 聊天消息显示区域
 // ============================================
@@ -6,7 +5,7 @@
 // 这版改成页块级虚拟化：
 // - 消息按页分块，不再按 message 逐条虚拟
 // - 视口附近少量页保持真实 DOM
-// - 远页折叠成固定高度块，但只有在该页真实渲染并量过高度后才允许折叠
+// - 远页折叠成固定高度块，优先使用实测高度，未测量时使用保守估算
 //
 // 这样滚动链路里不会出现“正在眼前从假高度变真高度的 message”，
 // 手感比消息级壳切换稳定得多，同时 DOM 数量也有上限。
@@ -35,13 +34,15 @@ import { AT_BOTTOM_THRESHOLD_PX } from '../../constants'
 import { useChatViewport } from './chatViewport'
 import {
   PREMEASURE_PAGE_RADIUS,
+  buildContentKeyedChatPages,
   buildExpandedPageSelection,
   buildPageOffsets,
   buildPageRenderSegments,
-  buildStableChatPages,
+  computeAnchorRestoreScrollDelta,
   buildTurnDurationMap,
   computeExpandedPageRange,
-  reconcileStableChatPages,
+  findPageToPremeasure,
+  type PagePremeasureDirection,
   type ChatPage,
   type StableChatPage,
 } from './chatPageModel'
@@ -59,10 +60,6 @@ type LoadMoreAnchorSnapshot = {
 
 /** Stable no-op to avoid creating a new closure on every render. */
 const NOOP = () => {}
-
-export function computeAnchorRestoreScrollDelta(previousTopOffset: number, nextTopOffset: number): number {
-  return nextTopOffset - previousTopOffset
-}
 
 function captureLoadMoreAnchor(root: HTMLElement, pageCountBefore = 0): LoadMoreAnchorSnapshot | null {
   const rootRect = root.getBoundingClientRect()
@@ -151,20 +148,23 @@ export const ChatArea = memo(
       const isLoadingRef = useRef(false)
       const [isLoadingMore, setIsLoadingMore] = useState(false)
       const [scrollOffsetFromBottom, setScrollOffsetFromBottom] = useState(0)
+      const [premeasureDirection, setPremeasureDirection] = useState<PagePremeasureDirection>('idle')
       const [viewportHeight, setViewportHeight] = useState(0)
       const [measuredPageHeights, setMeasuredPageHeights] = useState<Record<string, number>>({})
       const [pendingScrollMessageId, setPendingScrollMessageId] = useState<string | null>(null)
       const [pendingLoadMoreAnchorMessageId, setPendingLoadMoreAnchorMessageId] = useState<string | null>(null)
-      const pageKeyCounterRef = useRef(0)
       const scrollSnapshotRafRef = useRef<number | null>(null)
       const pendingLoadMoreAnchorRef = useRef<LoadMoreAnchorSnapshot | null>(null)
       const pendingLayoutAnchorRef = useRef<LoadMoreAnchorSnapshot | null>(null)
       const pendingLoadMoreTimerRef = useRef<number | null>(null)
       const pendingScrollClearTimerRef = useRef<number | null>(null)
+      const pendingAnchorClearRafRef = useRef<number | null>(null)
+      const pendingSessionResetRafRef = useRef<number | null>(null)
       const settlingScrollMessageIdRef = useRef<string | null>(null)
       const loadMoreRequestIdRef = useRef(0)
       const topSentinelVisibleRef = useRef(false)
       const lastWheelInputAtRef = useRef(0)
+      const tryLoadMoreRef = useRef<() => void>(NOOP)
 
       useEffect(() => {
         loadMoreRef.current = onLoadMore
@@ -177,8 +177,6 @@ export const ChatArea = memo(
       const atBottomThreshold = presentation.isCompact ? 150 : AT_BOTTOM_THRESHOLD_PX
       const messagePaddingClass = presentation.isCompact ? 'px-3' : 'px-5'
       const messageMaxWidthClass = isWideMode ? 'max-w-[95%] xl:max-w-6xl' : 'max-w-2xl'
-      const allocatePageKey = useCallback(() => `chat-page:${pageKeyCounterRef.current++}`, [])
-
       const shouldUseExternalViewModel = pageRecords != null && visibleMessagesProp != null
       const visibleMessageEntries = useMemo(
         () => (shouldUseExternalViewModel ? [] : buildVisibleMessageEntries(messages)),
@@ -188,7 +186,10 @@ export const ChatArea = memo(
         () => visibleMessagesProp ?? visibleMessageEntries.map(entry => entry.message),
         [visibleMessageEntries, visibleMessagesProp],
       )
-      const [pages, setPages] = useState<StableChatPage[]>(() => buildStableChatPages(visibleMessages, allocatePageKey))
+      const pages = useMemo<StableChatPage[]>(
+        () => (shouldUseExternalViewModel ? [] : buildContentKeyedChatPages(visibleMessages)),
+        [shouldUseExternalViewModel, visibleMessages],
+      )
       const localForkTargetIdMap = useMemo(
         () =>
           forkTargetIdMapProp ??
@@ -200,34 +201,7 @@ export const ChatArea = memo(
         [messages, turnDurationMapProp, visibleMessages],
       )
 
-      useLayoutEffect(() => {
-        if (pageRecords) return
-        setPages(currentPages =>
-          reconcileStableChatPages({
-            currentPages,
-            nextMessages: visibleMessages,
-            allocateKey: allocatePageKey,
-          }),
-        )
-      }, [allocatePageKey, pageRecords, visibleMessages])
-
       const activePages = pageRecords ?? pages
-
-      useEffect(() => {
-        const validKeys = new Set(activePages.map(page => page.key))
-        setMeasuredPageHeights(previous => {
-          let changed = false
-          const next: Record<string, number> = {}
-          for (const [key, value] of Object.entries(previous)) {
-            if (!validKeys.has(key)) {
-              changed = true
-              continue
-            }
-            next[key] = value
-          }
-          return changed ? next : previous
-        })
-      }, [activePages])
 
       const pendingTargetPageIndex = useMemo(
         () =>
@@ -270,16 +244,14 @@ export const ChatArea = memo(
       )
 
       const pageToPremeasure = useMemo(() => {
-        const startIndex = Math.max(0, expandedPageRange.startIndex - PREMEASURE_PAGE_RADIUS)
-        const endIndex = Math.min(activePages.length - 1, expandedPageRange.endIndex + PREMEASURE_PAGE_RADIUS)
-
-        for (let index = startIndex; index <= endIndex; index++) {
-          if (index >= expandedPageRange.startIndex && index <= expandedPageRange.endIndex) continue
-          const page = activePages[index]
-          if (measuredPageHeights[page.key] == null) return page
-        }
-        return null
-      }, [activePages, expandedPageRange.endIndex, expandedPageRange.startIndex, measuredPageHeights])
+        return findPageToPremeasure({
+          pages: activePages,
+          expandedPageRange,
+          measuredPageHeights,
+          direction: premeasureDirection,
+          radius: PREMEASURE_PAGE_RADIUS,
+        })
+      }, [activePages, expandedPageRange, measuredPageHeights, premeasureDirection])
 
       const clearPendingLoadMoreTimer = useCallback(() => {
         if (pendingLoadMoreTimerRef.current === null) return
@@ -293,11 +265,32 @@ export const ChatArea = memo(
         pendingScrollClearTimerRef.current = null
       }, [])
 
+      const clearPendingLoadMoreAnchorMessage = useCallback(() => {
+        if (pendingAnchorClearRafRef.current !== null) cancelAnimationFrame(pendingAnchorClearRafRef.current)
+        pendingAnchorClearRafRef.current = requestAnimationFrame(() => {
+          pendingAnchorClearRafRef.current = null
+          setPendingLoadMoreAnchorMessageId(null)
+        })
+      }, [])
+
+      const resetSessionViewState = useCallback(() => {
+        if (pendingSessionResetRafRef.current !== null) cancelAnimationFrame(pendingSessionResetRafRef.current)
+        pendingSessionResetRafRef.current = requestAnimationFrame(() => {
+          pendingSessionResetRafRef.current = null
+          setIsLoadingMore(false)
+          setMeasuredPageHeights({})
+          setPendingScrollMessageId(null)
+          setPremeasureDirection('idle')
+        })
+      }, [])
+
       useEffect(() => {
         return () => {
           clearPendingLoadMoreTimer()
           clearPendingScrollTimer()
           if (scrollSnapshotRafRef.current !== null) cancelAnimationFrame(scrollSnapshotRafRef.current)
+          if (pendingAnchorClearRafRef.current !== null) cancelAnimationFrame(pendingAnchorClearRafRef.current)
+          if (pendingSessionResetRafRef.current !== null) cancelAnimationFrame(pendingSessionResetRafRef.current)
         }
       }, [clearPendingLoadMoreTimer, clearPendingScrollTimer])
 
@@ -314,7 +307,12 @@ export const ChatArea = memo(
         if (scrollSnapshotRafRef.current !== null) cancelAnimationFrame(scrollSnapshotRafRef.current)
         scrollSnapshotRafRef.current = requestAnimationFrame(() => {
           scrollSnapshotRafRef.current = null
-          setScrollOffsetFromBottom(prev => (Math.abs(prev - nextOffset) < 1 ? prev : nextOffset))
+          setScrollOffsetFromBottom(prev => {
+            const delta = nextOffset - prev
+            if (Math.abs(delta) < 1) return prev
+            setPremeasureDirection(delta > 0 ? 'older' : 'newer')
+            return nextOffset
+          })
         })
       }, [])
 
@@ -365,21 +363,17 @@ export const ChatArea = memo(
       useEffect(() => {
         if (sessionId === prevSessionIdRef.current) return
         prevSessionIdRef.current = sessionId
-        pageKeyCounterRef.current = 0
         isAtBottomRef.current = true
         loadMoreBlockedRef.current = true
         pendingLoadMoreAnchorRef.current = null
-        setPendingLoadMoreAnchorMessageId(null)
+        clearPendingLoadMoreAnchorMessage()
         topSentinelVisibleRef.current = false
         loadMoreRequestIdRef.current += 1
         isLoadingRef.current = false
-        setIsLoadingMore(false)
         clearPendingLoadMoreTimer()
-        setMeasuredPageHeights({})
-        setPendingScrollMessageId(null)
         settlingScrollMessageIdRef.current = null
         clearPendingScrollTimer()
-        setPages(buildStableChatPages(visibleMessages, allocatePageKey))
+        resetSessionViewState()
         onAtBottomChange?.(true)
         onVisibleMessageIdsChange?.([])
 
@@ -391,11 +385,12 @@ export const ChatArea = memo(
           animate(root, { opacity: [0, 1] }, { duration: 0.2, ease: 'easeOut' })
         })
       }, [
-        allocatePageKey,
         clearPendingLoadMoreTimer,
+        clearPendingLoadMoreAnchorMessage,
         clearPendingScrollTimer,
         onAtBottomChange,
         onVisibleMessageIdsChange,
+        resetSessionViewState,
         sessionId,
         updateScrollOffsetSnapshot,
         visibleMessages,
@@ -430,7 +425,7 @@ export const ChatArea = memo(
           clearPendingLoadMoreTimer()
           pendingLoadMoreTimerRef.current = window.setTimeout(() => {
             pendingLoadMoreTimerRef.current = null
-            tryLoadMore()
+            tryLoadMoreRef.current()
           }, LOAD_MORE_DEFER_MS)
           return
         }
@@ -452,6 +447,10 @@ export const ChatArea = memo(
           setIsLoadingMore(false)
         })
       }, [activePages.length, clearPendingLoadMoreTimer, sessionId])
+
+      useEffect(() => {
+        tryLoadMoreRef.current = tryLoadMore
+      }, [tryLoadMore])
 
       useEffect(() => {
         const sentinel = topSentinelRef.current
@@ -488,7 +487,7 @@ export const ChatArea = memo(
         if (!target) return
 
         pendingLoadMoreAnchorRef.current = null
-        setPendingLoadMoreAnchorMessageId(null)
+        clearPendingLoadMoreAnchorMessage()
 
         const rootRect = root.getBoundingClientRect()
         const nextTopOffset = target.getBoundingClientRect().top - rootRect.top
@@ -497,7 +496,7 @@ export const ChatArea = memo(
           root.scrollTop += delta
           updateScrollOffsetSnapshot()
         }
-      }, [activePages, updateScrollOffsetSnapshot])
+      }, [activePages, clearPendingLoadMoreAnchorMessage, updateScrollOffsetSnapshot])
 
       useLayoutEffect(() => {
         const anchor = pendingLayoutAnchorRef.current
@@ -580,9 +579,15 @@ export const ChatArea = memo(
           if (root && !isAtBottomRef.current) {
             pendingLayoutAnchorRef.current = captureLoadMoreAnchor(root)
           }
-          return { ...previous, [pageKey]: nextHeight }
+          const activeKeys = new Set(activePages.map(page => page.key))
+          const next: Record<string, number> = {}
+          for (const [key, value] of Object.entries(previous)) {
+            if (activeKeys.has(key)) next[key] = value
+          }
+          next[pageKey] = nextHeight
+          return next
         })
-      }, [])
+      }, [activePages])
 
       const requestScrollToMessage = useCallback(
         (messageId: string, behavior: ScrollBehavior) => {
@@ -697,8 +702,6 @@ export const ChatArea = memo(
                 <PageBlock
                   key={segment.key}
                   page={segment.page}
-                  expanded={true}
-                  measuredHeight={segment.measuredHeight}
                   messageMaxWidthClass={messageMaxWidthClass}
                   messagePaddingClass={messagePaddingClass}
                   registerMessage={registerMessage}
@@ -735,8 +738,6 @@ export const ChatArea = memo(
 
 interface PageBlockProps {
   page: ChatPage
-  expanded: boolean
-  measuredHeight: number
   messageMaxWidthClass: string
   messagePaddingClass: string
   registerMessage?: (id: string, element: HTMLElement | null) => void
@@ -751,8 +752,6 @@ interface PageBlockProps {
 
 const PageBlock = memo(function PageBlock({
   page,
-  expanded,
-  measuredHeight,
   messageMaxWidthClass,
   messagePaddingClass,
   registerMessage,
@@ -767,14 +766,12 @@ const PageBlock = memo(function PageBlock({
   const wrapperRef = useRef<HTMLDivElement | null>(null)
 
   useLayoutEffect(() => {
-    if (!expanded) return
     const element = wrapperRef.current
     if (!element) return
     onMeasuredHeightChange(page.key, element.offsetHeight)
-  }, [expanded, onMeasuredHeightChange, page.key])
+  }, [onMeasuredHeightChange, page.key])
 
   useEffect(() => {
-    if (!expanded) return
     const element = wrapperRef.current
     if (!element || typeof ResizeObserver === 'undefined') return
 
@@ -783,11 +780,7 @@ const PageBlock = memo(function PageBlock({
     })
     observer.observe(element)
     return () => observer.disconnect()
-  }, [expanded, onMeasuredHeightChange, page.key])
-
-  if (!expanded) {
-    return <div className="shrink-0" data-page-key={page.key} style={{ height: `${measuredHeight}px` }} aria-hidden="true" />
-  }
+  }, [onMeasuredHeightChange, page.key])
 
   return (
     <div ref={wrapperRef} className="shrink-0" data-page-key={page.key}>
