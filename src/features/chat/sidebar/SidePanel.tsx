@@ -261,7 +261,7 @@ export function SidePanel({
   // Active sessions
   const busySessions = useBusySessions()
   const busyCount = useBusyCount()
-  const childSessionVersion = useSyncExternalStore(
+  useSyncExternalStore(
     childSessionStore.subscribe.bind(childSessionStore),
     childSessionStore.getVersion,
     childSessionStore.getVersion,
@@ -334,14 +334,11 @@ export function SidePanel({
   // ---- 子 session 展示数据 ----
   const rootSessionIds = useMemo(() => new Set(sessions.map(s => s.id)), [sessions])
 
-  const findParentId = useCallback(
-    (id: string) => {
-      const s = sessionLookup.get(id)
-      if (s?.parentID) return s.parentID
-      return childSessionStore.getSessionInfo(id)?.parentID
-    },
-    [sessionLookup, childSessionVersion],
-  )
+  const findParentId = useCallback((id: string) => {
+    const s = sessionLookup.get(id)
+    if (s?.parentID) return s.parentID
+    return childSessionStore.getSessionInfo(id)?.parentID
+  }, [sessionLookup])
 
   // 开关开 → 拉 /children 全量：选中的 root 或选中子 session 时保持其父展开
   const expandedChildSessionIds = useMemo(() => {

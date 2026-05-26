@@ -42,6 +42,10 @@ export type PageRenderSegment =
 
 export type ExpandedPageSelection = Set<number>
 
+export function computeAnchorRestoreScrollDelta(previousTopOffset: number, nextTopOffset: number): number {
+  return nextTopOffset - previousTopOffset
+}
+
 function estimateMessageHeight(message: Message): number {
   if (message.info.role === 'user') {
     return Math.max(72, message.parts.length * 40)
@@ -83,25 +87,26 @@ function buildMessageGroups(messages: Message[]): MessageGroupRow[] {
 
 export function buildChatPages(messages: Message[], pageMessageCount = PAGE_MESSAGE_COUNT): ChatPage[] {
   const rows = buildMessageGroups(messages)
-  const chronologicalPages: ChatPage[] = []
+  const renderPages: ChatPage[] = []
 
   let currentRows: MessageGroupRow[] = []
   let currentMessageCount = 0
-  for (const row of rows) {
+  for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex--) {
+    const row = rows[rowIndex]
     if (currentRows.length > 0 && currentMessageCount + row.messages.length > pageMessageCount) {
-      chronologicalPages.push(buildChatPage(currentRows))
+      renderPages.push(buildChatPage(currentRows))
       currentRows = []
       currentMessageCount = 0
     }
-    currentRows.push(row)
+    currentRows.unshift(row)
     currentMessageCount += row.messages.length
   }
 
   if (currentRows.length > 0) {
-    chronologicalPages.push(buildChatPage(currentRows))
+    renderPages.push(buildChatPage(currentRows))
   }
 
-  return chronologicalPages.reverse()
+  return renderPages
 }
 
 function buildChatPage(rows: MessageGroupRow[]): ChatPage {
@@ -118,6 +123,10 @@ function buildChatPage(rows: MessageGroupRow[]): ChatPage {
 
 export function buildStableChatPages(messages: Message[], allocateKey: () => string, pageMessageCount = PAGE_MESSAGE_COUNT): StableChatPage[] {
   return buildChatPages(messages, pageMessageCount).map(page => ({ ...page, key: allocateKey() }))
+}
+
+export function buildContentKeyedChatPages(messages: Message[], pageMessageCount = PAGE_MESSAGE_COUNT): StableChatPage[] {
+  return buildChatPages(messages, pageMessageCount)
 }
 
 function flattenPageMessagesChronological(page: ChatPage): Message[] {
@@ -279,6 +288,43 @@ export function buildExpandedPageSelection(
     }
   }
   return selection
+}
+
+export type PagePremeasureDirection = 'older' | 'newer' | 'idle'
+
+export function findPageToPremeasure(options: {
+  pages: StableChatPage[]
+  expandedPageRange: PageRange
+  measuredPageHeights: Record<string, number>
+  direction: PagePremeasureDirection
+  radius?: number
+}): StableChatPage | null {
+  const { pages, expandedPageRange, measuredPageHeights, direction } = options
+  const radius = options.radius ?? PREMEASURE_PAGE_RADIUS
+  if (pages.length === 0 || expandedPageRange.endIndex < expandedPageRange.startIndex) return null
+
+  const startIndex = Math.max(0, expandedPageRange.startIndex - radius)
+  const endIndex = Math.min(pages.length - 1, expandedPageRange.endIndex + radius)
+
+  const findNewer = () => {
+    for (let index = Math.max(0, expandedPageRange.startIndex - 1); index >= startIndex; index--) {
+      const page = pages[index]
+      if (measuredPageHeights[page.key] == null) return page
+    }
+    return null
+  }
+
+  const findOlder = () => {
+    for (let index = expandedPageRange.endIndex + 1; index <= endIndex; index++) {
+      const page = pages[index]
+      if (measuredPageHeights[page.key] == null) return page
+    }
+    return null
+  }
+
+  if (direction === 'older') return findOlder() ?? findNewer()
+  if (direction === 'newer') return findNewer() ?? findOlder()
+  return findOlder() ?? findNewer()
 }
 
 export function buildPageRenderSegments(options: {
