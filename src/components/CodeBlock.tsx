@@ -19,6 +19,8 @@ interface CodeBlockProps {
   maxHeight?: number
   /** 长行自动换行 */
   wordwrap?: boolean
+  /** During streaming, keep code plain until the block settles to avoid highlight churn. */
+  deferHighlight?: boolean
 }
 
 export const CodeBlock = memo(function CodeBlock({
@@ -29,6 +31,7 @@ export const CodeBlock = memo(function CodeBlock({
   variant = 'default',
   maxHeight,
   wordwrap,
+  deferHighlight = false,
 }: CodeBlockProps) {
   const { codeWordWrap } = useSyncExternalStore(themeStore.subscribe, themeStore.getSnapshot)
   const isMobile = useIsMobile()
@@ -50,7 +53,8 @@ export const CodeBlock = memo(function CodeBlock({
     return language || 'text'
   }, [code, language])
 
-  const { output: html } = useSyntaxHighlight(code, { lang: effectiveLanguage, enabled: inView })
+  const { output: highlightedHtml } = useSyntaxHighlight(code, { lang: effectiveLanguage, enabled: inView && !deferHighlight })
+  const html = deferHighlight ? null : highlightedHtml
 
   const containerStyle = maxHeight ? { ...style, maxHeight } : style
   const showLabel = !isReasoning && language && !HIDDEN_LANGS.has(language.toLowerCase())

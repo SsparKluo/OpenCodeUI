@@ -1,11 +1,36 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MarkdownRenderer } from './MarkdownRenderer'
 
+const mermaidMocks = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  render: vi.fn(async () => ({ svg: '<svg><title>Diagram</title></svg>' })),
+}))
+
 vi.mock('./CodeBlock', () => ({
-  CodeBlock: ({ code, language, variant }: { code: string; language?: string; variant?: string }) => (
-    <div data-testid="code-block" data-variant={variant ?? 'default'}>{`${language ?? 'text'}:${code}`}</div>
+  CodeBlock: ({
+    code,
+    language,
+    variant,
+    deferHighlight,
+  }: {
+    code: string
+    language?: string
+    variant?: string
+    deferHighlight?: boolean
+  }) => (
+    <div data-testid="code-block" data-variant={variant ?? 'default'} data-defer-highlight={String(!!deferHighlight)}>
+      {`${language ?? 'text'}:${code}`}
+    </div>
   ),
+}))
+
+vi.mock('../hooks/useTheme', () => ({
+  useTheme: () => ({ resolvedTheme: 'light' }),
+}))
+
+vi.mock('mermaid', () => ({
+  default: mermaidMocks,
 }))
 
 vi.mock('./ui', () => ({
@@ -17,6 +42,12 @@ vi.mock('./ui', () => ({
 }))
 
 describe('MarkdownRenderer', () => {
+  beforeEach(() => {
+    mermaidMocks.initialize.mockClear()
+    mermaidMocks.render.mockClear()
+    mermaidMocks.render.mockResolvedValue({ svg: '<svg><title>Diagram</title></svg>' })
+  })
+
   it('renders headings and inline code', () => {
     render(<MarkdownRenderer content={'# Title\n\nUse `pnpm`'} />)
 
@@ -74,6 +105,51 @@ describe('MarkdownRenderer', () => {
 
     const block = screen.getByTestId('code-block')
     expect(block.dataset.variant).toBe('default')
+  })
+
+  it('defers code block highlighting while content is streaming', () => {
+    render(<MarkdownRenderer content={'```ts\nconst x = 1\n```'} isStreaming />)
+
+    expect(screen.getByTestId('code-block')).toHaveAttribute('data-defer-highlight', 'true')
+  })
+
+  it('reserves enough marker space for large ordered list numbers', () => {
+    const { container } = render(<MarkdownRenderer content={'998. Alpha\n999. Beta\n1000. Gamma'} />)
+
+    expect(container.querySelector('ol')).toHaveStyle({ paddingInlineStart: '6ch' })
+  })
+
+  it('renders single-dollar inline math', () => {
+    const { container } = render(<MarkdownRenderer content={'Inline $x + y$ math'} />)
+
+    expect(container.querySelector('.katex')).toBeInTheDocument()
+  })
+
+  it('renders mermaid code fences as diagrams', async () => {
+    render(<MarkdownRenderer content={'```mermaid\ngraph TD\n  A-->B\n```'} />)
+
+    expect(await screen.findByRole('img', { name: 'Mermaid diagram' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy to clipboard' })).toBeInTheDocument()
+    expect(mermaidMocks.initialize).toHaveBeenCalledWith(
+      expect.objectContaining({ securityLevel: 'strict', startOnLoad: false, theme: 'default' }),
+    )
+  })
+
+  it('supports mermaid zoom, pan, and reset controls', async () => {
+    render(<MarkdownRenderer content={'```mermaid\ngraph TD\n  A-->B\n```'} />)
+
+    const diagram = await screen.findByRole('img', { name: 'Mermaid diagram' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in diagram' }))
+    expect(diagram).toHaveStyle({ transform: 'translate(0px, 0px) scale(1.15)' })
+
+    fireEvent.pointerDown(diagram, { button: 0, clientX: 10, clientY: 20, pointerId: 1, pointerType: 'mouse' })
+    fireEvent.pointerMove(diagram, { clientX: 35, clientY: 55, pointerId: 1, pointerType: 'mouse' })
+    fireEvent.pointerUp(diagram, { pointerId: 1, pointerType: 'mouse' })
+    expect(diagram).toHaveStyle({ transform: 'translate(25px, 35px) scale(1.15)' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset diagram view' }))
+    expect(diagram).toHaveStyle({ transform: 'translate(0px, 0px) scale(1)' })
   })
 
   it('renders markdown table with copy button in default mode', () => {

@@ -86,6 +86,8 @@ import {
   Rows2,
   GripVertical,
   AppWindow,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react'
 
 export interface IconProps extends SVGProps<SVGSVGElement> {
@@ -155,6 +157,8 @@ export const ClockIcon = wrap(Clock)
 export const CircleIcon = wrap(Circle)
 export const AlertCircleIcon = wrap(CircleAlert)
 export const RetryIcon = wrap(RefreshCcw)
+export const ZoomInIcon = wrap(ZoomIn)
+export const ZoomOutIcon = wrap(ZoomOut)
 export const CpuIcon = wrap(Cpu)
 export const DollarSignIcon = wrap(DollarSign)
 export const LightbulbIcon = wrap(Lightbulb)

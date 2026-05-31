@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CodeBlock } from './CodeBlock'
 
 const useIsMobileMock = vi.fn(() => false)
+const useSyntaxHighlightMock = vi.fn((_code: string, _options: unknown) => ({
+  output: '<pre><code>highlighted</code></pre>',
+}))
 const themeSnapshot = { codeWordWrap: false }
 
 vi.mock('../hooks/useIsMobile', () => ({
@@ -10,7 +13,7 @@ vi.mock('../hooks/useIsMobile', () => ({
 }))
 
 vi.mock('../hooks/useSyntaxHighlight', () => ({
-  useSyntaxHighlight: () => ({ output: '' }),
+  useSyntaxHighlight: (code: string, options: unknown) => useSyntaxHighlightMock(code, options),
 }))
 
 vi.mock('../hooks/useInView', () => ({
@@ -36,6 +39,8 @@ describe('CodeBlock', () => {
   beforeEach(() => {
     useIsMobileMock.mockReset()
     useIsMobileMock.mockReturnValue(false)
+    useSyntaxHighlightMock.mockClear()
+    useSyntaxHighlightMock.mockReturnValue({ output: '<pre><code>highlighted</code></pre>' })
   })
 
   it('requires tap-to-reveal copy button for unlabeled mobile code blocks', () => {
@@ -56,5 +61,16 @@ describe('CodeBlock', () => {
 
     expect(container.firstChild).not.toHaveAttribute('tabindex')
     expect(screen.getByText('ts')).toBeInTheDocument()
+  })
+
+  it('renders current plain code while highlight is deferred', () => {
+    render(<CodeBlock code="const value = 1" language="ts" deferHighlight />)
+
+    expect(screen.getByText('const value = 1')).toBeInTheDocument()
+    expect(screen.queryByText('highlighted')).not.toBeInTheDocument()
+    expect(useSyntaxHighlightMock).toHaveBeenCalledWith(
+      'const value = 1',
+      expect.objectContaining({ enabled: false, lang: 'ts' }),
+    )
   })
 })
