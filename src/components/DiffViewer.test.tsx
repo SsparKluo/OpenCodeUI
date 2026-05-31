@@ -79,4 +79,19 @@ describe('DiffViewer', () => {
       expect(segment.closest('.text-text-100')).not.toBeNull()
     }
   })
+
+  it('does not duplicate trailing characters when split word diff is syntax highlighted', () => {
+    const { container } = render(
+      <DiffViewer
+        before={'const [isLoading, setIsLoading] = useState(false)\nif (!enabled) return'}
+        after={'const [isLoading, setIsLoading] = useState(false)\nif (!enabled || delayMs > 0) return'}
+        language="ts"
+        viewMode="split"
+        wordWrap={false}
+      />,
+    )
+
+    expect(container.textContent).toContain('if (!enabled) return')
+    expect(container.textContent).not.toContain('returnn')
+  })
 })

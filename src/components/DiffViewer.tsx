@@ -11,7 +11,7 @@
 
 import { memo, useMemo, useRef, useState, useEffect, useCallback, useSyncExternalStore, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
-import { diffLines, diffWords } from 'diff'
+import { diffLines, diffWordsWithSpace } from 'diff'
 import { useSyntaxHighlight, type HighlightTokens } from '../hooks/useSyntaxHighlight'
 import { useDynamicVirtualScroll } from '../hooks/useDynamicVirtualScroll'
 import { themeStore } from '../store/themeStore'
@@ -1566,7 +1566,7 @@ const WrappedUnifiedDiffView = memo(function WrappedUnifiedDiffView({
 // ============================================
 
 type HighlightToken = HighlightTokens[number][number]
-type WordDiffChange = ReturnType<typeof diffWords>[number]
+type WordDiffChange = ReturnType<typeof diffWordsWithSpace>[number]
 
 const LineContent = memo(function LineContent({ line, tokens }: { line: DiffLine; tokens: HighlightTokens | null }) {
   const lineTokens = tokens && line.lineNo ? tokens[line.lineNo - 1] : null
@@ -1810,7 +1810,7 @@ function computeWordDiff(
   oldLine: string,
   newLine: string,
 ): { left: WordDiffSegment[]; right: WordDiffSegment[]; changes: WordDiffChange[] } {
-  const changes = diffWords(oldLine, newLine)
+  const changes = diffWordsWithSpace(oldLine, newLine)
 
   const mergedChanges: WordDiffChange[] = []
   for (let i = 0; i < changes.length; i++) {
