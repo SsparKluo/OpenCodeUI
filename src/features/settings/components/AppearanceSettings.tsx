@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { Button } from '../../../components/ui/Button'
-import { SunIcon, MoonIcon, SystemIcon, CheckIcon } from '../../../components/Icons'
+import { SunIcon, MoonIcon, SystemIcon, CheckIcon, ChevronDownIcon } from '../../../components/Icons'
 import { Toggle, SegmentedControl, SettingRow, SettingsSection } from './SettingsUI'
 import { useTheme } from '../../../hooks'
 import { getThemePreset } from '../../../themes'
@@ -212,7 +212,8 @@ function CustomCSSEditor({
 /* ====== Fonts ====== */
 :root:root {
   --font-ui-sans: 'Inter', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'SF Mono', Menlo, Consolas, 'Liberation Mono',
+    'DejaVu Sans Mono', 'Noto Sans Mono', 'Noto Sans Mono CJK SC', monospace;
 }
 
 /* ====== Light (default + manual light) ====== */
@@ -703,14 +704,26 @@ export function AppearanceSettings() {
         )}
 
         <SettingRow label={t('appearance.language')} description={t('appearance.languageDesc')}>
-          <select
-            value={i18n.language}
-            onChange={e => i18n.changeLanguage(e.target.value)}
-            className="px-2 py-1 text-[length:var(--fs-sm)] bg-bg-200/50 border border-border-200 rounded-md text-text-100 focus:outline-none focus:border-accent-main-100/50 cursor-pointer"
-          >
-            <option value="en">{t('appearance.languages.en')}</option>
-            <option value="zh-CN">{t('appearance.languages.zh-CN')}</option>
-          </select>
+          <div className="relative inline-flex">
+            <select
+              value={i18n.language}
+              onChange={e => i18n.changeLanguage(e.target.value)}
+              aria-label={t('appearance.language')}
+              style={{ colorScheme: resolvedTheme }}
+              className="appearance-none pl-2 pr-8 py-1 text-[length:var(--fs-sm)] bg-bg-200/50 border border-border-200 rounded-md text-text-100 focus:outline-none focus:border-accent-main-100/50 cursor-pointer"
+            >
+              <option className="bg-bg-100 text-text-100" value="en">
+                {t('appearance.languages.en')}
+              </option>
+              <option className="bg-bg-100 text-text-100" value="zh-CN">
+                {t('appearance.languages.zh-CN')}
+              </option>
+            </select>
+            <ChevronDownIcon
+              size={14}
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-text-300"
+            />
+          </div>
         </SettingRow>
       </SettingsSection>
     </div>

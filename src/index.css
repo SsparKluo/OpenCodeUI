@@ -19,6 +19,7 @@
 /* 动态视口高度变量 - 适配移动端虚拟键盘和地址栏 */
 :root {
   --app-height: 100vh;
+  color-scheme: light;
   /* Safe area insets：
    * - Android: 由 MainActivity.kt 通过 evaluateJavascript 注入真实值
    *   (Android WebView 的 env(safe-area-inset-*) 返回 0px)
@@ -273,7 +274,23 @@ body,
     'Segoe UI Emoji';
   --font-sans: var(--font-ui-sans);
   --font-ui-serif: 'Georgia', 'Noto Serif', serif;
-  --font-mono: ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --font-mono: 'SFMono-Regular', 'SF Mono', Menlo, Consolas, 'Liberation Mono', 'DejaVu Sans Mono',
+    'Noto Sans Mono', 'Ubuntu Mono', 'Noto Sans Mono CJK SC', 'WenQuanYi Micro Hei Mono',
+    'Noto Sans CJK SC', ui-monospace, monospace;
+}
+
+:root[data-mode='dark'] {
+  color-scheme: dark;
+}
+
+:root[data-mode='light'] {
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-mode]) {
+    color-scheme: dark;
+  }
 }
 
 /* ============================================

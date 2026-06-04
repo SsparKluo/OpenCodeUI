@@ -19,6 +19,9 @@ import { isTauri } from '../utils/tauri'
 import { copyTextToClipboard, readTextFromClipboard } from '../utils/clipboard'
 import { keybindingStore } from '../store/keybindingStore'
 
+const TERMINAL_FONT_FALLBACK =
+  "'SFMono-Regular', 'SF Mono', Menlo, Consolas, 'Liberation Mono', 'DejaVu Sans Mono', 'Noto Sans Mono', 'Ubuntu Mono', 'Noto Sans Mono CJK SC', 'WenQuanYi Micro Hei Mono', 'Noto Sans CJK SC', ui-monospace, monospace"
+
 // ============================================
 // 终端主题 - 与应用主题配合
 // ============================================
@@ -410,9 +413,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
 
     const terminal = new XTerm({
       theme,
-      fontFamily:
-        rootStyle.getPropertyValue('--font-mono').trim() ||
-        "ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace",
+      fontFamily: rootStyle.getPropertyValue('--font-mono').trim() || TERMINAL_FONT_FALLBACK,
       fontSize: touchUi ? Math.max(termFontSize, 14) : termFontSize,
       lineHeight: touchUi ? Math.max(termLineHeight, 1.3) : termLineHeight,
       cols: restoreSize?.cols,
