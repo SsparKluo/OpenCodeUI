@@ -28,6 +28,8 @@ interface ServiceStoreSnapshot {
   binaryPath: string
   /** 传给子进程的额外环境变量 */
   envVars: EnvVar[]
+  /** 自动检测到的 opencode 可执行文件路径 */
+  detectedBinaryPath: string | null
   /** 服务是否正在运行（最后一次检测结果） */
   running: boolean
   /** 是否由我们启动（用于关闭时判断） */
@@ -40,6 +42,7 @@ class ServiceStore {
   private _autoStart: boolean
   private _binaryPath: string
   private _envVars: EnvVar[]
+  private _detectedBinaryPath: string | null = null
   private _running = false
   private _startedByUs = false
   private _starting = false
@@ -87,9 +90,9 @@ class ServiceStore {
     return this._starting
   }
 
-  /** 返回实际要用的可执行文件路径，空则回退默认值 */
+  /** 返回实际要用的可执行文件路径：手动路径 > 自动检测 > PATH 里的 opencode */
   get effectiveBinaryPath() {
-    return this._binaryPath.trim() || 'opencode'
+    return this._binaryPath.trim() || this._detectedBinaryPath || 'opencode'
   }
 
   /** 将 envVars 转为 Record<string, string>，方便传给 Rust */
@@ -100,6 +103,10 @@ class ServiceStore {
       if (k) record[k] = value
     }
     return record
+  }
+
+  get detectedBinaryPath() {
+    return this._detectedBinaryPath
   }
 
   // ---- Setters ----
@@ -131,6 +138,11 @@ class ServiceStore {
     } catch {
       /* */
     }
+    this._notify()
+  }
+
+  setDetectedBinaryPath(path: string | null) {
+    this._detectedBinaryPath = path
     this._notify()
   }
 
@@ -167,6 +179,7 @@ class ServiceStore {
       autoStart: this._autoStart,
       binaryPath: this._binaryPath,
       envVars: this._envVars,
+      detectedBinaryPath: this._detectedBinaryPath,
       running: this._running,
       startedByUs: this._startedByUs,
       starting: this._starting,

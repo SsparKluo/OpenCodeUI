@@ -99,10 +99,20 @@ if (isNativeTauri) {
   // Auto-start opencode serve（如果设置开启）
   if (!isNativeTauriMobile && serviceStore.autoStart) {
     const serverUrl = serverStore.getActiveServer()?.url || 'http://127.0.0.1:4096'
-    const binaryPath = serviceStore.effectiveBinaryPath
     import('@tauri-apps/api/core').then(({ invoke }) => {
       serviceStore.setStarting(true)
-      invoke<boolean>('start_opencode_service', { url: serverUrl, binaryPath, envVars: serviceStore.envVarsRecord })
+      invoke<string | null>('detect_opencode_binary', { envVars: serviceStore.envVarsRecord })
+        .then(path => {
+          serviceStore.setDetectedBinaryPath(path)
+        })
+        .catch(() => undefined)
+        .then(() =>
+          invoke<boolean>('start_opencode_service', {
+            url: serverUrl,
+            binaryPath: serviceStore.effectiveBinaryPath,
+            envVars: serviceStore.envVarsRecord,
+          }),
+        )
         .then(weStarted => {
           serviceStore.setStartedByUs(weStarted)
           serviceStore.setRunning(true)

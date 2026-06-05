@@ -249,6 +249,7 @@ pub fn run() {
             commands::utils::open_new_window,
             commands::utils::desktop_window_ready,
             commands::opencode::check_opencode_service,
+            commands::opencode::detect_opencode_binary,
             commands::opencode::start_opencode_service,
             commands::opencode::stop_opencode_service,
             commands::opencode::get_service_started_by_us,
