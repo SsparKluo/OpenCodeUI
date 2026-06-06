@@ -292,6 +292,30 @@ class ActiveSessionStore {
     this.notify()
   }
 
+  removeSession(sessionId: string) {
+    let changed = false
+    let nextMap = this.state.statusMap
+
+    if (nextMap[sessionId]) {
+      nextMap = { ...nextMap }
+      delete nextMap[sessionId]
+      changed = true
+    }
+
+    for (const [requestId, request] of this.pendingRequests) {
+      if (request.sessionId !== sessionId) continue
+      this.pendingRequests.delete(requestId)
+      changed = true
+    }
+
+    if (this.deferredIdleSessions.delete(sessionId)) changed = true
+    if (this.sessionMeta.delete(sessionId)) changed = true
+
+    if (!changed) return
+    this.state = { ...this.state, statusMap: nextMap }
+    this.notify()
+  }
+
   // ============================================
   // Session 元信息管理
   // ============================================

@@ -202,6 +202,27 @@ class ChildSessionStore {
       this.notify()
     }
   }
+
+  removeSession(sessionId: string) {
+    const idsToRemove = this.getSessionAndDescendants(sessionId)
+    let changed = false
+
+    for (const id of idsToRemove) {
+      const info = this.sessionInfo.get(id)
+      if (info) {
+        const siblings = this.childrenByParent.get(info.parentID)
+        if (siblings?.delete(id)) {
+          if (siblings.size === 0) this.childrenByParent.delete(info.parentID)
+          changed = true
+        }
+      }
+
+      if (this.childrenByParent.delete(id)) changed = true
+      if (this.sessionInfo.delete(id)) changed = true
+    }
+
+    if (changed) this.notify()
+  }
 }
 
 // ============================================

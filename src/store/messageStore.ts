@@ -381,6 +381,7 @@ class MessageStore {
   clearSession(sessionId: string) {
     this.sessions.delete(sessionId)
     this.sessionAccessTime.delete(sessionId)
+    this.dirtyMessagesBySession.delete(sessionId)
     this.notify()
   }
 

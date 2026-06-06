@@ -7,11 +7,10 @@ import {
   type ApiSession,
   type SessionListParams,
 } from '../api'
-import { childSessionStore } from '../store/childSessionStore'
-import { followupQueueStore } from '../store/followupQueueStore'
 import { todoStore } from '../store/todoStore'
 import { useDirectory } from './useDirectory'
 import { sessionErrorHandler, normalizeToForwardSlash, isSameDirectory, autoDetectPathStyle } from '../utils'
+import { clearSessionRuntimeState } from '../utils/sessionLifecycle'
 import { SessionContext, type SessionContextValue } from './SessionContext.shared'
 
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -176,6 +175,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // 更新 todoStore
         todoStore.setTodos(data.sessionID, data.todos)
       },
+      onSessionDeleted: sessionId => {
+        clearSessionRuntimeState(sessionId)
+        setSessions(prev => prev.filter(s => s.id !== sessionId))
+      },
       onReconnected: () => {
         // SSE 重连成功后，如果已经有请求在进行中，跳过重复拉取
         if (isFetchingRef.current) return
@@ -225,10 +228,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       const targetDir = normalizeToForwardSlash(currentDirectory) || undefined
       await apiDeleteSession(id, targetDir)
-      // 清理该 session 的子 session 记录，防止内存泄漏
-      childSessionStore.clearChildren(id)
-      // 清理该 session 的排队消息
-      followupQueueStore.clearSession(id)
+      clearSessionRuntimeState(id)
       setSessions(prev => prev.filter(s => s.id !== id))
     },
     [currentDirectory],

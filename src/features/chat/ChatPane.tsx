@@ -295,6 +295,7 @@ export const ChatPane = memo(function ChatPane({
   const renderedMessages = renderedMessagesView.sessionId === routeSessionId ? renderedMessagesView.messages : []
   const isRenderingDeferredMessages = renderedMessages !== messages
   const renderedLoadState = loadState === 'loaded' && isRenderingDeferredMessages ? 'loading' : loadState
+  const inputDisabled = !!routeSessionId && loadState === 'error' && messages.length === 0
   const chatPageViewModel = useChatPageViewModel(renderedMessages)
 
   const navigationCtx = useMemo(
@@ -794,7 +795,7 @@ export const ChatPane = memo(function ChatPane({
           onAbort={handleAbort}
           onCommand={handleCommand}
           onNewChat={handleNewSession}
-          disabled={false}
+          disabled={inputDisabled}
           isStreaming={isStreaming}
           agents={agents}
           selectedAgent={selectedAgent}

@@ -14,6 +14,7 @@ import { activeSessionStore } from '../store/activeSessionStore'
 import { notificationStore } from '../store/notificationStore'
 import { soundStore } from '../store/soundStore'
 import { playNotificationSoundDeduped } from '../utils/notificationSoundBridge'
+import { clearSessionRuntimeState } from '../utils/sessionLifecycle'
 import { subscribeToEvents, getSessionStatus, getPendingPermissions, getPendingQuestions } from '../api'
 import { replyPermission } from '../api/permission'
 import { autoApproveStore } from '../store/autoApproveStore'
@@ -461,6 +462,12 @@ export function useGlobalEvents(directories?: string[]) {
         if (session.title && messageStore.getSessionState(session.id)) {
           messageStore.updateSessionMetadata(session.id, { title: session.title })
         }
+      },
+
+      onSessionDeleted: sessionId => {
+        const removedSessionIds = childSessionStore.getSessionAndDescendants(sessionId)
+        clearSessionRuntimeState(sessionId)
+        for (const id of removedSessionIds) paneLayoutStore.clearSession(id)
       },
 
       onServerConnected: data => {

@@ -87,6 +87,26 @@ function replaceNode(node: PaneNode, targetId: string, replacement: PaneNode): P
   }
 }
 
+function clearSessionFromNode(node: PaneNode, sessionId: string): { node: PaneNode; changed: boolean } {
+  if (node.type === 'leaf') {
+    if (node.sessionId !== sessionId) return { node, changed: false }
+    return { node: { ...node, sessionId: null }, changed: true }
+  }
+
+  const first = clearSessionFromNode(node.first, sessionId)
+  const second = clearSessionFromNode(node.second, sessionId)
+  if (!first.changed && !second.changed) return { node, changed: false }
+
+  return {
+    node: {
+      ...node,
+      first: first.node,
+      second: second.node,
+    },
+    changed: true,
+  }
+}
+
 /**
  * Remove a leaf from the tree. The sibling of the removed leaf takes its
  * parent split's place. Returns the new root (or null if tree becomes empty).
@@ -283,6 +303,13 @@ function createPaneLayoutStore() {
     setFocusedSession(sessionId: string | null) {
       if (!_focusedPaneId) return
       this.setPaneSession(_focusedPaneId, sessionId)
+    },
+
+    clearSession(sessionId: string) {
+      const result = clearSessionFromNode(_root, sessionId)
+      if (!result.changed) return
+      _root = result.node
+      _refreshSnapshot()
     },
 
     /**

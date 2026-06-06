@@ -21,6 +21,7 @@ const {
   clearChildrenMock,
   clearFollowupQueueMock,
   setTodosMock,
+  clearSessionRuntimeStateMock,
   sessionErrorHandlerMock,
   autoDetectPathStyleMock,
 } = vi.hoisted(() => ({
@@ -31,6 +32,7 @@ const {
   clearChildrenMock: vi.fn(),
   clearFollowupQueueMock: vi.fn(),
   setTodosMock: vi.fn(),
+  clearSessionRuntimeStateMock: vi.fn(),
   sessionErrorHandlerMock: vi.fn(),
   autoDetectPathStyleMock: vi.fn(),
 }))
@@ -73,6 +75,10 @@ vi.mock('../utils', () => ({
   autoDetectPathStyle: (...args: unknown[]) => autoDetectPathStyleMock(...args),
 }))
 
+vi.mock('../utils/sessionLifecycle', () => ({
+  clearSessionRuntimeState: (...args: unknown[]) => clearSessionRuntimeStateMock(...args),
+}))
+
 function SessionContextProbe() {
   const context = useContext(SessionContext)
 
@@ -95,6 +101,7 @@ describe('SessionProvider', () => {
     clearChildrenMock.mockReset()
     clearFollowupQueueMock.mockReset()
     setTodosMock.mockReset()
+    clearSessionRuntimeStateMock.mockReset()
     sessionErrorHandlerMock.mockReset()
     autoDetectPathStyleMock.mockReset()
     subscribeToEventsMock.mockImplementation((callbacks: EventCallbacks) => {
@@ -153,5 +160,33 @@ describe('SessionProvider', () => {
       await Promise.resolve()
       await Promise.resolve()
     })
+  })
+
+  it('removes deleted sessions from context and clears runtime state', async () => {
+    getSessionsMock.mockResolvedValue([
+      { id: 'session-1', directory: '/workspace/demo' },
+      { id: 'session-2', directory: '/workspace/demo' },
+    ])
+
+    render(
+      <SessionProvider>
+        <SessionContextProbe />
+      </SessionProvider>,
+    )
+
+    await act(async () => {
+      vi.runAllTimers()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(latestContext?.sessions.map(session => session.id)).toEqual(['session-1', 'session-2'])
+
+    act(() => {
+      latestEventCallbacks.onSessionDeleted?.('session-1')
+    })
+
+    expect(clearSessionRuntimeStateMock).toHaveBeenCalledWith('session-1')
+    expect(latestContext?.sessions.map(session => session.id)).toEqual(['session-2'])
   })
 })
