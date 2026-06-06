@@ -51,3 +51,23 @@ describe('serverStore clock calibration', () => {
     expect(serverStore.getActiveCalibratedNow()).toBeUndefined()
   })
 })
+
+describe('serverStore local runtime URL', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    localStorage.clear()
+    sessionStorage.clear()
+  })
+
+  it('uses the detected local service URL without persisting it as the configured URL', async () => {
+    const { serverStore } = await import('./serverStore')
+
+    expect(serverStore.getActiveBaseUrl()).toBe('http://127.0.0.1:4096')
+
+    expect(serverStore.setLocalServerRuntimeUrl('http://127.0.0.1:58231/')).toBe(true)
+
+    expect(serverStore.getActiveBaseUrl()).toBe('http://127.0.0.1:58231')
+    expect(serverStore.getLocalServerUrl()).toBe('http://127.0.0.1:58231')
+    expect(serverStore.getStoredServers().find(server => server.id === 'local')?.url).toBe('http://127.0.0.1:4096')
+  })
+})

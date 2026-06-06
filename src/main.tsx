@@ -89,55 +89,60 @@ interface StartOpencodeServiceResult {
   url?: string | null
 }
 
-// Tauri 原生 app 初始化
-if (isNativeTauri) {
+function configureNativeShell() {
+  if (!isNativeTauri) return
+
   // 添加 CSS class 用于 safe-area 适配
   document.documentElement.classList.add('tauri-app')
 
   // 确保 viewport meta 包含 viewport-fit=cover（用于状态栏沉浸式）
   const viewportMeta = document.querySelector('meta[name="viewport"]')
-  if (viewportMeta) {
-    const content = viewportMeta.getAttribute('content') || ''
-    if (!content.includes('viewport-fit=cover')) {
-      viewportMeta.setAttribute('content', content + ', viewport-fit=cover')
-    }
-  }
+  if (!viewportMeta) return
 
-  // Auto-start opencode serve（如果设置开启）
-  if (!isNativeTauriMobile && serviceStore.autoStart) {
-    const serverUrl = serverStore.getLocalServerUrl()
-    import('@tauri-apps/api/core').then(({ invoke }) => {
-      serviceStore.setStarting(true)
-      invoke<string | null>('detect_opencode_binary', { envVars: serviceStore.envVarsRecord })
-        .then(path => {
-          serviceStore.setDetectedBinaryPath(path)
-        })
-        .catch(() => undefined)
-        .then(() =>
-          invoke<StartOpencodeServiceResult>('start_opencode_service', {
-            url: serverUrl,
-            binaryPath: serviceStore.effectiveBinaryPath,
-            envVars: serviceStore.envVarsRecord,
-          }),
-        )
-        .then(result => {
-          applyLocalServiceUrl(result.url)
-          serviceStore.setStartedByUs(result.startedByUs)
-          serviceStore.setRunning(true)
-          serviceStore.setStarting(false)
-          if (result.started) {
-            console.info('[Service] opencode serve started by app')
-          } else {
-            console.info('[Service] opencode serve already running')
-          }
-        })
-        .catch(err => {
-          serviceStore.setStarting(false)
-          apiErrorHandler('auto-start opencode serve', err)
-        })
-    })
+  const content = viewportMeta.getAttribute('content') || ''
+  if (!content.includes('viewport-fit=cover')) {
+    viewportMeta.setAttribute('content', content + ', viewport-fit=cover')
   }
 }
+
+async function initializeNativeDesktopService() {
+  if (!isNativeTauri || isNativeTauriMobile || !serviceStore.autoStart) return
+
+  const serverUrl = serverStore.getLocalServerUrl()
+  serviceStore.setStarting(true)
+
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+
+    try {
+      const path = await invoke<string | null>('detect_opencode_binary', { envVars: serviceStore.envVarsRecord })
+      serviceStore.setDetectedBinaryPath(path)
+    } catch {
+      // Starting with PATH fallback is still useful if detection fails.
+    }
+
+    const result = await invoke<StartOpencodeServiceResult>('start_opencode_service', {
+      url: serverUrl,
+      binaryPath: serviceStore.effectiveBinaryPath,
+      envVars: serviceStore.envVarsRecord,
+    })
+
+    applyLocalServiceUrl(result.url)
+    serviceStore.setStartedByUs(result.startedByUs)
+    serviceStore.setRunning(true)
+    if (result.started) {
+      console.info('[Service] opencode serve started by app')
+    } else {
+      console.info('[Service] opencode serve already running')
+    }
+  } catch (err) {
+    apiErrorHandler('auto-start opencode serve', err)
+  } finally {
+    serviceStore.setStarting(false)
+  }
+}
+
+configureNativeShell()
 
 // 全局错误处理 - 防止未捕获错误导致页面刷新
 window.addEventListener('error', event => {
@@ -162,10 +167,16 @@ function bootstrap() {
       </Suspense>
     </StrictMode>,
   )
-
-  if (isNativeTauri) {
-    void getSDKClientAsync().catch(err => apiErrorHandler('initialize sdk client', err))
-  }
 }
 
-void bootstrap()
+async function startApp() {
+  await initializeNativeDesktopService()
+
+  if (isNativeTauri) {
+    await getSDKClientAsync().catch(err => apiErrorHandler('initialize sdk client', err))
+  }
+
+  bootstrap()
+}
+
+void startApp()
