@@ -10,6 +10,11 @@ function clampSidebarWidth(width: number, minWidth: number, maxWidth: number) {
 }
 
 const SIDEBAR_TRANSITION_MS = 300
+const SIDEBAR_SWIPE_LOCK_PX = 10
+const SIDEBAR_SWIPE_HORIZONTAL_BIAS = 1.25
+const SIDEBAR_SWIPE_CLOSE_PX = 80
+
+type SidebarSwipeAxis = 'pending' | 'horizontal' | 'vertical'
 
 interface SidebarProps {
   isOpen: boolean
@@ -209,32 +214,59 @@ export const Sidebar = memo(function Sidebar({
   )
 
   const touchStartX = useRef(0)
+  const touchStartY = useRef(0)
   const touchDeltaX = useRef(0)
+  const touchSwipeAxis = useRef<SidebarSwipeAxis>('pending')
   const [swipeX, setSwipeX] = useState(0)
   const isSwiping = useRef(false)
   const [isSwipingActive, setIsSwipingActive] = useState(false)
 
   const handleSidebarTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return
     touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
     touchDeltaX.current = 0
+    touchSwipeAxis.current = 'pending'
     isSwiping.current = false
     setIsSwipingActive(false)
   }, [])
 
   const handleSidebarTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return
+
     const deltaX = e.touches[0].clientX - touchStartX.current
-    if (deltaX < -10) {
-      isSwiping.current = true
-      setIsSwipingActive(true)
-      touchDeltaX.current = deltaX
-      setSwipeX(deltaX)
+    const deltaY = e.touches[0].clientY - touchStartY.current
+    const absX = Math.abs(deltaX)
+    const absY = Math.abs(deltaY)
+
+    if (touchSwipeAxis.current === 'pending') {
+      if (Math.max(absX, absY) < SIDEBAR_SWIPE_LOCK_PX) return
+
+      touchSwipeAxis.current = absX > absY * SIDEBAR_SWIPE_HORIZONTAL_BIAS ? 'horizontal' : 'vertical'
+      if (touchSwipeAxis.current === 'vertical') {
+        isSwiping.current = false
+        setIsSwipingActive(false)
+        touchDeltaX.current = 0
+        setSwipeX(0)
+        return
+      }
     }
+
+    if (touchSwipeAxis.current !== 'horizontal') return
+
+    e.preventDefault()
+    isSwiping.current = true
+    setIsSwipingActive(true)
+    const nextDeltaX = Math.min(0, deltaX)
+    touchDeltaX.current = nextDeltaX
+    setSwipeX(nextDeltaX)
   }, [])
 
   const handleSidebarTouchEnd = useCallback(() => {
-    if (isSwiping.current && touchDeltaX.current < -80) {
+    if (touchSwipeAxis.current === 'horizontal' && isSwiping.current && touchDeltaX.current < -SIDEBAR_SWIPE_CLOSE_PX) {
       onClose()
     }
+    touchSwipeAxis.current = 'pending'
     isSwiping.current = false
     setIsSwipingActive(false)
     touchDeltaX.current = 0
@@ -258,6 +290,7 @@ export const Sidebar = memo(function Sidebar({
           onTouchStart={handleSidebarTouchStart}
           onTouchMove={handleSidebarTouchMove}
           onTouchEnd={handleSidebarTouchEnd}
+          onTouchCancel={handleSidebarTouchEnd}
           className={`
             fixed left-0 z-40
             flex flex-col bg-bg-100 shadow-lg
