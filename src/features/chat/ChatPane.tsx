@@ -15,6 +15,7 @@ import { OutlineIndex } from '../../components/OutlineIndex'
 import { PaneHeader } from './PaneHeader'
 import { PaneDropOverlay, resolveDropZone, type DropZone, type PaneDropOverlayHandle } from './PaneDropOverlay'
 import { useChatSession, useModels, useModelSelection } from '../../hooks'
+import { useServerStore } from '../../hooks/useServerStore'
 import { useCancelHint } from '../../hooks/useCancelHint'
 import { InlineToolRequestContext, type InlineToolRequestContextValue } from './InlineToolRequestContext'
 import { ChatViewportProvider, canUseSplitPane, useChatViewportMaybe, type ChatViewportValue } from './chatViewport'
@@ -27,7 +28,9 @@ import { restoreModelSelection } from '../../utils/sessionHelpers'
 import { findModelByKey, getModelKey } from '../../utils/modelUtils'
 import { useTheme } from '../../hooks/useTheme'
 import type { Attachment } from '../../api'
+import type { MessageError } from '../../types/message'
 import { getInternalDragSnapshot, subscribeInternalDrag, subscribeInternalDrop } from '../../lib/internalDragCore'
+import { ErrorBoundary } from '../../components/ErrorBoundary'
 
 interface ChatPaneProps {
   paneId: string
@@ -37,6 +40,7 @@ interface ChatPaneProps {
   displayMode: 'single' | 'split'
   isPaneFullscreen?: boolean
   onOpenSidebar?: () => void
+  onOpenSettings?: () => void
   showSidebarButton?: boolean
   onSplitPane?: () => void
   onTogglePaneFullscreen?: () => void
@@ -121,6 +125,7 @@ export const ChatPane = memo(function ChatPane({
   displayMode,
   isPaneFullscreen = false,
   onOpenSidebar,
+  onOpenSettings,
   showSidebarButton = false,
   onSplitPane,
   onTogglePaneFullscreen,
@@ -146,6 +151,8 @@ export const ChatPane = memo(function ChatPane({
   // Models
   // ============================================
   const { models, isLoading: modelsLoading, refetch: refetchModels } = useModels()
+  const { activeServer, getHealth } = useServerStore()
+  const activeServerHealth = activeServer ? getHealth(activeServer.id) : null
   const hiddenModelKeys = useHiddenModelKeys()
   const visibleModels = useMemo(
     () => models.filter(model => !hiddenModelKeys.includes(getModelKey(model))),
@@ -247,6 +254,7 @@ export const ChatPane = memo(function ChatPane({
     setSelectedAgent,
     routeSessionId,
     loadState,
+    loadError,
     hasMoreHistory,
     retryStatus,
     effectiveDirectory,
@@ -297,6 +305,46 @@ export const ChatPane = memo(function ChatPane({
   const renderedLoadState = loadState === 'loaded' && isRenderingDeferredMessages ? 'loading' : loadState
   const inputDisabled = !!routeSessionId && loadState === 'error' && messages.length === 0
   const chatPageViewModel = useChatPageViewModel(renderedMessages)
+
+  const connectionError = useMemo<MessageError | undefined>(() => {
+    if (!activeServer) {
+      return {
+        name: 'APIError',
+        data: {
+          message: 'No active OpenCode server is selected',
+          isRetryable: false,
+        },
+      }
+    }
+
+    if (!activeServerHealth || activeServerHealth.status === 'checking' || activeServerHealth.status === 'online') {
+      return undefined
+    }
+
+    const lines = [
+      `Server: ${activeServer.name}`,
+      `URL: ${activeServer.url}`,
+      `Status: ${activeServerHealth.status}`,
+      activeServerHealth.error ? `Error: ${activeServerHealth.error}` : '',
+      activeServerHealth.status === 'error' || activeServerHealth.status === 'offline'
+        ? 'Expected /global/health to return OpenCode health JSON.'
+        : '',
+    ].filter(Boolean)
+
+    const responseBody = [lines.join('\n'), activeServerHealth.details ? `Raw diagnostics:\n${activeServerHealth.details}` : '']
+      .filter(Boolean)
+      .join('\n\n')
+
+    return {
+      name: 'APIError',
+      data: {
+        message: activeServerHealth.error || `Unable to connect to ${activeServer.name}`,
+        statusCode: activeServerHealth.status === 'unauthorized' ? 401 : undefined,
+        isRetryable: activeServerHealth.status !== 'unauthorized',
+        responseBody,
+      },
+    }
+  }, [activeServer, activeServerHealth])
 
   const navigationCtx = useMemo(
     () => ({ navigateToSession, currentSessionId: routeSessionId, currentDirectory: effectiveDirectory }),
@@ -738,28 +786,33 @@ export const ChatPane = memo(function ChatPane({
 
       <div className="absolute inset-0">
         <InlineToolRequestContext.Provider value={inlineToolRequestCtx}>
-          <ChatArea
-            ref={chatAreaRef}
-            messages={renderedMessages}
-            pageRecords={chatPageViewModel.pageRecords}
-            visibleMessages={chatPageViewModel.visibleMessages}
-            forkTargetIdMap={chatPageViewModel.forkTargetIdMap}
-            turnDurationMap={chatPageViewModel.turnDurationMap}
-            sessionId={routeSessionId}
-            isStreaming={isStreaming}
-            allowStreamingLayoutAnimation={isAtBottom}
-            loadState={renderedLoadState}
-            hasMoreHistory={hasMoreHistory}
-            onLoadMore={loadMoreHistory}
-            onUndo={handleUndoWithAnimation}
-            onFork={handleForkMessage}
-            canUndo={canUndo}
-            registerMessage={registerMessage}
-            retryStatus={retryStatus}
-            bottomPadding={inputBoxHeight}
-            onVisibleMessageIdsChange={handleVisibleIdsChange}
-            onAtBottomChange={setIsAtBottom}
-          />
+          <ErrorBoundary onOpenSettings={onOpenSettings}>
+            <ChatArea
+              ref={chatAreaRef}
+              messages={renderedMessages}
+              pageRecords={chatPageViewModel.pageRecords}
+              visibleMessages={chatPageViewModel.visibleMessages}
+              forkTargetIdMap={chatPageViewModel.forkTargetIdMap}
+              turnDurationMap={chatPageViewModel.turnDurationMap}
+              sessionId={routeSessionId}
+              isStreaming={isStreaming}
+              allowStreamingLayoutAnimation={isAtBottom}
+              loadState={renderedLoadState}
+              loadError={loadError}
+              connectionError={connectionError}
+              onOpenSettings={onOpenSettings}
+              hasMoreHistory={hasMoreHistory}
+              onLoadMore={loadMoreHistory}
+              onUndo={handleUndoWithAnimation}
+              onFork={handleForkMessage}
+              canUndo={canUndo}
+              registerMessage={registerMessage}
+              retryStatus={retryStatus}
+              bottomPadding={inputBoxHeight}
+              onVisibleMessageIdsChange={handleVisibleIdsChange}
+              onAtBottomChange={setIsAtBottom}
+            />
+          </ErrorBoundary>
         </InlineToolRequestContext.Provider>
       </div>
 

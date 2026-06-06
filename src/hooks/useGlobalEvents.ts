@@ -338,6 +338,11 @@ export function useGlobalEvents(directories?: string[]) {
         })
     }
 
+    const refreshActiveServerHealth = () => {
+      const activeServerId = serverStore.getActiveServerId()
+      void serverStore.checkHealth(activeServerId).catch(() => {})
+    }
+
     refreshRef.current = fetchAndInitialize
 
     const approveGlobalPendingPermissions = () => {
@@ -366,6 +371,9 @@ export function useGlobalEvents(directories?: string[]) {
     }
 
     const unsubscribeAutoApprove = autoApproveStore.subscribe(approveGlobalPendingPermissions)
+    const unsubscribeServerChange = serverStore.onServerChange(serverId => {
+      void serverStore.checkHealth(serverId).catch(() => {})
+    })
 
     const unsubscribe = subscribeToEvents({
       // ============================================
@@ -623,6 +631,7 @@ export function useGlobalEvents(directories?: string[]) {
         if (import.meta.env.DEV) {
           console.log(`[GlobalEvents] SSE reconnected (reason: ${reason}), notifying for data refresh`)
         }
+        refreshActiveServerHealth()
         // 重连后重新拉取全量状态 + pending requests
         fetchAndInitialize()
         // 通知所有 pub/sub 消费者
@@ -633,6 +642,7 @@ export function useGlobalEvents(directories?: string[]) {
     })
 
     fetchAndInitialize()
+    refreshActiveServerHealth()
     approveGlobalPendingPermissions()
 
     return () => {
@@ -641,6 +651,7 @@ export function useGlobalEvents(directories?: string[]) {
         refreshRef.current = null
       }
       unsubscribeAutoApprove()
+      unsubscribeServerChange()
       unsubscribe()
     }
   }, [])

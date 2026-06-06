@@ -118,6 +118,10 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
       } catch (e) {
         if (requestId !== requestIdRef.current) return
         setError(e instanceof Error ? e : new Error('Failed to fetch sessions'))
+        if (!append) {
+          setSessions([])
+          setHasMore(false)
+        }
       } finally {
         if (requestId === requestIdRef.current) {
           isFetchingRef.current = false

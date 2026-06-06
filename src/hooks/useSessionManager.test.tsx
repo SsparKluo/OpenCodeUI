@@ -13,6 +13,7 @@ const {
   messageStoreMock: {
     getSessionState: vi.fn(),
     setLoadState: vi.fn(),
+    setLoadError: vi.fn(),
     setMessages: vi.fn(),
     updateSessionMetadata: vi.fn(),
     prependMessages: vi.fn(),
@@ -43,6 +44,7 @@ describe('useSessionManager', () => {
     getSessionMessagesMock.mockReset()
     messageStoreMock.getSessionState.mockReset()
     messageStoreMock.setLoadState.mockReset()
+    messageStoreMock.setLoadError.mockReset()
     messageStoreMock.setMessages.mockReset()
     messageStoreMock.updateSessionMetadata.mockReset()
     messageStoreMock.prependMessages.mockReset()
@@ -73,6 +75,9 @@ describe('useSessionManager', () => {
     })
 
     expect(messageStoreMock.setLoadState).toHaveBeenCalledWith('missing-session', 'loading')
-    expect(messageStoreMock.setLoadState).toHaveBeenCalledWith('missing-session', 'error')
+    expect(messageStoreMock.setLoadError).toHaveBeenCalledWith(
+      'missing-session',
+      expect.objectContaining({ name: 'APIError' }),
+    )
   })
 })

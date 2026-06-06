@@ -7,6 +7,20 @@ import { getSDKClient, unwrap } from './sdk'
 import { formatPathForApi } from '../utils/directoryUtils'
 import type { ModelInfo, ApiProject, ApiPath } from './types'
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function requireRecord(value: unknown, message: string): Record<string, unknown> {
+  if (isRecord(value)) return value
+  throw new Error(message)
+}
+
+function requireArray<T = unknown>(value: unknown, message: string): T[] {
+  if (Array.isArray(value)) return value as T[]
+  throw new Error(message)
+}
+
 // Re-export all types
 export * from './types'
 
@@ -38,28 +52,40 @@ export * from './lsp'
 
 export async function getActiveModels(directory?: string): Promise<ModelInfo[]> {
   const sdk = getSDKClient()
-  const data = unwrap(await sdk.config.providers({ directory: formatPathForApi(directory) }))
+  const data = requireRecord(
+    unwrap(await sdk.config.providers({ directory: formatPathForApi(directory) })),
+    'Invalid OpenCode providers response',
+  )
+  const providers = requireArray<Record<string, unknown>>(data.providers, 'Invalid OpenCode providers response')
   const models: ModelInfo[] = []
 
-  for (const provider of data.providers) {
-    for (const [, model] of Object.entries(provider.models)) {
+  for (const provider of providers) {
+    const providerModels = isRecord(provider.models) ? provider.models : {}
+    for (const [, rawModel] of Object.entries(providerModels)) {
+      if (!isRecord(rawModel)) continue
+      const model = rawModel
       if (model.status === 'active') {
-        const variants = model.variants ? Object.keys(model.variants) : []
+        const limit = isRecord(model.limit) ? model.limit : {}
+        const capabilities = isRecord(model.capabilities) ? model.capabilities : {}
+        const inputCapabilities = isRecord(capabilities.input) ? capabilities.input : {}
+        const variants = isRecord(model.variants) ? Object.keys(model.variants) : []
+        const modelId = typeof model.id === 'string' ? model.id : ''
+        if (!modelId) continue
 
         models.push({
-          id: model.id,
-          name: model.name || model.id,
-          providerId: provider.id,
-          providerName: provider.name || provider.id,
-          family: model.family || '',
-          contextLimit: model.limit.context,
-          outputLimit: model.limit.output,
-          supportsReasoning: model.capabilities.reasoning,
-          supportsImages: model.capabilities.input.image,
-          supportsPdf: model.capabilities.input.pdf,
-          supportsAudio: model.capabilities.input.audio,
-          supportsVideo: model.capabilities.input.video,
-          supportsToolcall: model.capabilities.toolcall,
+          id: modelId,
+          name: typeof model.name === 'string' ? model.name : modelId,
+          providerId: typeof provider.id === 'string' ? provider.id : '',
+          providerName: typeof provider.name === 'string' ? provider.name : typeof provider.id === 'string' ? provider.id : '',
+          family: typeof model.family === 'string' ? model.family : '',
+          contextLimit: typeof limit.context === 'number' ? limit.context : 0,
+          outputLimit: typeof limit.output === 'number' ? limit.output : 0,
+          supportsReasoning: capabilities.reasoning === true,
+          supportsImages: inputCapabilities.image === true,
+          supportsPdf: inputCapabilities.pdf === true,
+          supportsAudio: inputCapabilities.audio === true,
+          supportsVideo: inputCapabilities.video === true,
+          supportsToolcall: capabilities.toolcall === true,
           variants,
         })
       }
@@ -71,8 +97,12 @@ export async function getActiveModels(directory?: string): Promise<ModelInfo[]> 
 
 export async function getDefaultModels(directory?: string): Promise<Record<string, string>> {
   const sdk = getSDKClient()
-  const data = unwrap(await sdk.config.providers({ directory: formatPathForApi(directory) }))
-  return data.default
+  const data = requireRecord(
+    unwrap(await sdk.config.providers({ directory: formatPathForApi(directory) })),
+    'Invalid OpenCode providers response',
+  )
+  const defaults = requireRecord(data.default, 'Invalid OpenCode default model response')
+  return Object.fromEntries(Object.entries(defaults).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
 }
 
 // ============================================
@@ -93,7 +123,7 @@ export async function getCurrentProject(directory?: string): Promise<ApiProject>
  */
 export async function getProjects(directory?: string): Promise<ApiProject[]> {
   const sdk = getSDKClient()
-  return unwrap(await sdk.project.list({ directory: formatPathForApi(directory) }))
+  return requireArray<ApiProject>(unwrap(await sdk.project.list({ directory: formatPathForApi(directory) })), 'Invalid OpenCode project list response')
 }
 
 /**
@@ -131,5 +161,5 @@ export async function updateProject(
 
 export async function getPath(): Promise<ApiPath> {
   const sdk = getSDKClient()
-  return unwrap(await sdk.path.get())
+  return requireRecord(unwrap(await sdk.path.get()), 'Invalid OpenCode path response') as unknown as ApiPath
 }

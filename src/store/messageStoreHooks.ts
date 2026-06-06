@@ -32,6 +32,7 @@ function createSnapshot(): MessageStoreSnapshot {
     redoSteps: messageStore.getRedoSteps(sessionId),
     revertedContent: messageStore.getCurrentRevertedContent(sessionId),
     loadState: messageStore.getLoadState(sessionId),
+    loadError: messageStore.getSessionState(sessionId ?? '')?.loadError,
   }
 }
 
@@ -154,6 +155,7 @@ export function useSessionState(sessionId: string | null): SessionStateSnapshot 
       messages: visibleMessages,
       isStreaming: state.isStreaming,
       loadState: state.loadState,
+      loadError: state.loadError,
       revertState: state.revertState,
       canUndo: messageStore.canUndo(sessionId),
       canRedo: !state.isStreaming && (state.revertState?.history.length ?? 0) > 0,

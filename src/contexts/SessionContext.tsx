@@ -86,6 +86,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         setHasMore(data.length >= currentLimitRef.current)
       } catch (e) {
+        if (requestId === requestIdRef.current && !append) {
+          setSessions([])
+          setHasMore(false)
+        }
         sessionErrorHandler('fetch sessions', e)
       } finally {
         if (requestId === requestIdRef.current) {

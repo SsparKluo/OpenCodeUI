@@ -66,6 +66,7 @@ const EMPTY_SESSION_STATE = {
   messages: [] as import('../types/message').Message[],
   isStreaming: false,
   loadState: 'idle' as const,
+  loadError: undefined,
   revertState: null,
   canUndo: false,
   canRedo: false,
@@ -160,6 +161,7 @@ export function useChatSession({
   const revertedContent = perSessionState.revertedContent
   const hasMoreHistory = perSessionState.hasMoreHistory
   const loadState = routeSessionId ? perSessionState.loadState : ('idle' as const)
+  const loadError = routeSessionId ? perSessionState.loadError : undefined
 
   // OpenAPI SessionStatus.retry: { attempt, message, next }
   const retryStatus = useMemo<LiveRetryStatus | null>(() => {
@@ -1109,6 +1111,7 @@ export function useChatSession({
     revertedContent,
     restoredContent: activeRestoredContent,
     loadState,
+    loadError,
     hasMoreHistory,
     retryStatus,
     agents,

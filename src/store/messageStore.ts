@@ -8,7 +8,7 @@
 // 3. Undo/Redo 通过 revertState 实现
 // 4. RAF 批量通知 React 组件更新
 
-import type { Message, Part, FilePart, AgentPart } from '../types/message'
+import type { Message, MessageError, Part, FilePart, AgentPart } from '../types/message'
 import type { ApiMessageWithParts, ApiMessage, ApiPart, ApiSession, Attachment } from '../api/types'
 import { logger } from '../utils/logger'
 import { isUserUIMessage, toUIMessage, toUIMessageInfo, toUIPart } from '../utils/messageConversion'
@@ -176,11 +176,12 @@ class MessageStore {
         revertState: null,
         isStreaming: false,
         loadState: 'idle',
-        hasMoreHistory: false,
-        directory: '',
-        title: undefined,
-        shareUrl: undefined,
-        isStale: false,
+          hasMoreHistory: false,
+          directory: '',
+          title: undefined,
+          loadError: undefined,
+          shareUrl: undefined,
+          isStale: false,
       }
       this.sessions.set(sessionId, state)
     }
@@ -228,6 +229,7 @@ class MessageStore {
       title?: string
       loadState?: SessionState['loadState']
       shareUrl?: string
+      loadError?: MessageError
     },
   ) {
     const state = this.sessions.get(sessionId)
@@ -237,6 +239,7 @@ class MessageStore {
     if (options.directory !== undefined) state.directory = options.directory
     if (options.title !== undefined) state.title = options.title
     if (options.loadState !== undefined) state.loadState = options.loadState
+    if (options.loadError !== undefined) state.loadError = options.loadError
     if (options.shareUrl !== undefined) state.shareUrl = options.shareUrl
 
     this.notify()
@@ -281,6 +284,14 @@ class MessageStore {
   setLoadState(sessionId: string, loadState: SessionState['loadState']) {
     const state = this.ensureSession(sessionId)
     state.loadState = loadState
+    if (loadState !== 'error') state.loadError = undefined
+    this.notify()
+  }
+
+  setLoadError(sessionId: string, error: MessageError) {
+    const state = this.ensureSession(sessionId)
+    state.loadState = 'error'
+    state.loadError = error
     this.notify()
   }
 
@@ -303,6 +314,7 @@ class MessageStore {
 
     state.messages = apiMessages.map(toUIMessage)
     state.loadState = 'loaded'
+    state.loadError = undefined
     state.hasMoreHistory = options?.hasMoreHistory ?? false
     state.directory = options?.directory ?? ''
     if (options?.title !== undefined) state.title = options.title

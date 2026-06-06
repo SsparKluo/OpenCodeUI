@@ -17,6 +17,18 @@ import { messageStore } from '../../../store'
 import { SettingsCard } from './SettingsUI'
 import type { ServerConfig, ServerHealth } from '../../../store/serverStore'
 
+const IPV4_PATTERN = /^(?:\d{1,3}\.){3}\d{1,3}$/
+
+function isHttpsIpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, '')
+    return parsed.protocol === 'https:' && (IPV4_PATTERN.test(hostname) || hostname.includes(':'))
+  } catch {
+    return false
+  }
+}
+
 // ============================================
 // Server Item
 // ============================================
@@ -193,6 +205,7 @@ function EditServerForm({
   const [password, setPassword] = useState(server.auth?.password || '')
   const [showAuth, setShowAuth] = useState(!!server.auth?.password)
   const [error, setError] = useState('')
+  const showHttpsIpWarning = isHttpsIpUrl(url)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -294,6 +307,12 @@ function EditServerForm({
         </>
       )}
 
+      {showHttpsIpWarning && (
+        <div className="text-[length:var(--fs-xs)] text-warning-100 bg-warning-bg border border-warning-100/20 rounded-md px-2.5 py-2 leading-relaxed">
+          {t('servers.httpsIpWarning')}
+        </div>
+      )}
+
       {error && <p className="text-[length:var(--fs-xs)] text-danger-100">{error}</p>}
       <div className="flex justify-end gap-2 pt-1">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
@@ -360,6 +379,7 @@ function AddServerForm({
       return false
     }
   })()
+  const showHttpsIpWarning = isHttpsIpUrl(url)
 
   const inputCls =
     'w-full h-8 px-3 text-[length:var(--fs-md)] bg-bg-000 border border-border-200 rounded-md focus:outline-none focus:border-accent-main-100/50 text-text-100 placeholder:text-text-400'
@@ -450,6 +470,12 @@ function AddServerForm({
         </>
       )}
 
+      {showHttpsIpWarning && (
+        <div className="text-[length:var(--fs-xs)] text-warning-100 bg-warning-bg border border-warning-100/20 rounded-md px-2.5 py-2 leading-relaxed">
+          {t('servers.httpsIpWarning')}
+        </div>
+      )}
+
       {error && <p className="text-[length:var(--fs-xs)] text-danger-100">{error}</p>}
       <div className="flex justify-end gap-2 pt-1">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
@@ -505,8 +531,9 @@ export function ServersSettings() {
 
       setActiveServer(id) // 内部触发 serverChangeListeners → reconnectSSE()
       navigateHome()
+      void checkHealth(id)
     },
-    [activeServer?.id, routeSessionId, setActiveServer, navigateHome],
+    [activeServer?.id, checkHealth, routeSessionId, setActiveServer, navigateHome],
   )
 
   return (
@@ -547,9 +574,9 @@ export function ServersSettings() {
                   ? { username: updates.username || 'opencode', password: updates.password }
                   : undefined
                 updateServer(s.id, { name: updates.name, url: updates.url, auth })
-                checkHealth(s.id)
+                void checkHealth(s.id)
               }}
-              onCheckHealth={() => checkHealth(s.id)}
+              onCheckHealth={() => void checkHealth(s.id)}
             />
           ))}
 
@@ -559,7 +586,7 @@ export function ServersSettings() {
                 const auth = pass ? { username: user || 'opencode', password: pass } : undefined
                 const s = addServer({ name: n, url: u, auth })
                 setAddingServer(false)
-                checkHealth(s.id)
+                void checkHealth(s.id)
               }}
               onCancel={() => setAddingServer(false)}
             />

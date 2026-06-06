@@ -847,6 +847,11 @@ export function reconnectSSE() {
   connectSingleton()
 }
 
+export function disconnectSSE(error?: string) {
+  disconnectSingleton()
+  updateConnectionState({ state: error ? 'error' : 'disconnected', error, reconnectAttempt: 0 })
+}
+
 /**
  * 订阅 SSE 事件（单例模式，多个订阅者共享一个连接）
  */

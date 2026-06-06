@@ -22,6 +22,19 @@ import {
 import { sessionErrorHandler } from '../utils'
 import { isSessionNotFoundError } from '../utils/sessionErrors'
 import { INITIAL_MESSAGE_LIMIT, HISTORY_LOAD_BATCH_SIZE } from '../constants'
+import type { MessageError } from '../types/message'
+
+function toLoadMessageError(error: unknown): MessageError {
+  const message = error instanceof Error ? error.message : String(error || 'Failed to load session')
+  return {
+    name: 'APIError',
+    data: {
+      message,
+      isRetryable: true,
+      responseBody: error instanceof Error ? error.stack : undefined,
+    },
+  }
+}
 
 interface UseSessionManagerOptions {
   sessionId: string | null
@@ -173,7 +186,7 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
       } catch (error) {
         if (isStale()) return
         sessionErrorHandler('load session', error)
-        messageStore.setLoadState(sid, 'error')
+        messageStore.setLoadError(sid, toLoadMessageError(error))
         if (isSessionNotFoundError(error)) {
           onSessionMissing?.(sid)
         }

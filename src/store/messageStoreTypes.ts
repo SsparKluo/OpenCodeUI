@@ -2,7 +2,7 @@
 // MessageStore Types
 // ============================================
 
-import type { Message, Part } from '../types/message'
+import type { Message, MessageError, Part } from '../types/message'
 
 export interface RevertState {
   /** 撤销点的消息 ID */
@@ -29,6 +29,8 @@ export interface SessionState {
   isStreaming: boolean
   /** 加载状态 */
   loadState: 'idle' | 'loading' | 'loaded' | 'error'
+  /** 空会话加载失败时展示在消息流里的错误 */
+  loadError?: MessageError
   /** 是否还有更多历史消息 */
   hasMoreHistory: boolean
   /** session 目录 */
@@ -60,12 +62,14 @@ export interface MessageStoreSnapshot {
   redoSteps: number
   revertedContent: RevertHistoryItem | null
   loadState: SessionState['loadState']
+  loadError?: MessageError
 }
 
 export interface SessionStateSnapshot {
   messages: Message[]
   isStreaming: boolean
   loadState: SessionState['loadState']
+  loadError?: MessageError
   revertState: RevertState | null
   canUndo: boolean
   canRedo: boolean

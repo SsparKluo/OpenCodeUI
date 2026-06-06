@@ -25,9 +25,10 @@ import {
 import { useTranslation } from 'react-i18next'
 import { animate } from 'motion/mini'
 import { MessageRenderer } from '../message'
+import { MessageErrorView } from '../message/parts'
 import { messageStore } from '../../store'
 import { useTheme } from '../../hooks/useTheme'
-import type { Message } from '../../types/message'
+import type { Message, MessageError } from '../../types/message'
 import { RetryStatusInline, type RetryStatusInlineData } from './RetryStatusInline'
 import { buildVisibleMessageEntries, getVisibleMessageForkTargetId } from './chatAreaVisibility'
 import { AT_BOTTOM_THRESHOLD_PX } from '../../constants'
@@ -102,6 +103,9 @@ interface ChatAreaProps {
   isStreaming?: boolean
   allowStreamingLayoutAnimation?: boolean
   loadState?: 'idle' | 'loading' | 'loaded' | 'error'
+  loadError?: MessageError
+  connectionError?: MessageError
+  onOpenSettings?: () => void
   hasMoreHistory?: boolean
   onLoadMore?: () => void | Promise<void>
   onUndo?: (userMessageId: string) => void
@@ -135,6 +139,9 @@ export const ChatArea = memo(
         isStreaming: _isStreaming = false,
         allowStreamingLayoutAnimation = true,
         loadState = 'idle',
+        loadError,
+        connectionError,
+        onOpenSettings,
         onLoadMore,
         onUndo,
         onFork,
@@ -821,6 +828,25 @@ export const ChatArea = memo(
                 <div className="flex justify-start">
                   <div className="w-full min-w-0">
                     <RetryStatusInline status={retryStatus} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {visibleMessages.length === 0 && (loadError || connectionError) && (
+              <div className={`w-full ${messageMaxWidthClass} mx-auto ${messagePaddingClass} shrink-0`}>
+                <div className="flex justify-start">
+                  <div className="w-full min-w-0 space-y-2">
+                    <MessageErrorView error={loadError ?? connectionError!} />
+                    {connectionError && onOpenSettings && (
+                      <button
+                        type="button"
+                        onClick={onOpenSettings}
+                        className="rounded-md border border-border-200 bg-bg-100 px-3 py-1.5 text-[length:var(--fs-sm)] text-text-200 transition-colors hover:bg-bg-200"
+                      >
+                        Open server settings
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

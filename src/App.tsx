@@ -109,7 +109,7 @@ function App() {
         paneDirectories: paneControllers
           .map(controller => controller.effectiveDirectory)
           .filter((directory): directory is string => Boolean(directory)),
-        projectDirectories: savedDirectories.map(directory => directory.path),
+        projectDirectories: (Array.isArray(savedDirectories) ? savedDirectories : []).map(directory => directory.path),
       }),
     [routeDirectory, currentDirectory, paneControllers, savedDirectories],
   )
@@ -189,39 +189,6 @@ function App() {
 
   const handleOpenSidebar = useCallback(() => setSidebarExpanded(true), [setSidebarExpanded])
 
-  const renderPaneLeaf = useCallback(
-    (paneId: string, paneSessionId: string | null) => (
-      <ChatPane
-        key={paneId}
-        paneId={paneId}
-        sessionId={paneSessionId}
-        isFocused={paneLayout.focusedPaneId === paneId}
-        paneCount={paneLayout.paneCount}
-        displayMode={paneLayout.isSplit && paneLayout.fullscreenPaneId !== paneId ? 'split' : 'single'}
-        isPaneFullscreen={paneLayout.fullscreenPaneId === paneId}
-        onOpenSidebar={handleOpenSidebar}
-        showSidebarButton={chatViewport.interaction.sidebarBehavior === 'overlay'}
-        onSplitPane={splitPaneEnabled && !paneLayout.fullscreenPaneId ? handleEnterSplitMode : undefined}
-        onTogglePaneFullscreen={paneLayout.isSplit ? handleToggleFocusedPaneFullscreen : undefined}
-        navigatePaneToSession={navigatePaneToSession}
-        navigatePaneHome={navigatePaneHome}
-      />
-    ),
-    [
-      paneLayout.focusedPaneId,
-      paneLayout.paneCount,
-      paneLayout.isSplit,
-      paneLayout.fullscreenPaneId,
-      chatViewport.interaction.sidebarBehavior,
-      splitPaneEnabled,
-      handleOpenSidebar,
-      handleEnterSplitMode,
-      handleToggleFocusedPaneFullscreen,
-      navigatePaneToSession,
-      navigatePaneHome,
-    ],
-  )
-
   const focusedDirectory = focusedRouteDirectory || ''
 
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
@@ -237,6 +204,41 @@ function App() {
     openSettingsTab('about')
   }, [openSettingsTab])
   const closeSettings = useCallback(() => setSettingsDialogOpen(false), [])
+
+  const renderPaneLeaf = useCallback(
+    (paneId: string, paneSessionId: string | null) => (
+      <ChatPane
+        key={paneId}
+        paneId={paneId}
+        sessionId={paneSessionId}
+        isFocused={paneLayout.focusedPaneId === paneId}
+        paneCount={paneLayout.paneCount}
+        displayMode={paneLayout.isSplit && paneLayout.fullscreenPaneId !== paneId ? 'split' : 'single'}
+        isPaneFullscreen={paneLayout.fullscreenPaneId === paneId}
+        onOpenSidebar={handleOpenSidebar}
+        showSidebarButton={chatViewport.interaction.sidebarBehavior === 'overlay'}
+        onSplitPane={splitPaneEnabled && !paneLayout.fullscreenPaneId ? handleEnterSplitMode : undefined}
+        onTogglePaneFullscreen={paneLayout.isSplit ? handleToggleFocusedPaneFullscreen : undefined}
+        onOpenSettings={openSettings}
+        navigatePaneToSession={navigatePaneToSession}
+        navigatePaneHome={navigatePaneHome}
+      />
+    ),
+    [
+      paneLayout.focusedPaneId,
+      paneLayout.paneCount,
+      paneLayout.isSplit,
+      paneLayout.fullscreenPaneId,
+      chatViewport.interaction.sidebarBehavior,
+      splitPaneEnabled,
+      handleOpenSidebar,
+      handleEnterSplitMode,
+      handleToggleFocusedPaneFullscreen,
+      openSettings,
+      navigatePaneToSession,
+      navigatePaneHome,
+    ],
+  )
 
   const [projectDialogOpen, setProjectDialogOpen] = useState(false)
   const openProject = useCallback(() => setProjectDialogOpen(true), [])
