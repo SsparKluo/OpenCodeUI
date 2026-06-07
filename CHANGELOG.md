@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.6.15] - 2026-06-06
+
+- fix(settings): validate opencode server health (0c19e18)
+- fix(startup): refresh after local service URL changes (991a856)
+
 ## [v0.6.14] - 2026-06-06
 
 - fix(pwa): clear stale iOS keyboard inset (f5eba98)
