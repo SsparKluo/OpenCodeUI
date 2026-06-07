@@ -262,7 +262,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
         showCloseButton={false}
         rawContent
       >
-        <div className="flex flex-col" style={{ height: '92vh' }}>
+        <div className="flex flex-col" style={{ height: 'calc(var(--app-height) * 0.92)' }}>
           {/* Sticky Header + Tabs */}
           <div className="shrink-0">
             {/* Title bar */}
