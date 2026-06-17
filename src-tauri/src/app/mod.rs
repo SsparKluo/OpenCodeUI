@@ -146,7 +146,7 @@ fn configure_desktop_window_builder<'a, R: tauri::Runtime, M: tauri::Manager<R>>
     let window_builder = window_builder
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .hidden_title(true)
-        .traffic_light_position(tauri::LogicalPosition::new(12.0, 16.0));
+        .traffic_light_position(tauri::LogicalPosition::new(12.0, 12.0));
 
     window_builder
 }
