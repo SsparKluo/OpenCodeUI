@@ -237,6 +237,37 @@ pub fn run() {
                     let state = window.state::<BridgeState>();
                     state.disconnect_window(window.label());
                 }
+                tauri::WindowEvent::DragDrop(event) => {
+                    match event {
+                        tauri::DragDropEvent::Enter { paths, position } => {
+                            let paths: Vec<String> = paths
+                                .into_iter()
+                                .map(|p| p.to_string_lossy().to_string())
+                                .collect();
+                            let _ = window.emit(
+                                "file-drop-enter",
+                                (paths, position.x, position.y),
+                            );
+                        }
+                        tauri::DragDropEvent::Over { position } => {
+                            let _ = window.emit("file-drop-over", (position.x, position.y));
+                        }
+                        tauri::DragDropEvent::Drop { paths, position } => {
+                            let paths: Vec<String> = paths
+                                .into_iter()
+                                .map(|p| p.to_string_lossy().to_string())
+                                .collect();
+                            let _ = window.emit(
+                                "file-drop-drop",
+                                (paths, position.x, position.y),
+                            );
+                        }
+                        tauri::DragDropEvent::Leave => {
+                            let _ = window.emit("file-drop-leave", ());
+                        }
+                        _ => {}
+                    }
+                }
                 _ => {}
             }
         })

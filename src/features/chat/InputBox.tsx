@@ -1106,6 +1106,49 @@ function InputBoxComponent({
     }
   }, [handleTauriDragDropEvent])
 
+  // Rust 端 WindowEvent::DragDrop 转发的 file-drop-* 事件（macOS 保底路径）
+  useEffect(() => {
+    if (!isTauri()) return
+
+    let disposed = false
+    const cleanupFns: (() => void)[] = []
+
+    void import('@tauri-apps/api/event').then(async ({ listen }) => {
+      if (disposed) return
+
+      const { PhysicalPosition } = await import('@tauri-apps/api/dpi')
+
+      const onEnter = await listen<[string[], number, number]>('file-drop-enter', e => {
+        if (disposed) return
+        handleTauriDragDropEvent({ type: 'enter', paths: e.payload[0], position: new PhysicalPosition(e.payload[1], e.payload[2]) })
+      })
+      cleanupFns.push(onEnter)
+
+      const onOver = await listen<[number, number]>('file-drop-over', e => {
+        if (disposed) return
+        handleTauriDragDropEvent({ type: 'over', position: new PhysicalPosition(e.payload[0], e.payload[1]) })
+      })
+      cleanupFns.push(onOver)
+
+      const onDrop = await listen<[string[], number, number]>('file-drop-drop', e => {
+        if (disposed) return
+        handleTauriDragDropEvent({ type: 'drop', paths: e.payload[0], position: new PhysicalPosition(e.payload[1], e.payload[2]) })
+      })
+      cleanupFns.push(onDrop)
+
+      const onLeave = await listen<void>('file-drop-leave', () => {
+        if (disposed) return
+        handleTauriDragDropEvent({ type: 'leave' })
+      })
+      cleanupFns.push(onLeave)
+    })
+
+    return () => {
+      disposed = true
+      cleanupFns.forEach(fn => fn())
+    }
+  }, [handleTauriDragDropEvent])
+
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault()
