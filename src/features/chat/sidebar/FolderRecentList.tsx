@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ApiSession } from '../../../api'
 import {
@@ -6,6 +6,7 @@ import {
   FolderOpenIcon,
   GitBranchIcon,
   GripVerticalIcon,
+  PinIcon,
   SpinnerIcon,
   CheckIcon,
   ChevronDownIcon,
@@ -19,6 +20,7 @@ import { getDirectoryName, isSameDirectory, normalizeToForwardSlash } from '../.
 import { useLayoutStore } from '../../../store'
 import { useBusySessions } from '../../../store/activeSessionStore'
 import { useNotifications } from '../../../store/notificationStore'
+import { pinnedSessionsStore, type PinnedSessionEntry } from '../../../store/pinnedSessionsStore'
 import { SessionListItem } from '../../sessions'
 import { SessionChildrenSlot } from './SessionChildrenSlot'
 
@@ -48,6 +50,8 @@ interface FolderRecentListProps {
   inlineChildSessions?: Map<string, ApiSession[]>
   onSelectChildSession?: (session: ApiSession) => void
   workspaceDirectoriesByProjectId?: Map<string, string[]>
+  pinnedSessions?: ApiSession[]
+  unavailablePinnedEntries?: PinnedSessionEntry[]
   // ---- 编辑模式 ----
   isEditMode?: boolean
   selectedSessionIds?: Set<string>
@@ -419,6 +423,8 @@ export function FolderRecentList({
   inlineChildSessions,
   onSelectChildSession,
   workspaceDirectoriesByProjectId,
+  pinnedSessions = [],
+  unavailablePinnedEntries = [],
   isEditMode = false,
   selectedSessionIds,
   selectedProjectIds,
@@ -513,13 +519,31 @@ export function FolderRecentList({
   return (
     <>
       <div className="h-full overflow-y-auto custom-scrollbar px-1.5 py-1 select-none">
-        {projects.length === 0 ? (
+        {projects.length === 0 && pinnedSessions.length === 0 && unavailablePinnedEntries.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center text-text-400 opacity-70">
             <p className="text-[length:var(--fs-sm)] font-medium text-text-300">{t('sidebar.noProjectFoldersYet')}</p>
             <p className="mt-1 text-[length:var(--fs-xs)] text-text-400/70">{t('sidebar.addProjectDesc')}</p>
           </div>
         ) : (
           <div onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+            {(pinnedSessions.length > 0 || unavailablePinnedEntries.length > 0) && (
+              <PinnedFolderSection
+                sessions={pinnedSessions}
+                unavailableEntries={unavailablePinnedEntries}
+                selectedSessionId={selectedSessionId}
+                preferTouchUi={preferTouchUi}
+                showSessionDiffStats={sidebarFolderRecentsShowDiff}
+                onSelectSession={onSelectSession}
+                onRenameSession={onRenameSession}
+                onRequestDeleteSession={setPendingDelete}
+                expandedChildSessionIds={expandedChildSessionIds}
+                inlineChildSessions={inlineChildSessions}
+                onSelectChildSession={onSelectChildSession}
+                isEditMode={isEditMode}
+                selectedSessionIds={selectedSessionIds}
+                onToggleSessionSelection={onToggleSessionSelection}
+              />
+            )}
             {displayOrder.map(projectId => {
               const project = projectById.get(projectId)
               if (!project) return null
@@ -590,6 +614,128 @@ export function FolderRecentList({
 // ============================================
 // Folder Section
 // ============================================
+
+interface PinnedFolderSectionProps {
+  sessions: ApiSession[]
+  unavailableEntries: PinnedSessionEntry[]
+  selectedSessionId: string | null
+  preferTouchUi: boolean
+  showSessionDiffStats: boolean
+  onSelectSession: (session: ApiSession) => void
+  onRenameSession: (session: ApiSession, newTitle: string) => Promise<void>
+  onRequestDeleteSession: (pending: PendingDeleteSession) => void
+  expandedChildSessionIds?: Set<string>
+  inlineChildSessions?: Map<string, ApiSession[]>
+  onSelectChildSession?: (session: ApiSession) => void
+  isEditMode?: boolean
+  selectedSessionIds?: Set<string>
+  onToggleSessionSelection?: (sessionId: string, options?: { shiftKey?: boolean }) => void
+}
+
+function PinnedFolderSection({
+  sessions,
+  unavailableEntries,
+  selectedSessionId,
+  preferTouchUi,
+  showSessionDiffStats,
+  onSelectSession,
+  onRenameSession,
+  onRequestDeleteSession,
+  expandedChildSessionIds,
+  inlineChildSessions,
+  onSelectChildSession,
+  isEditMode,
+  selectedSessionIds,
+  onToggleSessionSelection,
+}: PinnedFolderSectionProps) {
+  const { t } = useTranslation(['commands', 'chat'])
+  const [isExpanded, setIsExpanded] = useState(true)
+
+  return (
+    <div className="relative transition-all duration-150 group/folder">
+      <div className="relative flex w-full items-center rounded-md hover:bg-bg-200/40 transition-colors duration-150 select-none">
+        <button
+          onClick={() => setIsExpanded(value => !value)}
+          className="flex flex-1 min-w-0 items-center gap-2 pl-2 pr-2 py-1.5 text-left cursor-default select-none"
+          title={t('sessions.pinned')}
+        >
+          <span className="size-5 shrink-0 flex items-center justify-center">
+            <PinIcon size={15} className="text-accent-main-100" />
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[length:var(--fs-sm)] font-medium text-text-300">
+            {t('sessions.pinned')}
+          </span>
+        </button>
+      </div>
+
+      <ExpandableSection show={isExpanded}>
+        <div onTouchStart={e => e.stopPropagation()}>
+          {sessions.map(session => (
+            <div key={session.id}>
+              <SessionListItem
+                session={session}
+                isSelected={session.id === selectedSessionId}
+                onSelect={() => onSelectSession(session)}
+                onRename={newTitle => onRenameSession(session, newTitle)}
+                onDelete={() => onRequestDeleteSession({ session, removeLocal: () => {} })}
+                preferTouchUi={preferTouchUi}
+                density="minimal"
+                showStats={showSessionDiffStats}
+                showDirectory={false}
+                isEditMode={isEditMode}
+                isChecked={selectedSessionIds?.has(session.id)}
+                onToggleCheck={
+                  onToggleSessionSelection ? options => onToggleSessionSelection(session.id, options) : undefined
+                }
+              />
+              {onSelectChildSession &&
+                (expandedChildSessionIds?.has(session.id) || inlineChildSessions?.has(session.id)) && (
+                  <SessionChildrenSlot
+                    parentSession={session}
+                    selectedSessionId={selectedSessionId}
+                    fetchAll={expandedChildSessionIds?.has(session.id)}
+                    children={inlineChildSessions?.get(session.id)}
+                    onSelect={onSelectChildSession}
+                    isEditMode={isEditMode}
+                    selectedSessionIds={selectedSessionIds}
+                    onToggleSessionSelection={onToggleSessionSelection}
+                  />
+                )}
+            </div>
+          ))}
+          {unavailableEntries.map(entry => (
+            <UnavailablePinnedSessionItem key={entry.sessionId} entry={entry} />
+          ))}
+        </div>
+      </ExpandableSection>
+    </div>
+  )
+}
+
+function UnavailablePinnedSessionItem({ entry }: { entry: PinnedSessionEntry }) {
+  const { t } = useTranslation(['commands'])
+  return (
+    <div className="group relative flex items-start pl-[6px] pr-3 py-1.5 rounded-md border border-transparent opacity-75">
+      <div className="flex-1 min-w-0 mr-1 group-hover:mr-7 transition-[margin] duration-200">
+        <p className="text-[length:var(--fs-sm)] truncate font-medium text-text-300" title={entry.title}>
+          {entry.title || entry.sessionId.slice(0, 12) + '...'}
+        </p>
+        <div className="flex items-center mt-1 h-4 text-[length:var(--fs-xxs)] text-text-400 gap-1 overflow-hidden">
+          <span className="shrink-0 opacity-60">{t('sessions.unavailable')}</span>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => pinnedSessionsStore.unpin(entry.sessionId)}
+        className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded text-accent-main-100 hover:text-accent-main-200 opacity-0 group-hover:opacity-100 transition-colors"
+        title={t('sessions.unpin')}
+        aria-label={t('sessions.unpin')}
+      >
+        <PinIcon className="w-3 h-3" />
+      </button>
+    </div>
+  )
+}
 
 interface FolderRecentSectionProps {
   project: FolderRecentProject
@@ -682,6 +828,15 @@ function FolderRecentSection({
     pageSize: DIRECTORY_PAGE_SIZE,
     enabled: hasActivated && !hasWorkspaceTree,
   })
+  const pinnedEntries = useSyncExternalStore(
+    pinnedSessionsStore.subscribe,
+    pinnedSessionsStore.getSnapshot,
+    pinnedSessionsStore.getSnapshot,
+  )
+  const visibleSessions = useMemo(() => {
+    const pinnedSet = new Set(pinnedEntries.map(entry => entry.sessionId))
+    return sessions.filter(session => !pinnedSet.has(session.id))
+  }, [pinnedEntries, sessions])
 
   const handleRename = useCallback(
     async (sessionId: string, newTitle: string) => {
@@ -820,13 +975,13 @@ function FolderRecentSection({
                   draggableWorkspaceDirectories={draggableWorkspaceDirectories}
                   onReorderWorkspace={onReorderWorkspace}
                 />
-              ) : sessions.length === 0 ? (
+              ) : visibleSessions.length === 0 ? (
                 <div className="px-2 py-1 text-[length:var(--fs-xs)] text-text-400/50">
                   {t('sidebar.noChatsInFolder')}
                 </div>
               ) : (
                 <>
-                  {sessions.map(session => (
+                  {visibleSessions.map(session => (
                     <div key={session.id}>
                       <SessionListItem
                         session={session}

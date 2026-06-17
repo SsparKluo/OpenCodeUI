@@ -7,7 +7,6 @@ import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 import { ActiveSessionItem } from './ActiveSessionItem'
 import { NotificationItem } from './NotificationItem'
 import { SidebarFooter } from './SidebarFooter'
-import { PinnedBar } from './PinnedBar'
 import { buildActiveSessionTree } from './activeSessionTree'
 import { getParentPath } from './sidebarUtils'
 import {
@@ -280,19 +279,14 @@ export function SidePanel({
   const { sessions, isLoading, isLoadingMore, hasMore, search, setSearch, loadMore, deleteSession, refresh } =
     useSessionContext()
 
-  // 过滤已置顶对话，避免在正常列表中冗余显示
   const pinnedEntries = useSyncExternalStore(
     pinnedSessionsStore.subscribe,
     pinnedSessionsStore.getSnapshot,
     pinnedSessionsStore.getSnapshot,
   )
-  const visibleSessions = useMemo(() => {
-    const pinnedSet = new Set(pinnedEntries.map(e => e.sessionId))
-    return sessions.filter(s => !pinnedSet.has(s.id))
-  }, [sessions, pinnedEntries])
-
   // 缓存通过 API 拉取的 session 数据（sessions 列表中不存在的）
   const [fetchedSessions, setFetchedSessions] = useState<Record<string, ApiSession>>({})
+  const [unavailablePinnedSessionIds, setUnavailablePinnedSessionIds] = useState<Set<string>>(() => new Set())
 
   // 为 active sessions 构建 sessionId -> ApiSession 的查找表
   const sessionLookup = useMemo(() => {
@@ -309,15 +303,56 @@ export function SidePanel({
     return map
   }, [sessions, fetchedSessions])
 
-  // 异步拉取不在 lookup 中的 active/notification/selected session
+  const orderedSessions = useMemo(() => {
+    const pinnedSet = new Set(pinnedEntries.map(e => e.sessionId))
+    const pinned = pinnedEntries
+      .map(entry => sessionLookup.get(entry.sessionId))
+      .filter((session): session is ApiSession => Boolean(session))
+    const rest = sessions.filter(s => !pinnedSet.has(s.id))
+    return [...pinned, ...rest]
+  }, [pinnedEntries, sessionLookup, sessions])
+  const pinnedDividerAfterIds = useMemo(() => {
+    const lastPinned = pinnedEntries
+      .map(entry => sessionLookup.get(entry.sessionId))
+      .filter((session): session is ApiSession => Boolean(session))
+      .at(-1)
+    if (!lastPinned) return undefined
+    const pinnedSet = new Set(pinnedEntries.map(e => e.sessionId))
+    return sessions.some(s => !pinnedSet.has(s.id)) ? new Set([lastPinned.id]) : undefined
+  }, [pinnedEntries, sessionLookup, sessions])
+  const resolvedPinnedSessions = useMemo(
+    () =>
+      pinnedEntries
+        .map(entry => sessionLookup.get(entry.sessionId))
+        .filter((session): session is ApiSession => Boolean(session)),
+    [pinnedEntries, sessionLookup],
+  )
+  const unavailablePinnedEntries = useMemo(
+    () => pinnedEntries.filter(entry => unavailablePinnedSessionIds.has(entry.sessionId) && !sessionLookup.has(entry.sessionId)),
+    [pinnedEntries, sessionLookup, unavailablePinnedSessionIds],
+  )
+
+  // 异步拉取不在 lookup 中的 active/notification/pinned/selected session
   useEffect(() => {
-    const allNeeded = [
+    const allNeeded: Array<{ sessionId: string; directory?: string; pinned?: boolean }> = [
       ...busySessions.map(e => ({ sessionId: e.sessionId, directory: e.directory })),
       ...notifications.map(e => ({ sessionId: e.sessionId, directory: e.directory })),
+      ...pinnedEntries.map(e => ({ sessionId: e.sessionId, directory: e.directory, pinned: true })),
     ]
     if (selectedSessionId && !sessionLookup.has(selectedSessionId)) {
       allNeeded.push({ sessionId: selectedSessionId, directory: currentDirectory || '' })
     }
+
+    setUnavailablePinnedSessionIds(prev => {
+      if (prev.size === 0) return prev
+      let changed = false
+      const next = new Set(prev)
+      for (const entry of pinnedEntries) {
+        if (sessionLookup.has(entry.sessionId) && next.delete(entry.sessionId)) changed = true
+      }
+      return changed ? next : prev
+    })
+
     const missing = allNeeded.filter(entry => !sessionLookup.has(entry.sessionId))
     if (missing.length === 0) return
 
@@ -328,9 +363,28 @@ export function SidePanel({
         missing.map(async entry => {
           try {
             const session = await getSession(entry.sessionId, entry.directory)
-            if (!cancelled) results[session.id] = session
+            if (!cancelled) {
+              results[session.id] = session
+              if (entry.pinned) {
+                pinnedSessionsStore.update(session.id, {
+                  directory: session.directory || entry.directory,
+                  title: session.title || session.id.slice(0, 12) + '...',
+                })
+                setUnavailablePinnedSessionIds(prev => {
+                  if (!prev.has(session.id)) return prev
+                  const next = new Set(prev)
+                  next.delete(session.id)
+                  return next
+                })
+              }
+            }
           } catch {
-            /* ignore */
+            if (!cancelled && entry.pinned) {
+              setUnavailablePinnedSessionIds(prev => {
+                if (prev.has(entry.sessionId)) return prev
+                return new Set(prev).add(entry.sessionId)
+              })
+            }
           }
         }),
       )
@@ -342,7 +396,7 @@ export function SidePanel({
     return () => {
       cancelled = true
     }
-  }, [busySessions, notifications, sessionLookup, selectedSessionId, currentDirectory])
+  }, [busySessions, notifications, pinnedEntries, sessionLookup, selectedSessionId, currentDirectory])
 
   // ---- 子 session 展示数据 ----
   const rootSessionIds = useMemo(() => new Set(sessions.map(s => s.id)), [sessions])
@@ -682,6 +736,7 @@ export function SidePanel({
     async (sessionId: string, newTitle: string) => {
       try {
         await updateSession(sessionId, { title: newTitle }, currentDirectory)
+        pinnedSessionsStore.update(sessionId, { title: newTitle })
         refresh()
       } catch (e) {
         uiErrorHandler('rename session', e)
@@ -705,6 +760,7 @@ export function SidePanel({
     async (session: ApiSession, newTitle: string) => {
       try {
         await updateSession(session.id, { title: newTitle }, session.directory)
+        pinnedSessionsStore.update(session.id, { title: newTitle })
         if (!currentDirectory || isSameDirectory(currentDirectory, session.directory)) {
           await refresh()
         }
@@ -718,6 +774,7 @@ export function SidePanel({
   const handleDeleteFolderSession = useCallback(
     async (session: ApiSession) => {
       await apiDeleteSession(session.id, session.directory)
+      pinnedSessionsStore.unpin(session.id)
 
       if (!currentDirectory || isSameDirectory(currentDirectory, session.directory)) {
         await refresh()
@@ -749,6 +806,7 @@ export function SidePanel({
           } else {
             await apiDeleteSession(id, currentDirectory)
           }
+          pinnedSessionsStore.unpin(id)
         } catch (e) {
           uiErrorHandler('batch delete session', e)
         }
@@ -1134,27 +1192,22 @@ export function SidePanel({
           {/* Recents Tab */}
           {sidebarTab === 'recents' && (
             <div ref={recentsSelectionRootRef} className="flex-1 overflow-hidden">
-              <PinnedBar
-                sessionLookup={sessionLookup}
-                selectedSessionId={selectedSessionId}
-                onSelectSession={(s) => handleSelect(s)}
-                onRenameSession={(sessionId, newTitle) => {
-                  const s = sessionLookup.get(sessionId)
-                  if (s) { handleRenameFolderSession(s, newTitle) }
-                }}
-              />
               {sidebarFolderRecents && !search ? (
                 <FolderRecentList
                   projects={folderProjects}
                   {...commonFolderRecentListProps}
                   onReorderProject={handleReorderProjectGroup}
                   workspaceDirectoriesByProjectId={workspaceDirectoriesByProjectId}
+                  pinnedSessions={resolvedPinnedSessions}
+                  unavailablePinnedEntries={unavailablePinnedEntries}
                 />
               ) : shouldRenderWorkspaceTreeOnly ? (
                 <FolderRecentList
                   projects={currentProjectTreeProjects}
                   {...commonFolderRecentListProps}
                   onReorderProject={reorderDirectories}
+                  pinnedSessions={resolvedPinnedSessions}
+                  unavailablePinnedEntries={unavailablePinnedEntries}
                 />
               ) : shouldWaitForWorkspaceResolution ? (
                 <div className="flex h-full items-center justify-center text-text-400/70">
@@ -1162,7 +1215,7 @@ export function SidePanel({
                 </div>
               ) : (
                 <SessionList
-                  sessions={visibleSessions}
+                  sessions={orderedSessions}
                   selectedId={selectedSessionId}
                   isLoading={isLoading}
                   isLoadingMore={isLoadingMore}
@@ -1182,6 +1235,7 @@ export function SidePanel({
                   expandedChildSessionIds={expandedChildSessionIds}
                   inlineChildSessions={inlineChildSessions}
                   onSelectChildSession={handleSelectActive}
+                  pinnedDividerAfterIds={pinnedDividerAfterIds}
                   isEditMode={isEditMode}
                   selectedSessionIds={selectedSessionIds}
                   onToggleSessionSelection={toggleSessionSelection}

@@ -68,6 +68,7 @@
     "noChatsYet": "No chats yet",
     "untitledChat": "Untitled Chat",
     "rename": "Rename",
+    "pinned": "Pinned",
     "switchProject": "Switch Project",
     "failedToLoadProjects": "Failed to load projects",
     "noOtherProjects": "No other projects",
@@ -83,7 +84,8 @@
       "older": "Older"
     },
     "pin": "Pin",
-    "unpin": "Unpin"
+    "unpin": "Unpin",
+    "unavailable": "Unavailable"
   },
   "slashCommand": {
     "commands": "Commands",

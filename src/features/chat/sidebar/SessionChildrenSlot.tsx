@@ -8,6 +8,7 @@ import { getSessionChildren, updateSession, deleteSession as apiDeleteSession, t
 import { SpinnerIcon } from '../../../components/Icons'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 import { useInputCapabilities } from '../../../hooks/useInputCapabilities'
+import { pinnedSessionsStore } from '../../../store/pinnedSessionsStore'
 import { uiErrorHandler } from '../../../utils'
 import { SessionListItem } from '../../sessions'
 
@@ -73,6 +74,7 @@ export function SessionChildrenSlot({
   const handleRename = useCallback(async (childId: string, newTitle: string) => {
     try {
       await updateSession(childId, { title: newTitle })
+      pinnedSessionsStore.update(childId, { title: newTitle })
       setFetched(prev => prev.map(s => (s.id === childId ? { ...s, title: newTitle } : s)))
     } catch (e) {
       uiErrorHandler('rename session', e)
@@ -85,6 +87,7 @@ export function SessionChildrenSlot({
     setDeleteConfirm({ isOpen: false, sessionId: null })
     try {
       await apiDeleteSession(id)
+      pinnedSessionsStore.unpin(id)
       setFetched(prev => prev.filter(s => s.id !== id))
       if (selectedSessionId === id) onDeleteSelected?.()
     } catch (e) {

@@ -68,6 +68,7 @@
     "noChatsYet": "暂无对话",
     "untitledChat": "未命名对话",
     "rename": "重命名",
+    "pinned": "置顶",
     "switchProject": "切换项目",
     "failedToLoadProjects": "加载项目失败",
     "noOtherProjects": "没有其他项目",
@@ -83,7 +84,8 @@
       "older": "更早"
     },
     "pin": "置顶",
-    "unpin": "取消置顶"
+    "unpin": "取消置顶",
+    "unavailable": "不可用"
   },
   "slashCommand": {
     "commands": "命令",

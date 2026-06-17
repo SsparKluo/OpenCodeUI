@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState, useMemo, type PointerEvent } from 'react'
+import { useRef, useEffect, useCallback, useState, useMemo, useSyncExternalStore, type PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SearchIcon, PencilIcon, TrashIcon, ComposeIcon, CheckIcon, PinIcon } from '../../components/Icons'
 import { formatRelativeTime } from '../../utils/dateUtils'
@@ -34,6 +34,7 @@ interface SessionListProps {
   /** 按父 ID 分组的直接挂出来的子 session */
   inlineChildSessions?: Map<string, ApiSession[]>
   onSelectChildSession?: (session: ApiSession) => void
+  pinnedDividerAfterIds?: Set<string>
   // ---- 编辑模式 ----
   isEditMode?: boolean
   selectedSessionIds?: Set<string>
@@ -66,6 +67,7 @@ export function SessionList({
   expandedChildSessionIds,
   inlineChildSessions,
   onSelectChildSession,
+  pinnedDividerAfterIds,
   isEditMode = false,
   selectedSessionIds,
   onToggleSessionSelection,
@@ -242,6 +244,7 @@ export function SessionList({
               const inlineChildren = inlineChildSessions?.get(session.id)
               const shouldFetchAll = expandedChildSessionIds?.has(session.id)
               const hasChildren = shouldFetchAll || (inlineChildren && inlineChildren.length > 0)
+              const showPinnedDivider = pinnedDividerAfterIds?.has(session.id)
               return (
                 <div key={session.id}>
                   <SessionListItem
@@ -272,6 +275,7 @@ export function SessionList({
                       onToggleSessionSelection={onToggleSessionSelection}
                     />
                   )}
+                  {showPinnedDivider && <div className="mx-3 my-1.5 h-px bg-border-200/45" />}
                 </div>
               )
             })}
@@ -366,6 +370,15 @@ export function SessionListItem({
     (session.summary.additions > 0 || session.summary.deletions > 0 || session.summary.files > 0),
   )
   const itemPaddingClass = isCompact ? (isEditMode ? 'px-3 py-2' : 'pl-[6px] pr-3 py-2') : 'px-3 py-2.5'
+  const pinnedEntries = useSyncExternalStore(
+    pinnedSessionsStore.subscribe,
+    pinnedSessionsStore.getSnapshot,
+    pinnedSessionsStore.getSnapshot,
+  )
+  const isPinned = useMemo(
+    () => pinnedEntries.some(entry => entry.sessionId === session.id),
+    [pinnedEntries, session.id],
+  )
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -383,13 +396,13 @@ export function SessionListItem({
   const handlePin = (e: React.MouseEvent) => {
     e.stopPropagation()
     ;(e.currentTarget as HTMLElement).blur()
-    if (pinnedSessionsStore.isPinned(session.id)) {
+    if (isPinned) {
       pinnedSessionsStore.unpin(session.id)
     } else {
       pinnedSessionsStore.pin({
         sessionId: session.id,
         directory: session.directory || '',
-        title: session.title || session.id.slice(0, 12) + '...',
+        title: session.title || t('sessions.untitledChat'),
       })
     }
   }
@@ -635,7 +648,7 @@ export function SessionListItem({
           >
             <div
               className={`flex min-w-0 flex-1 items-center gap-1.5 transition-[padding] duration-200 ${
-              showActions ? 'pr-20' : 'pr-0 group-hover:pr-20'
+                showActions ? 'pr-20' : 'pr-0 group-hover:pr-20'
               }`}
             >
               {/* 标题 */}
@@ -679,23 +692,23 @@ export function SessionListItem({
                 : 'opacity-0 group-hover:opacity-100 peer-focus-visible:opacity-100 focus-within:opacity-100 pointer-events-none group-hover:pointer-events-auto peer-focus-visible:pointer-events-auto focus-within:pointer-events-auto'
             }`}
           >
-          <button
-            type="button"
-            onClick={handlePin}
-            className={`p-1 rounded transition-colors focus-visible:ring-1 focus-visible:ring-border-200 focus-visible:ring-inset ${
-              pinnedSessionsStore.isPinned(session.id)
-                ? 'text-accent-main-100 hover:text-accent-main-200'
-                : 'text-text-500 hover:text-text-200 hover:bg-bg-300'
-            }`}
-            title={pinnedSessionsStore.isPinned(session.id) ? t('sessions.unpin') : t('sessions.pin')}
-            aria-label={pinnedSessionsStore.isPinned(session.id) ? t('sessions.unpin') : t('sessions.pin')}
-          >
-            <PinIcon className="w-3 h-3" />
-          </button>
-          <button
-            type="button"
-            onClick={handleStartEdit}
-            className="p-1 rounded hover:bg-bg-300 text-text-500 hover:text-text-200 transition-colors focus-visible:ring-1 focus-visible:ring-border-200 focus-visible:ring-inset"
+            <button
+              type="button"
+              onClick={handlePin}
+              className={`p-1 rounded transition-colors focus-visible:ring-1 focus-visible:ring-border-200 focus-visible:ring-inset ${
+                isPinned
+                  ? 'text-accent-main-100 hover:text-accent-main-200'
+                  : 'text-text-500 hover:text-text-200 hover:bg-bg-300'
+              }`}
+              title={isPinned ? t('sessions.unpin') : t('sessions.pin')}
+              aria-label={isPinned ? t('sessions.unpin') : t('sessions.pin')}
+            >
+              <PinIcon className="w-3 h-3" />
+            </button>
+            <button
+              type="button"
+              onClick={handleStartEdit}
+              className="p-1 rounded hover:bg-bg-300 text-text-500 hover:text-text-200 transition-colors focus-visible:ring-1 focus-visible:ring-border-200 focus-visible:ring-inset"
               title={t('sessions.rename')}
               aria-label={t('sessions.rename')}
             >
@@ -893,12 +906,12 @@ export function SessionListItem({
             type="button"
             onClick={handlePin}
             className={`p-1.5 rounded-md transition-colors focus-visible:ring-1 focus-visible:ring-border-200 focus-visible:ring-inset ${
-              pinnedSessionsStore.isPinned(session.id)
+              isPinned
                 ? 'text-accent-main-100 hover:text-accent-main-200'
                 : 'text-text-400 hover:text-text-100 hover:bg-bg-300'
             }`}
-            title={pinnedSessionsStore.isPinned(session.id) ? t('sessions.unpin') : t('sessions.pin')}
-            aria-label={pinnedSessionsStore.isPinned(session.id) ? t('sessions.unpin') : t('sessions.pin')}
+            title={isPinned ? t('sessions.unpin') : t('sessions.pin')}
+            aria-label={isPinned ? t('sessions.unpin') : t('sessions.pin')}
           >
             <PinIcon className="w-3.5 h-3.5" />
           </button>

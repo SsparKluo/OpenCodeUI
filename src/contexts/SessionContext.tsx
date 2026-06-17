@@ -9,6 +9,7 @@ import {
 } from '../api'
 import { todoStore } from '../store/todoStore'
 import { serverStore } from '../store/serverStore'
+import { pinnedSessionsStore } from '../store/pinnedSessionsStore'
 import { useDirectory } from './useDirectory'
 import { sessionErrorHandler, normalizeToForwardSlash, isSameDirectory, autoDetectPathStyle } from '../utils'
 import { clearSessionRuntimeState } from '../utils/sessionLifecycle'
@@ -239,6 +240,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       const targetDir = normalizeToForwardSlash(currentDirectory) || undefined
       await apiDeleteSession(id, targetDir)
+      pinnedSessionsStore.unpin(id)
       clearSessionRuntimeState(id)
       setSessions(prev => prev.filter(s => s.id !== id))
     },

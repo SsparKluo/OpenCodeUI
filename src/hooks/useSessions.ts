@@ -8,6 +8,7 @@ import {
   type SessionListParams,
 } from '../api'
 import { serverStore } from '../store/serverStore'
+import { pinnedSessionsStore } from '../store/pinnedSessionsStore'
 import { autoDetectPathStyle, isSameDirectory } from '../utils'
 
 interface UseSessionsOptions {
@@ -278,6 +279,7 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
   const remove = useCallback(
     async (sessionId: string) => {
       await deleteSession(sessionId, normalizedDirectory)
+      pinnedSessionsStore.unpin(sessionId)
       setSessions(prev => prev.filter(s => s.id !== sessionId))
     },
     [normalizedDirectory],

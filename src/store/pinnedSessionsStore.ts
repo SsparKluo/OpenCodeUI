@@ -36,17 +36,35 @@ class PinnedSessionsStore {
     }
   }
 
-  getAll(): PinnedSessionEntry[] {
-    return this.entries
-  }
-
   isPinned(sessionId: string): boolean {
     return this.entries.some(e => e.sessionId === sessionId)
   }
 
   pin(entry: PinnedSessionEntry) {
-    if (this.entries.some(e => e.sessionId === entry.sessionId)) return
+    const existingIndex = this.entries.findIndex(e => e.sessionId === entry.sessionId)
+    if (existingIndex !== -1) {
+      const existing = this.entries[existingIndex]
+      if (existing.directory === entry.directory && existing.title === entry.title) return
+      this.entries = [
+        ...this.entries.slice(0, existingIndex),
+        entry,
+        ...this.entries.slice(existingIndex + 1),
+      ]
+      this.persist()
+      this.emit()
+      return
+    }
     this.entries = [...this.entries, entry]
+    this.persist()
+    this.emit()
+  }
+
+  update(sessionId: string, patch: Partial<Omit<PinnedSessionEntry, 'sessionId'>>) {
+    const index = this.entries.findIndex(e => e.sessionId === sessionId)
+    if (index === -1) return
+    const next = { ...this.entries[index], ...patch }
+    if (next.directory === this.entries[index].directory && next.title === this.entries[index].title) return
+    this.entries = [...this.entries.slice(0, index), next, ...this.entries.slice(index + 1)]
     this.persist()
     this.emit()
   }
@@ -59,18 +77,12 @@ class PinnedSessionsStore {
     this.emit()
   }
 
-  /** 拖拽排序：移动条目到指定位置 */
-  reorder(fromIndex: number, toIndex: number) {
-    const copy = [...this.entries]
-    const [moved] = copy.splice(fromIndex, 1)
-    copy.splice(toIndex, 0, moved)
-    this.entries = copy
-    this.persist()
-    this.emit()
-  }
-
   private persist() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.entries))
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.entries))
+    } catch {
+      /* ignore persistence failures */
+    }
   }
 
   subscribe = (fn: () => void): (() => void) => {

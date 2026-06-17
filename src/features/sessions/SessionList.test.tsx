@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiSession } from '../../api'
+import { pinnedSessionsStore } from '../../store/pinnedSessionsStore'
 import { SessionListItem } from './SessionList'
 
 const { useSessionActiveEntryMock, useHasUnreadCompletedNotificationMock, markSessionNotificationsReadMock } = vi.hoisted(() => ({
@@ -44,6 +45,7 @@ describe('SessionListItem', () => {
     useSessionActiveEntryMock.mockReturnValue(null)
     useHasUnreadCompletedNotificationMock.mockReturnValue(false)
     markSessionNotificationsReadMock.mockReset()
+    pinnedSessionsStore.unpin('session-1')
   })
 
   it('renders the session row as a semantic button and selects it', () => {
@@ -88,6 +90,27 @@ describe('SessionListItem', () => {
     fireEvent.click(sessionRow!)
 
     expect(onSelect).toHaveBeenCalledTimes(1)
+  })
+
+  it('pins and unpins a session from the row action', () => {
+    render(
+      <SessionListItem
+        session={session}
+        isSelected={false}
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+        onRename={vi.fn()}
+        preferTouchUi={false}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /pin/i }))
+
+    expect(pinnedSessionsStore.isPinned('session-1')).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: /unpin/i }))
+
+    expect(pinnedSessionsStore.isPinned('session-1')).toBe(false)
   })
 
 })
