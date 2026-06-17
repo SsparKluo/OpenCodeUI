@@ -783,7 +783,6 @@ body {
   transition:
     opacity 180ms cubic-bezier(0.4, 0, 0.2, 1),
     transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform, opacity;
 }
 
 /* Floating actions contain backdrop-blur chips; avoid transform layers here so blur survives in WebView/Tauri. */

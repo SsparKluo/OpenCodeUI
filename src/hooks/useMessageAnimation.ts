@@ -75,8 +75,14 @@ export function useMessageAnimation() {
             inputBoxEl.style.transform = 'scale(1.005)'
 
             safeTimeout(() => {
-              inputBoxEl.style.boxShadow = ''
+              // 先禁掉 CSS transition，再清 transform，防止第二次 260ms 动画
+              inputBoxEl.style.transition = 'none'
               inputBoxEl.style.transform = ''
+              inputBoxEl.style.boxShadow = ''
+              // 下一帧恢复 CSS transition
+              requestAnimationFrame(() => {
+                inputBoxEl.style.transition = ''
+              })
             }, 200)
           }, 100)
         }
@@ -100,8 +106,12 @@ export function useMessageAnimation() {
         inputBoxEl.style.boxShadow = '0 0 0 1px hsl(var(--accent-main-100) / 0.2)'
 
         safeTimeout(() => {
+          inputBoxEl.style.transition = 'none'
           inputBoxEl.style.transform = ''
           inputBoxEl.style.boxShadow = ''
+          requestAnimationFrame(() => {
+            inputBoxEl.style.transition = ''
+          })
         }, 180)
       }
 
