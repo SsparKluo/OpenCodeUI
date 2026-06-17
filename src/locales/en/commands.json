@@ -81,7 +81,9 @@
       "previous7Days": "Previous 7 Days",
       "previous30Days": "Previous 30 Days",
       "older": "Older"
-    }
+    },
+    "pin": "Pin",
+    "unpin": "Unpin"
   },
   "slashCommand": {
     "commands": "Commands",

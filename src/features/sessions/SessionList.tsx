@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useState, useMemo, type PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { SearchIcon, PencilIcon, TrashIcon, ComposeIcon, CheckIcon } from '../../components/Icons'
+import { SearchIcon, PencilIcon, TrashIcon, ComposeIcon, CheckIcon, PinIcon } from '../../components/Icons'
 import { formatRelativeTime } from '../../utils/dateUtils'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useInputCapabilities } from '../../hooks/useInputCapabilities'
@@ -9,6 +9,7 @@ import { notificationStore, useHasUnreadCompletedNotification } from '../../stor
 import { SessionChildrenSlot } from '../chat/sidebar/SessionChildrenSlot'
 import type { ApiSession } from '../../api'
 import { startInternalDrag } from '../../lib/internalDragCore'
+import { pinnedSessionsStore } from '../../store/pinnedSessionsStore'
 
 interface SessionListProps {
   sessions: ApiSession[]
@@ -379,6 +380,20 @@ export function SessionListItem({
     setIsEditing(true)
   }
 
+  const handlePin = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    ;(e.currentTarget as HTMLElement).blur()
+    if (pinnedSessionsStore.isPinned(session.id)) {
+      pinnedSessionsStore.unpin(session.id)
+    } else {
+      pinnedSessionsStore.pin({
+        sessionId: session.id,
+        directory: session.directory || '',
+        title: session.title || session.id.slice(0, 12) + '...',
+      })
+    }
+  }
+
   const handleSaveEdit = () => {
     const trimmed = editTitle.trim()
     if (trimmed && trimmed !== session.title) {
@@ -620,7 +635,7 @@ export function SessionListItem({
           >
             <div
               className={`flex min-w-0 flex-1 items-center gap-1.5 transition-[padding] duration-200 ${
-                showActions ? 'pr-12' : 'pr-0 group-hover:pr-12'
+              showActions ? 'pr-20' : 'pr-0 group-hover:pr-20'
               }`}
             >
               {/* 标题 */}
@@ -664,10 +679,23 @@ export function SessionListItem({
                 : 'opacity-0 group-hover:opacity-100 peer-focus-visible:opacity-100 focus-within:opacity-100 pointer-events-none group-hover:pointer-events-auto peer-focus-visible:pointer-events-auto focus-within:pointer-events-auto'
             }`}
           >
-            <button
-              type="button"
-              onClick={handleStartEdit}
-              className="p-1 rounded hover:bg-bg-300 text-text-500 hover:text-text-200 transition-colors focus-visible:ring-1 focus-visible:ring-border-200 focus-visible:ring-inset"
+          <button
+            type="button"
+            onClick={handlePin}
+            className={`p-1 rounded transition-colors focus-visible:ring-1 focus-visible:ring-border-200 focus-visible:ring-inset ${
+              pinnedSessionsStore.isPinned(session.id)
+                ? 'text-accent-main-100 hover:text-accent-main-200'
+                : 'text-text-500 hover:text-text-200 hover:bg-bg-300'
+            }`}
+            title={pinnedSessionsStore.isPinned(session.id) ? t('sessions.unpin') : t('sessions.pin')}
+            aria-label={pinnedSessionsStore.isPinned(session.id) ? t('sessions.unpin') : t('sessions.pin')}
+          >
+            <PinIcon className="w-3 h-3" />
+          </button>
+          <button
+            type="button"
+            onClick={handleStartEdit}
+            className="p-1 rounded hover:bg-bg-300 text-text-500 hover:text-text-200 transition-colors focus-visible:ring-1 focus-visible:ring-border-200 focus-visible:ring-inset"
               title={t('sessions.rename')}
               aria-label={t('sessions.rename')}
             >
@@ -785,7 +813,7 @@ export function SessionListItem({
           className="peer flex min-w-0 flex-1 items-start bg-transparent border-none p-0 text-left select-none"
         >
           <div
-            className={`flex-1 min-w-0 transition-[padding] duration-200 ${showActions ? 'pr-[60px]' : 'pr-1 group-hover:pr-[60px]'}`}
+            className={`flex-1 min-w-0 transition-[padding] duration-200 ${showActions ? 'pr-[88px]' : 'pr-1 group-hover:pr-[88px]'}`}
           >
             {/* Row 1: Title */}
             <p
@@ -861,6 +889,19 @@ export function SessionListItem({
               : 'opacity-0 group-hover:opacity-100 peer-focus-visible:opacity-100 focus-within:opacity-100 pointer-events-none group-hover:pointer-events-auto peer-focus-visible:pointer-events-auto focus-within:pointer-events-auto'
           }`}
         >
+          <button
+            type="button"
+            onClick={handlePin}
+            className={`p-1.5 rounded-md transition-colors focus-visible:ring-1 focus-visible:ring-border-200 focus-visible:ring-inset ${
+              pinnedSessionsStore.isPinned(session.id)
+                ? 'text-accent-main-100 hover:text-accent-main-200'
+                : 'text-text-400 hover:text-text-100 hover:bg-bg-300'
+            }`}
+            title={pinnedSessionsStore.isPinned(session.id) ? t('sessions.unpin') : t('sessions.pin')}
+            aria-label={pinnedSessionsStore.isPinned(session.id) ? t('sessions.unpin') : t('sessions.pin')}
+          >
+            <PinIcon className="w-3.5 h-3.5" />
+          </button>
           <button
             type="button"
             onClick={handleStartEdit}

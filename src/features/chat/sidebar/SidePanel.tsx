@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 import { ActiveSessionItem } from './ActiveSessionItem'
 import { NotificationItem } from './NotificationItem'
 import { SidebarFooter } from './SidebarFooter'
+import { PinnedBar } from './PinnedBar'
 import { buildActiveSessionTree } from './activeSessionTree'
 import { getParentPath } from './sidebarUtils'
 import {
@@ -33,6 +34,7 @@ import { useSessionContext } from '../../../contexts/useSessionContext'
 import { useLayoutStore, useMessageStore, childSessionStore } from '../../../store'
 import { useBusySessions, useBusyCount } from '../../../store/activeSessionStore'
 import { notificationStore, useNotifications, useUnreadNotificationCount } from '../../../store/notificationStore'
+import { pinnedSessionsStore } from '../../../store/pinnedSessionsStore'
 import type { NotificationEntry } from '../../../store/notificationStore'
 import {
   updateSession,
@@ -277,6 +279,17 @@ export function SidePanel({
 
   const { sessions, isLoading, isLoadingMore, hasMore, search, setSearch, loadMore, deleteSession, refresh } =
     useSessionContext()
+
+  // 过滤已置顶对话，避免在正常列表中冗余显示
+  const pinnedEntries = useSyncExternalStore(
+    pinnedSessionsStore.subscribe,
+    pinnedSessionsStore.getSnapshot,
+    pinnedSessionsStore.getSnapshot,
+  )
+  const visibleSessions = useMemo(() => {
+    const pinnedSet = new Set(pinnedEntries.map(e => e.sessionId))
+    return sessions.filter(s => !pinnedSet.has(s.id))
+  }, [sessions, pinnedEntries])
 
   // 缓存通过 API 拉取的 session 数据（sessions 列表中不存在的）
   const [fetchedSessions, setFetchedSessions] = useState<Record<string, ApiSession>>({})
@@ -1121,6 +1134,15 @@ export function SidePanel({
           {/* Recents Tab */}
           {sidebarTab === 'recents' && (
             <div ref={recentsSelectionRootRef} className="flex-1 overflow-hidden">
+              <PinnedBar
+                sessionLookup={sessionLookup}
+                selectedSessionId={selectedSessionId}
+                onSelectSession={(s) => handleSelect(s)}
+                onRenameSession={(sessionId, newTitle) => {
+                  const s = sessionLookup.get(sessionId)
+                  if (s) { handleRenameFolderSession(s, newTitle) }
+                }}
+              />
               {sidebarFolderRecents && !search ? (
                 <FolderRecentList
                   projects={folderProjects}
@@ -1140,7 +1162,7 @@ export function SidePanel({
                 </div>
               ) : (
                 <SessionList
-                  sessions={sessions}
+                  sessions={visibleSessions}
                   selectedId={selectedSessionId}
                   isLoading={isLoading}
                   isLoadingMore={isLoadingMore}
@@ -1204,8 +1226,8 @@ export function SidePanel({
                           {t('common:clear')}
                         </button>
                       </div>
-                    </div>
-                  )}
+                  </div>
+                )}
 
                   {/* Notification history */}
                   {notifications.map((entry: NotificationEntry) => {
