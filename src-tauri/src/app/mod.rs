@@ -12,7 +12,7 @@ use bridge::BridgeState;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::Manager;
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 use tauri_plugin_decorum::WebviewWindowExt;
 
 // Desktop-only imports for service management
@@ -91,10 +91,37 @@ fn create_hidden_content_window(
     builder.visible(false).build()
 }
 
+/// macOS 红绿灯（关闭/最小化/最大化）相对窗口左上角的偏移。
+/// 注意：这里通过 decorum 的 `set_traffic_lights_inset` 应用，其内部定位算法与
+/// Tauri 原生 `trafficLightPosition` 不同，y 值需按与自定义标题栏的视觉对齐微调。
+#[cfg(target_os = "macos")]
+const TRAFFIC_LIGHT_INSET: (f32, f32) = (12.0, 14.0);
+
+/// 重新定位 macOS 红绿灯。
+/// macOS 在退出全屏后会把红绿灯重置回系统默认位置，
+/// 因此需要在退出全屏时重新应用偏移，保持与自定义标题栏垂直对齐。
+#[cfg(target_os = "macos")]
+fn reposition_traffic_lights(window: &tauri::WebviewWindow) {
+    let (x, y) = TRAFFIC_LIGHT_INSET;
+    let _ = window.set_traffic_lights_inset(x, y);
+}
+
+/// 记录每个窗口上一次的全屏状态（按 label），用于检测「退出全屏」这一跳变。
+#[cfg(target_os = "macos")]
+fn fullscreen_state() -> &'static std::sync::Mutex<std::collections::HashMap<String, bool>> {
+    static STATE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, bool>>> =
+        std::sync::OnceLock::new();
+    STATE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
 #[cfg(not(target_os = "android"))]
 fn finish_desktop_window_setup(window: &tauri::WebviewWindow) {
     #[cfg(windows)]
     let _ = window.create_overlay_titlebar();
+
+    // macOS：初始定位红绿灯，使其与自定义标题栏对齐
+    #[cfg(target_os = "macos")]
+    reposition_traffic_lights(window);
 }
 
 #[cfg(not(target_os = "android"))]
@@ -146,7 +173,7 @@ fn configure_desktop_window_builder<'a, R: tauri::Runtime, M: tauri::Manager<R>>
     let window_builder = window_builder
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .hidden_title(true)
-        .traffic_light_position(tauri::LogicalPosition::new(12.0, 12.0));
+        .traffic_light_position(tauri::LogicalPosition::new(12.0, 14.0));
 
     window_builder
 }
@@ -229,6 +256,24 @@ pub fn run() {
                         if state.we_started.load(Ordering::SeqCst) {
                             api.prevent_close();
                             let _ = window.emit("close-requested", ());
+                        }
+                    }
+                }
+                tauri::WindowEvent::Resized(_) => {
+                    // macOS：仅在「退出全屏」时重新对齐红绿灯。
+                    // 普通缩放时 overlay 模式会自动把红绿灯锚定在左上角，无需干预；
+                    // 若每帧都重算（setFrame 重设标题栏容器）反而会与 AppKit 的 resize
+                    // 周期错相，导致拖拽卡顿。只有进出全屏时系统会重置位置。
+                    #[cfg(target_os = "macos")]
+                    if let Some(webview) = window.get_webview_window(window.label()) {
+                        let is_fs = webview.is_fullscreen().unwrap_or(false);
+                        let was_fs = fullscreen_state()
+                            .lock()
+                            .ok()
+                            .map(|mut m| m.insert(window.label().to_string(), is_fs).unwrap_or(false))
+                            .unwrap_or(false);
+                        if was_fs && !is_fs {
+                            reposition_traffic_lights(&webview);
                         }
                     }
                 }
