@@ -1,5 +1,26 @@
 # Changelog
 
+## [v0.6.18] - 2026-06-19
+
+- chore: upgrade ajv to v8 for build compatibility (2c5830f)
+- fix: macOS 拖拽文件上传两次的问题 (977844f)
+- fix: 高亮当前对话位置的 tick 在日间模式下不可见 (c919d1c)
+- fix(macos): 兼容拖放坐标判断 (f4ae1e9)
+- fix(macos): clear fullscreen state on window destroy (37972e9)
+- fix(macos): 退出全屏后重新对齐红绿灯位置 (1a6c403)
+- fix: undo 后输入框字体模糊的问题 (726387e)
+- fix(macos): 红黄绿按钮与自定义标题栏按钮垂直对齐 (a942272)
+- fix: macOS 从 Finder 拖放文件到窗口不生效 (71ed010)
+- fix(chat): integrate pinned session UI and lifecycle (9b1b7a9)
+- feat: add conversation pinning to sidebar (d6b7500)
+- fix(chat): preserve first message on new sessions (38e51c3)
+- fix(chat): keep outline highlight toggle scoped (a1e9ddb)
+- fix(chat): stabilize outline current highlight (68b7748)
+- fix(terminal): omit undefined restore size options (c0a6038)
+- fix(chat): show hidden project directories (9da3bee)
+- feat: add territory-based highlight to outline index (ec10ea4)
+- fix: consolidate drawer bottom safe-area padding (8c01459)
+
 ## [v0.6.17] - 2026-06-07
 
 - fix: default changes panel to last turn scope (0c341e9)
