@@ -50,6 +50,7 @@ const CloseServiceDialog = lazy(() =>
 
 const MOBILE_PAGER_SCROLL_END_MS = 120
 const MOBILE_RIGHT_PANEL_UNMOUNT_MS = 420
+const MOBILE_PAGER_SETTLED_PX = 2
 
 type MobilePagerPage = 'left' | 'chat' | 'right'
 
@@ -200,10 +201,19 @@ function App() {
   const mobilePagerRef = useRef<HTMLDivElement | null>(null)
   const mobilePagerInitializedRef = useRef(false)
   const mobilePagerInteractingRef = useRef(false)
+  const mobileProgrammaticTargetRef = useRef<MobilePagerPage | null>(null)
   const mobileScrollEndTimerRef = useRef<number | null>(null)
   const mobileRightUnmountTimerRef = useRef<number | null>(null)
   const shouldRenderMobileRightPanelRef = useRef(false)
   const [shouldRenderMobileRightPanel, setShouldRenderMobileRightPanel] = useState(false)
+  const mobilePagerInMotionRef = useRef(false)
+  const [isMobilePagerInMotion, setIsMobilePagerInMotion] = useState(false)
+
+  const setMobilePagerInMotion = useCallback((inMotion: boolean) => {
+    if (mobilePagerInMotionRef.current === inMotion) return
+    mobilePagerInMotionRef.current = inMotion
+    setIsMobilePagerInMotion(inMotion)
+  }, [])
 
   const setMobileRightPanelRendered = useCallback((rendered: boolean) => {
     if (shouldRenderMobileRightPanelRef.current === rendered) return
@@ -222,15 +232,32 @@ function App() {
     setMobileRightPanelRendered(true)
   }, [clearMobileRightUnmountTimer, setMobileRightPanelRendered])
 
+  const mobileActivePage: MobilePagerPage = rightPanelOpen ? 'right' : sidebarExpanded ? 'left' : 'chat'
+  const showMobileChatFrame = isMobilePagerInMotion || sidebarExpanded
+
+  const getMobilePageScrollLeft = useCallback(
+    (page: MobilePagerPage) => (page === 'left' ? 0 : page === 'right' ? mobileRightScrollLeft : mobileChatScrollLeft),
+    [mobileChatScrollLeft, mobileRightScrollLeft],
+  )
+
   const scrollMobilePagerTo = useCallback(
     (page: MobilePagerPage, behavior: ScrollBehavior = 'smooth') => {
       const pager = mobilePagerRef.current
       if (!pager) return
 
-      const left = page === 'left' ? 0 : page === 'right' ? mobileRightScrollLeft : mobileChatScrollLeft
+      const left = getMobilePageScrollLeft(page)
+      if (Math.abs(pager.scrollLeft - left) < 1) {
+        mobileProgrammaticTargetRef.current = null
+        setMobilePagerInMotion(false)
+        pager.scrollTo({ left, behavior: 'auto' })
+        return
+      }
+
+      mobileProgrammaticTargetRef.current = behavior === 'smooth' ? page : null
+      setMobilePagerInMotion(behavior === 'smooth')
       pager.scrollTo({ left, behavior })
     },
-    [mobileChatScrollLeft, mobileRightScrollLeft],
+    [getMobilePageScrollLeft, setMobilePagerInMotion],
   )
 
   const getNearestMobilePage = useCallback(
@@ -272,6 +299,15 @@ function App() {
     const pager = mobilePagerRef.current
     if (!pager) return
 
+    const activePageLeft = getMobilePageScrollLeft(mobileActivePage)
+    if (Math.abs(pager.scrollLeft - activePageLeft) > 1.5) {
+      setMobilePagerInMotion(true)
+    }
+
+    if (!mobilePagerInteractingRef.current && Math.abs(pager.scrollLeft - mobileRightScrollLeft) <= MOBILE_PAGER_SETTLED_PX) {
+      setMobilePagerInMotion(false)
+    }
+
     if (pager.scrollLeft > mobileChatScrollLeft + 24) {
       ensureMobileRightPanelRendered()
     }
@@ -283,12 +319,29 @@ function App() {
     mobileScrollEndTimerRef.current = window.setTimeout(() => {
       mobileScrollEndTimerRef.current = null
       if (mobilePagerInteractingRef.current) return
+
+      if (mobileProgrammaticTargetRef.current) {
+        const targetLeft = getMobilePageScrollLeft(mobileProgrammaticTargetRef.current)
+        if (Math.abs(pager.scrollLeft - targetLeft) >= 2) return
+        mobileProgrammaticTargetRef.current = null
+      }
+
       syncMobilePagerState()
+      setMobilePagerInMotion(false)
     }, MOBILE_PAGER_SCROLL_END_MS)
-  }, [ensureMobileRightPanelRendered, mobileChatScrollLeft, syncMobilePagerState])
+  }, [
+    ensureMobileRightPanelRendered,
+    getMobilePageScrollLeft,
+    mobileActivePage,
+    mobileChatScrollLeft,
+    mobileRightScrollLeft,
+    setMobilePagerInMotion,
+    syncMobilePagerState,
+  ])
 
   const handleMobilePagerInteractionStart = useCallback(() => {
     mobilePagerInteractingRef.current = true
+    mobileProgrammaticTargetRef.current = null
   }, [])
 
   const handleMobilePagerInteractionEnd = useCallback(() => {
@@ -301,8 +354,9 @@ function App() {
     mobileScrollEndTimerRef.current = window.setTimeout(() => {
       mobileScrollEndTimerRef.current = null
       syncMobilePagerState()
+      setMobilePagerInMotion(false)
     }, MOBILE_PAGER_SCROLL_END_MS)
-  }, [syncMobilePagerState])
+  }, [setMobilePagerInMotion, syncMobilePagerState])
 
   useLayoutEffect(() => {
     if (!isMobilePanelLayout) {
@@ -311,9 +365,22 @@ function App() {
     }
 
     const page = rightPanelOpen ? 'right' : sidebarExpanded ? 'left' : 'chat'
-    scrollMobilePagerTo(page, mobilePagerInitializedRef.current ? 'smooth' : 'auto')
-    mobilePagerInitializedRef.current = true
-  }, [isMobilePanelLayout, rightPanelOpen, scrollMobilePagerTo, sidebarExpanded])
+    if (!mobilePagerInitializedRef.current) {
+      const pager = mobilePagerRef.current
+      if (pager) {
+        pager.scrollLeft = getMobilePageScrollLeft(page)
+      }
+      mobileProgrammaticTargetRef.current = null
+      mobilePagerInMotionRef.current = false
+      mobilePagerInitializedRef.current = true
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      scrollMobilePagerTo(page, 'smooth')
+    })
+    return () => window.cancelAnimationFrame(frameId)
+  }, [getMobilePageScrollLeft, isMobilePanelLayout, rightPanelOpen, scrollMobilePagerTo, sidebarExpanded])
 
   useEffect(() => {
     if (!isMobilePanelLayout) {
@@ -348,6 +415,8 @@ function App() {
     return () => {
       if (mobileScrollEndTimerRef.current !== null) window.clearTimeout(mobileScrollEndTimerRef.current)
       if (mobileRightUnmountTimerRef.current !== null) window.clearTimeout(mobileRightUnmountTimerRef.current)
+      mobileProgrammaticTargetRef.current = null
+      mobilePagerInMotionRef.current = false
     }
   }, [])
 
@@ -796,6 +865,8 @@ function App() {
               >
                 <section
                   className="h-full shrink-0 overflow-hidden bg-bg-100"
+                  aria-hidden={mobileActivePage !== 'left'}
+                  inert={mobileActivePage !== 'left'}
                   style={{
                     width: `${mobileLeftPanelWidth}px`,
                     flexBasis: `${mobileLeftPanelWidth}px`,
@@ -827,8 +898,12 @@ function App() {
                     scrollSnapAlign: 'start',
                     scrollSnapStop: 'always',
                   }}
-                >
-                  <div className="relative z-10 flex h-full flex-col overflow-hidden rounded-xl bg-bg-100 shadow-[0_0_16px_hsl(var(--always-black)/0.08)] [contain:layout_paint]">
+                  >
+                  <div
+                    className={`relative z-10 flex h-full flex-col overflow-hidden bg-bg-100 [contain:layout_paint] ${showMobileChatFrame ? 'rounded-xl shadow-[0_0_16px_hsl(var(--always-black)/0.08)]' : ''}`}
+                    aria-hidden={mobileActivePage !== 'chat'}
+                    inert={mobileActivePage !== 'chat'}
+                  >
                     <div className={paneLayout.isSplit && !paneLayout.fullscreenPaneId ? 'flex-1 min-h-0 p-2' : 'flex-1 min-h-0'}>
                       <SplitContainer
                         node={paneLayout.root}
@@ -837,24 +912,29 @@ function App() {
                       />
                     </div>
 
-                    <div
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-0 z-[80] rounded-xl border-x border-border-200/50"
-                    />
-
-                    {sidebarExpanded && (
-                      <button
-                        type="button"
-                        aria-label={t('chat:sidebar.collapseSidebar')}
-                        className="absolute inset-0 z-[70] cursor-default bg-transparent"
-                        onClick={handleCloseSidebar}
+                    {showMobileChatFrame && (
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-0 z-[80] rounded-xl border-x border-border-200/50"
                       />
                     )}
+
                   </div>
+
+                  {sidebarExpanded && (
+                    <button
+                      type="button"
+                      aria-label={t('chat:sidebar.collapseSidebar')}
+                      className="absolute inset-0 z-[70] cursor-default bg-transparent [touch-action:pan-x]"
+                      onClick={handleCloseSidebar}
+                    />
+                  )}
                 </section>
 
                 <section
                   className="h-full shrink-0 overflow-hidden bg-bg-100"
+                  aria-hidden={mobileActivePage !== 'right'}
+                  inert={mobileActivePage !== 'right'}
                   style={{
                     width: `${mobilePageWidth}px`,
                     flexBasis: `${mobilePageWidth}px`,

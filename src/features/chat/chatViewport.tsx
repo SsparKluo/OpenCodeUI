@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- exports viewport helpers, hooks, and provider */
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useInputCapabilities } from '../../hooks/useInputCapabilities'
 
 export type ChatSurfaceVariant = 'desktop' | 'compact'
@@ -279,7 +279,10 @@ export function useChatViewportController({
 }) {
   const { preferTouchUi, hasCoarsePointer, hasTouch } = useInputCapabilities()
   const touchCapable = preferTouchUi || hasCoarsePointer || hasTouch
-  const surfaceRef = useRef<HTMLDivElement>(null)
+  const [surfaceElement, setSurfaceElement] = useState<HTMLElement | null>(null)
+  const surfaceRef = useCallback((node: HTMLElement | null) => {
+    setSurfaceElement(node)
+  }, [])
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window === 'undefined' ? 1280 : window.innerWidth))
   const [viewportHeight, setViewportHeight] = useState(() => (typeof window === 'undefined' ? 800 : window.innerHeight))
   const [surfaceWidth, setSurfaceWidth] = useState(0)
@@ -309,8 +312,14 @@ export function useChatViewportController({
   }, [])
 
   useEffect(() => {
-    const el = surfaceRef.current
-    if (!el) return
+    if (!surfaceElement) {
+      const frameId = window.requestAnimationFrame(() => setSurfaceWidth(0))
+      return () => window.cancelAnimationFrame(frameId)
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      setSurfaceWidth(surfaceElement.getBoundingClientRect().width)
+    })
 
     const ro = new ResizeObserver(entries => {
       for (const entry of entries) {
@@ -318,9 +327,12 @@ export function useChatViewportController({
       }
     })
 
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
+    ro.observe(surfaceElement)
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      ro.disconnect()
+    }
+  }, [surfaceElement])
 
   const setSidebarRequestedWidth = useCallback((width: number) => {
     setSidebarHasCustomWidth(true)
