@@ -767,9 +767,13 @@ export class LayoutStore {
     this.notify()
   }
 
-  openRightPanel(view: RightPanelView) {
+  openRightPanel(view?: RightPanelView) {
     this.state.rightPanelOpen = true
-    this.setRightPanelView(view)
+    if (view) {
+      this.setRightPanelView(view)
+    } else {
+      this.notify()
+    }
   }
 
   closeRightPanel() {

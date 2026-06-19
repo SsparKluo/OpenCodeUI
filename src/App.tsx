@@ -199,6 +199,7 @@ function App() {
   const mobileRightScrollLeft = mobileLeftPanelWidth + mobilePageWidth
   const mobilePagerRef = useRef<HTMLDivElement | null>(null)
   const mobilePagerInitializedRef = useRef(false)
+  const mobilePagerInteractingRef = useRef(false)
   const mobileScrollEndTimerRef = useRef<number | null>(null)
   const mobileRightUnmountTimerRef = useRef<number | null>(null)
   const shouldRenderMobileRightPanelRef = useRef(false)
@@ -220,12 +221,6 @@ function App() {
     clearMobileRightUnmountTimer()
     setMobileRightPanelRendered(true)
   }, [clearMobileRightUnmountTimer, setMobileRightPanelRendered])
-
-  const getMobilePagerTarget = useCallback(() => {
-    if (rightPanelOpen) return mobileRightScrollLeft
-    if (sidebarExpanded) return 0
-    return mobileChatScrollLeft
-  }, [mobileChatScrollLeft, mobileRightScrollLeft, rightPanelOpen, sidebarExpanded])
 
   const scrollMobilePagerTo = useCallback(
     (page: MobilePagerPage, behavior: ScrollBehavior = 'smooth') => {
@@ -265,7 +260,7 @@ function App() {
     if (page === 'right') {
       ensureMobileRightPanelRendered()
       if (sidebarExpanded) setSidebarExpanded(false)
-      if (!rightPanelOpen) layoutStore.openRightPanel('files')
+      if (!rightPanelOpen) layoutStore.openRightPanel()
       return
     }
 
@@ -287,9 +282,27 @@ function App() {
 
     mobileScrollEndTimerRef.current = window.setTimeout(() => {
       mobileScrollEndTimerRef.current = null
+      if (mobilePagerInteractingRef.current) return
       syncMobilePagerState()
     }, MOBILE_PAGER_SCROLL_END_MS)
   }, [ensureMobileRightPanelRendered, mobileChatScrollLeft, syncMobilePagerState])
+
+  const handleMobilePagerInteractionStart = useCallback(() => {
+    mobilePagerInteractingRef.current = true
+  }, [])
+
+  const handleMobilePagerInteractionEnd = useCallback(() => {
+    mobilePagerInteractingRef.current = false
+
+    if (mobileScrollEndTimerRef.current !== null) {
+      window.clearTimeout(mobileScrollEndTimerRef.current)
+    }
+
+    mobileScrollEndTimerRef.current = window.setTimeout(() => {
+      mobileScrollEndTimerRef.current = null
+      syncMobilePagerState()
+    }, MOBILE_PAGER_SCROLL_END_MS)
+  }, [syncMobilePagerState])
 
   useLayoutEffect(() => {
     if (!isMobilePanelLayout) {
@@ -297,13 +310,10 @@ function App() {
       return
     }
 
-    const pager = mobilePagerRef.current
-    if (!pager) return
-
-    const target = getMobilePagerTarget()
-    pager.scrollTo({ left: target, behavior: mobilePagerInitializedRef.current ? 'smooth' : 'auto' })
+    const page = rightPanelOpen ? 'right' : sidebarExpanded ? 'left' : 'chat'
+    scrollMobilePagerTo(page, mobilePagerInitializedRef.current ? 'smooth' : 'auto')
     mobilePagerInitializedRef.current = true
-  }, [getMobilePagerTarget, isMobilePanelLayout])
+  }, [isMobilePanelLayout, rightPanelOpen, scrollMobilePagerTo, sidebarExpanded])
 
   useEffect(() => {
     if (!isMobilePanelLayout) {
@@ -358,6 +368,14 @@ function App() {
     setSidebarExpanded(false)
   }, [isMobilePanelLayout, scrollMobilePagerTo, setSidebarExpanded])
 
+  const handleToggleSidebar = useCallback(() => {
+    if (sidebarExpanded) {
+      handleCloseSidebar()
+    } else {
+      handleOpenSidebar()
+    }
+  }, [handleCloseSidebar, handleOpenSidebar, sidebarExpanded])
+
   const handleToggleRightPanel = useCallback(() => {
     if (!isMobilePanelLayout) {
       layoutStore.toggleRightPanel()
@@ -373,7 +391,7 @@ function App() {
     ensureMobileRightPanelRendered()
     if (sidebarExpanded) setSidebarExpanded(false)
     scrollMobilePagerTo('right')
-    layoutStore.openRightPanel('files')
+    layoutStore.openRightPanel()
   }, [ensureMobileRightPanelRendered, isMobilePanelLayout, rightPanelOpen, scrollMobilePagerTo, setSidebarExpanded, sidebarExpanded])
 
   const focusedDirectory = focusedRouteDirectory || ''
@@ -466,7 +484,7 @@ function App() {
       openSettings,
       openProject,
       commandPalette: () => setCommandPaletteOpen(true),
-      toggleSidebar: () => setSidebarExpanded(!sidebarExpanded),
+      toggleSidebar: handleToggleSidebar,
       toggleRightPanel: handleToggleRightPanel,
       focusInput: () => {
         const input = document.querySelector<HTMLTextAreaElement>('[data-input-box] textarea')
@@ -523,9 +541,8 @@ function App() {
     [
       openSettings,
       openProject,
-      sidebarExpanded,
-      setSidebarExpanded,
       focusedController,
+      handleToggleSidebar,
       handleToggleRightPanel,
       handleNewTerminal,
       paneLayout.focusedPaneId,
@@ -573,7 +590,7 @@ function App() {
         description: t('commands:toggleSidebarDesc'),
         category: t('commands:categories.general'),
         shortcut: getShortcut('toggleSidebar'),
-        action: () => setSidebarExpanded(!sidebarExpanded),
+        action: handleToggleSidebar,
       },
       {
         id: 'toggleRightPanel',
@@ -743,9 +760,8 @@ function App() {
     openSettings,
     openProject,
     openSettingsTab,
+    handleToggleSidebar,
     handleToggleRightPanel,
-    sidebarExpanded,
-    setSidebarExpanded,
     focusedController,
     handleNewTerminal,
     paneLayout.focusedPaneId,
@@ -774,6 +790,9 @@ function App() {
                   WebkitOverflowScrolling: 'touch',
                 }}
                 onScroll={handleMobilePagerScroll}
+                onTouchStart={handleMobilePagerInteractionStart}
+                onTouchEnd={handleMobilePagerInteractionEnd}
+                onTouchCancel={handleMobilePagerInteractionEnd}
               >
                 <section
                   className="h-full shrink-0 overflow-hidden bg-bg-100"
