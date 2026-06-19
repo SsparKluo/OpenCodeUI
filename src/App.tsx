@@ -820,7 +820,7 @@ function App() {
 
                 <section
                   ref={surfaceRef}
-                  className="relative flex h-full shrink-0 flex-col overflow-hidden bg-bg-100"
+                  className="relative h-full shrink-0 overflow-visible bg-bg-100"
                   style={{
                     width: `${mobilePageWidth}px`,
                     flexBasis: `${mobilePageWidth}px`,
@@ -828,22 +828,29 @@ function App() {
                     scrollSnapStop: 'always',
                   }}
                 >
-                  <div className={paneLayout.isSplit && !paneLayout.fullscreenPaneId ? 'flex-1 min-h-0 p-2' : 'flex-1 min-h-0'}>
-                    <SplitContainer
-                      node={paneLayout.root}
-                      renderLeaf={renderPaneLeaf}
-                      fullscreenPaneId={paneLayout.fullscreenPaneId}
-                    />
-                  </div>
+                  <div className="relative flex h-full flex-col overflow-hidden rounded-xl bg-bg-100 [contain:layout_paint]">
+                    <div className={paneLayout.isSplit && !paneLayout.fullscreenPaneId ? 'flex-1 min-h-0 p-2' : 'flex-1 min-h-0'}>
+                      <SplitContainer
+                        node={paneLayout.root}
+                        renderLeaf={renderPaneLeaf}
+                        fullscreenPaneId={paneLayout.fullscreenPaneId}
+                      />
+                    </div>
 
-                  {sidebarExpanded && (
-                    <button
-                      type="button"
-                      aria-label={t('chat:sidebar.collapseSidebar')}
-                      className="absolute inset-0 z-[70] cursor-default bg-transparent"
-                      onClick={handleCloseSidebar}
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 z-[80] rounded-xl border-x border-border-200/50"
                     />
-                  )}
+
+                    {sidebarExpanded && (
+                      <button
+                        type="button"
+                        aria-label={t('chat:sidebar.collapseSidebar')}
+                        className="absolute inset-0 z-[70] cursor-default bg-transparent"
+                        onClick={handleCloseSidebar}
+                      />
+                    )}
+                  </div>
                 </section>
 
                 <section

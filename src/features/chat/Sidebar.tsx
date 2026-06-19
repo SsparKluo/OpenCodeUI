@@ -279,7 +279,7 @@ export const Sidebar = memo(function Sidebar({
     if (mobileInline) {
       return (
         <>
-          <div className="relative flex h-full w-full flex-col overflow-hidden bg-bg-100 border-r border-border-200/50 [contain:strict]">
+          <div className="relative flex h-full w-full flex-col overflow-hidden bg-bg-100 [contain:strict]">
             <SidePanel
               onNewSession={onNewSession}
               onSelectSession={handleSelectSession}
