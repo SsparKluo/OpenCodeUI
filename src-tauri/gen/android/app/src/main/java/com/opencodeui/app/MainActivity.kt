@@ -32,6 +32,8 @@ class MainActivity : TauriActivity() {
     val controller = WindowInsetsControllerCompat(window, window.decorView)
     controller.isAppearanceLightStatusBars = true
     controller.isAppearanceLightNavigationBars = true
+    window.statusBarColor = Color.TRANSPARENT
+    window.navigationBarColor = Color.TRANSPARENT
 
     // 禁用系统对比度强制（避免状态栏自动加黑/渐变）
     if (Build.VERSION.SDK_INT >= 29) {
@@ -41,7 +43,7 @@ class MainActivity : TauriActivity() {
 
     // 监听 WindowInsets 变化：
     // 1. 对内容容器 setPadding，让 WebView 物理 resize（键盘弹出时 window.innerHeight 自动变小）
-    // 2. 注入 CSS 变量供前端做精细布局
+    // 2. 系统栏本身保持透明，decorView 用页面背景色补齐状态栏背后区域
     val contentView = findViewById<View>(android.R.id.content)
     ViewCompat.setOnApplyWindowInsetsListener(contentView) { view, windowInsets ->
       val systemInsets = windowInsets.getInsets(
@@ -142,8 +144,8 @@ class MainActivity : TauriActivity() {
     val controller = WindowInsetsControllerCompat(window, window.decorView)
     controller.isAppearanceLightStatusBars = isLightBg && mode != "dark"
     controller.isAppearanceLightNavigationBars = isLightBg && mode != "dark"
-    window.statusBarColor = color
-    window.navigationBarColor = color
+    window.statusBarColor = Color.TRANSPARENT
+    window.navigationBarColor = Color.TRANSPARENT
     window.decorView.setBackgroundColor(color)
   }
 
@@ -155,8 +157,8 @@ class MainActivity : TauriActivity() {
       val controller = WindowInsetsControllerCompat(window, window.decorView)
       controller.isAppearanceLightStatusBars = isLightBg && mode != "dark"
       controller.isAppearanceLightNavigationBars = isLightBg && mode != "dark"
-      window.statusBarColor = color
-      window.navigationBarColor = color
+      window.statusBarColor = Color.TRANSPARENT
+      window.navigationBarColor = Color.TRANSPARENT
       window.decorView.setBackgroundColor(color)
     }
 
