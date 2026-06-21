@@ -291,6 +291,12 @@ npm install
 npm run tauri build
 ```
 
+> **macOS users**: If the app shows "cannot be opened because the developer cannot be verified" and gets moved to Trash, run this command in Terminal to remove the quarantine attribute:
+>
+> ```bash
+> xattr -d com.apple.quarantine /Applications/OpenCode.app
+> ```
+
 ## Project Structure
 
 ```

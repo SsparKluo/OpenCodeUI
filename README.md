@@ -342,6 +342,12 @@ npm install
 npm run tauri build
 ```
 
+> **macOS 用户注意**：安装后如果打开提示"无法验证开发者"而移入废纸篓，请在终端执行以下命令移除隔离属性：
+>
+> ```bash
+> xattr -d com.apple.quarantine /Applications/OpenCode.app
+> ```
+
 ## 项目结构
 
 ```
