@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, memo } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DESKTOP_FULLSCREEN_LAYER_Z_INDEX } from '../../constants'
 import { DownloadIcon, PlusIcon, MinusIcon } from '../../components/Icons'
@@ -6,9 +6,10 @@ import { CopyButton } from '../../components/ui'
 import { getAttachmentIcon } from './utils'
 import { saveData } from '../../utils/downloadUtils'
 import type { Attachment } from './types'
-import { FullscreenViewer } from '../../components/FullscreenViewer'
 import { CodePreview } from '../../components/CodePreview'
 import { detectLanguage } from '../../utils/languageUtils'
+import { useFullscreen } from '../../contexts'
+import type { FullscreenLayer } from '../../contexts'
 
 // ============================================
 // 常量
@@ -57,54 +58,75 @@ export const AttachmentDetailModal = memo(function AttachmentDetailModal({
   onClose,
 }: AttachmentDetailModalProps) {
   const { t } = useTranslation(['commands', 'common'])
+  const { openFullscreen, updateFullscreen, closeFullscreen } = useFullscreen()
+  const layerRef = useRef<FullscreenLayer | null>(null)
 
-  if (!attachment) return null
+  const layer = useMemo(() => {
+    if (!attachment) return null
 
-  const isImage = attachment.mime?.startsWith('image/')
-  const hasContent = !!attachment.content
-  const hasUrl = !!attachment.url
-  const { Icon, colorClass } = getAttachmentIcon(attachment)
+    const isImage = attachment.mime?.startsWith('image/')
+    const hasContent = !!attachment.content
+    const hasUrl = !!attachment.url
+    const { Icon, colorClass } = getAttachmentIcon(attachment)
 
-  const titleNode = (
-    <div className="flex items-center gap-2 min-w-0 flex-1">
-      <span className={`${colorClass} flex items-center shrink-0 [&>svg]:w-4 [&>svg]:h-4`}>
-        <Icon />
-      </span>
-      <span className="text-text-100 text-[length:var(--fs-md)] font-mono font-medium truncate min-w-0 flex-1">
-        {attachment.displayName}
-      </span>
-      {attachment.mime && (
-        <span className="text-[length:var(--fs-xs)] text-text-500 shrink-0 hidden sm:inline">{attachment.mime}</span>
-      )}
-    </div>
-  )
+    const titleNode = (
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        <span className={`${colorClass} flex items-center shrink-0 [&>svg]:w-4 [&>svg]:h-4`}>
+          <Icon />
+        </span>
+        <span className="text-text-100 text-[length:var(--fs-md)] font-mono font-medium truncate min-w-0 flex-1">
+          {attachment.displayName}
+        </span>
+        {attachment.mime && (
+          <span className="text-[length:var(--fs-xs)] text-text-500 shrink-0 hidden sm:inline">{attachment.mime}</span>
+        )}
+      </div>
+    )
 
-  const headerRightNode = (
-    <div className="flex items-center gap-1">
-      {hasContent && <CopyButton text={attachment.content!} position="static" />}
-      {(hasContent || (isImage && hasUrl)) && <DownloadButton attachment={attachment} />}
-    </div>
-  )
+    const headerRightNode = (
+      <div className="flex items-center gap-1">
+        {hasContent && <CopyButton text={attachment.content!} position="static" />}
+        {(hasContent || (isImage && hasUrl)) && <DownloadButton attachment={attachment} />}
+      </div>
+    )
 
-  return (
-    <FullscreenViewer
-      isOpen={isOpen}
-      onClose={onClose}
-      zIndex={DESKTOP_FULLSCREEN_LAYER_Z_INDEX}
-      title={titleNode}
-      headerRight={headerRightNode}
-    >
-      {isImage && hasUrl ? (
-        <ZoomableImage url={attachment.url!} alt={attachment.displayName} />
-      ) : hasContent ? (
-        <CodePreview code={attachment.content!} language={detectLanguage(attachment.displayName) || 'text'} />
-      ) : (
-        <div className="flex items-center justify-center h-full text-text-400 text-[length:var(--fs-base)]">
-          {t('attachment.noPreview')}
-        </div>
-      )}
-    </FullscreenViewer>
-  )
+    return {
+      id: `attachment:${attachment.id ?? attachment.displayName}`,
+      zIndex: DESKTOP_FULLSCREEN_LAYER_Z_INDEX,
+      title: titleNode,
+      headerRight: headerRightNode,
+      onClose,
+      content:
+        isImage && hasUrl ? (
+          <ZoomableImage url={attachment.url!} alt={attachment.displayName} />
+        ) : hasContent ? (
+          <CodePreview code={attachment.content!} language={detectLanguage(attachment.displayName) || 'text'} />
+        ) : (
+          <div className="flex items-center justify-center h-full text-text-400 text-[length:var(--fs-base)]">
+            {t('attachment.noPreview')}
+          </div>
+        ),
+    }
+  }, [attachment, onClose, t])
+
+  useEffect(() => {
+    layerRef.current = layer
+  }, [layer])
+
+  useEffect(() => {
+    if (!isOpen || !layer?.id) return
+    const currentLayer = layerRef.current
+    if (!currentLayer) return
+    openFullscreen(currentLayer)
+    return () => closeFullscreen(currentLayer.id)
+  }, [closeFullscreen, isOpen, layer?.id, openFullscreen])
+
+  useEffect(() => {
+    if (!isOpen || !layer) return
+    updateFullscreen(layer)
+  }, [isOpen, layer, updateFullscreen])
+
+  return null
 })
 
 // ============================================

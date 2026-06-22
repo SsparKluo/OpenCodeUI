@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { RetryIcon, ChevronRightIcon, MaximizeIcon, ClockIcon, GitBranchIcon, GitDiffIcon, LayersIcon } from './Icons'
 import { getMaterialIconUrl } from '../utils/materialIcons'
 import { DiffViewer, useDiffViewerData, type ViewMode } from './DiffViewer'
-import { FullscreenViewer, ViewModeSwitch } from './FullscreenViewer'
+import { ViewModeSwitch } from './FullscreenViewer'
 import { getCurrentProject, initGitProject } from '../api/client'
 import { getLastTurnDiff, getSessionDiff } from '../api/session'
 import { getVcsDiff, getVcsInfo } from '../api/vcs'
@@ -21,6 +21,7 @@ import { PreviewTabsBar, type PreviewTabsBarItem } from './PreviewTabsBar'
 import { useVerticalSplitResize } from '../hooks/useVerticalSplitResize'
 import { DropdownMenu } from './ui'
 import { changeScopeStore, useSessionChangeScope, type ChangeScopeMode } from '../store/changeScopeStore'
+import { useFullscreenLayer } from '../contexts'
 
 // 常量
 const MIN_LIST_HEIGHT = 80
@@ -917,9 +918,33 @@ const DiffPreviewPanel = memo(function DiffPreviewPanel({
   }, [diff.patch, diff.before, diff.after])
   const diffViewerData = useDiffViewerData(before, after, language, isResizing)
   const { t } = useTranslation(['components', 'common'])
-  const [fullscreenOpen, setFullscreenOpen] = useState(false)
   const [fullscreenViewMode, setFullscreenViewMode] = useState<ViewMode>(viewMode)
   const fileName = diff.file.split(/[/\\]/).pop() || diff.file
+  const fullscreenLayer = useMemo(
+    () => ({
+      id: `session-change:${diff.file}`,
+      title: fileName,
+      titleExtra: (
+        <div className="flex items-center gap-1.5 text-[length:var(--fs-xs)] font-mono tabular-nums shrink-0">
+          {diff.additions > 0 && <span className="text-success-100">+{diff.additions}</span>}
+          {diff.deletions > 0 && <span className="text-danger-100">-{diff.deletions}</span>}
+        </div>
+      ),
+      headerRight: <ViewModeSwitch viewMode={fullscreenViewMode} onChange={setFullscreenViewMode} />,
+      deferContent: true,
+      content: (
+        <DiffViewer
+          before={before}
+          after={after}
+          language={language}
+          viewMode={fullscreenViewMode}
+          data={diffViewerData}
+        />
+      ),
+    }),
+    [after, before, diff.additions, diff.deletions, diff.file, diffViewerData, fileName, fullscreenViewMode, language],
+  )
+  const { open: openFullscreen } = useFullscreenLayer(fullscreenLayer)
   const previewTabItems = useMemo<PreviewTabsBarItem[]>(
     () =>
       previewDiffs.map(previewDiff => {
@@ -961,7 +986,7 @@ const DiffPreviewPanel = memo(function DiffPreviewPanel({
           <button
             onClick={() => {
               setFullscreenViewMode(viewMode)
-              setFullscreenOpen(true)
+              openFullscreen()
             }}
             className="p-1 text-text-400 hover:text-text-100 hover:bg-bg-300/50 rounded transition-colors"
             title={t('contentBlock.fullscreen')}
@@ -975,22 +1000,6 @@ const DiffPreviewPanel = memo(function DiffPreviewPanel({
       <div className="flex-1 min-h-0">
         <DiffViewer before={before} after={after} language={language} viewMode={viewMode} isResizing={isResizing} data={diffViewerData} />
       </div>
-
-      <FullscreenViewer
-        isOpen={fullscreenOpen}
-        onClose={() => setFullscreenOpen(false)}
-        title={fileName}
-        titleExtra={
-          <div className="flex items-center gap-1.5 text-[length:var(--fs-xs)] font-mono tabular-nums shrink-0">
-            {diff.additions > 0 && <span className="text-success-100">+{diff.additions}</span>}
-            {diff.deletions > 0 && <span className="text-danger-100">-{diff.deletions}</span>}
-          </div>
-        }
-        headerRight={<ViewModeSwitch viewMode={fullscreenViewMode} onChange={setFullscreenViewMode} />}
-        deferContent
-      >
-        <DiffViewer before={before} after={after} language={language} viewMode={fullscreenViewMode} data={diffViewerData} />
-      </FullscreenViewer>
     </div>
   )
 })

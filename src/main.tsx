@@ -5,7 +5,7 @@ import './index.css'
 import './i18n'
 import { initOverlayScrollbars } from './lib/overlayScrollbar'
 import App from './App.tsx'
-import { DirectoryProvider, SessionProvider } from './contexts'
+import { DirectoryProvider, FullscreenProvider, SessionProvider } from './contexts'
 import { themeStore } from './store/themeStore'
 import { serverStore } from './store/serverStore'
 import { messageStore } from './store/messageStore'
@@ -162,7 +162,9 @@ function bootstrap() {
       <Suspense fallback={null}>
         <DirectoryProvider>
           <SessionProvider>
-            <App />
+            <FullscreenProvider>
+              <App />
+            </FullscreenProvider>
           </SessionProvider>
         </DirectoryProvider>
       </Suspense>

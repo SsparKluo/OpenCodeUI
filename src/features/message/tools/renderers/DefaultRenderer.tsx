@@ -12,7 +12,7 @@ import type { ToolRendererProps, ExtractedToolData } from '../types'
 // 通用的 Input/Output 渲染逻辑
 // ============================================
 
-export function DefaultRenderer({ part, data }: ToolRendererProps) {
+export function DefaultRenderer({ part, data, onFullscreenChange }: ToolRendererProps) {
   const { t } = useTranslation('message')
   const { state, tool } = part
   const { toolCardStyle } = useSyncExternalStore(themeStore.subscribe, themeStore.getSnapshot)
@@ -42,6 +42,8 @@ export function DefaultRenderer({ part, data }: ToolRendererProps) {
           isLoading={isActive && !hasInput}
           loadingText=""
           defaultCollapsed={true}
+          onFullscreenChange={onFullscreenChange}
+          fullscreenId={`tool:${part.sessionID}:${part.messageID}:${part.id}:input`}
         />
       )}
 
@@ -54,6 +56,8 @@ export function DefaultRenderer({ part, data }: ToolRendererProps) {
           hasError={hasError}
           hasOutput={hasOutput}
           compact={isCompact}
+          onFullscreenChange={onFullscreenChange}
+          fullscreenBaseId={`tool:${part.sessionID}:${part.messageID}:${part.id}:output`}
         />
       )}
 
@@ -74,22 +78,49 @@ interface OutputBlockProps {
   hasError: boolean
   hasOutput: boolean
   compact?: boolean
+  onFullscreenChange?: (isFullscreen: boolean) => void
+  fullscreenBaseId: string
 }
 
-function OutputBlock({ tool, data, isActive, hasError, hasOutput, compact }: OutputBlockProps) {
+function OutputBlock({
+  tool,
+  data,
+  isActive,
+  hasError,
+  hasOutput,
+  compact,
+  onFullscreenChange,
+  fullscreenBaseId,
+}: OutputBlockProps) {
   const { t } = useTranslation('message')
 
   // 1. Error 优先
   if (hasError) {
     return (
-      <ContentBlock label={t('defaultRenderer.error')} content={data.error || ''} variant="error" compact={compact} />
+      <ContentBlock
+        label={t('defaultRenderer.error')}
+        content={data.error || ''}
+        variant="error"
+        compact={compact}
+        onFullscreenChange={onFullscreenChange}
+        fullscreenId={`${fullscreenBaseId}:error`}
+      />
     )
   }
 
   // 2. 工具活跃时（running/pending）统一显示 loading — compact 模式下不显示
   if (isActive) {
     if (compact) return null
-    return <ContentBlock label={t('defaultRenderer.output')} isLoading={true} loadingText="" compact={compact} />
+    return (
+      <ContentBlock
+        label={t('defaultRenderer.output')}
+        isLoading={true}
+        loadingText=""
+        compact={compact}
+        onFullscreenChange={onFullscreenChange}
+        fullscreenId={`${fullscreenBaseId}:loading`}
+      />
+    )
   }
 
   // 3. 完成后显示结果
@@ -114,6 +145,8 @@ function OutputBlock({ tool, data, isActive, hasError, hasOutput, compact }: Out
               }
               language={detectLanguage(file.filePath)}
               compact={compact}
+              onFullscreenChange={onFullscreenChange}
+              fullscreenId={`${fullscreenBaseId}:file:${file.filePath || idx}`}
             />
           ))}
         </div>
@@ -132,6 +165,8 @@ function OutputBlock({ tool, data, isActive, hasError, hasOutput, compact }: Out
           diffStats={data.diffStats}
           language={data.outputLang}
           compact={compact}
+          onFullscreenChange={onFullscreenChange}
+          fullscreenId={`${fullscreenBaseId}:diff`}
         />
       )
     }
@@ -145,12 +180,21 @@ function OutputBlock({ tool, data, isActive, hasError, hasOutput, compact }: Out
         filePath={data.filePath}
         stats={data.exitCode !== undefined ? { exit: data.exitCode } : undefined}
         compact={compact}
+        onFullscreenChange={onFullscreenChange}
+        fullscreenId={`${fullscreenBaseId}:text`}
       />
     )
   }
 
   // 4. 无输出
-  return <ContentBlock label={t('defaultRenderer.output')} compact={compact} />
+  return (
+    <ContentBlock
+      label={t('defaultRenderer.output')}
+      compact={compact}
+      onFullscreenChange={onFullscreenChange}
+      fullscreenId={`${fullscreenBaseId}:empty`}
+    />
+  )
 }
 
 function FileResultIcon({ filePath }: { filePath: string }) {

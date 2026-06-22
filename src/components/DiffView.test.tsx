@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { DiffView } from './DiffView'
+import { FullscreenProvider } from '../contexts'
 
 vi.mock('../hooks/useSyntaxHighlight', () => ({
   useSyntaxHighlight: (code: string, options?: { mode?: 'html' | 'tokens' }) => ({
@@ -19,11 +20,13 @@ vi.mock('./FullscreenViewer', () => ({
 describe('DiffView', () => {
   it('renders diff stats and can open fullscreen viewer', () => {
     render(
-      <DiffView
-        before={'const a = 1\nconst keep = true'}
-        after={'const a = 2\nconst keep = true'}
-        filePath="src/app.ts"
-      />,
+      <FullscreenProvider>
+        <DiffView
+          before={'const a = 1\nconst keep = true'}
+          after={'const a = 2\nconst keep = true'}
+          filePath="src/app.ts"
+        />
+      </FullscreenProvider>,
     )
 
     expect(screen.getByText('app.ts')).toBeInTheDocument()

@@ -24,12 +24,14 @@ const EMPTY_MESSAGES: Message[] = []
 // 4. 按需交互 - 输入框只在需要时显示
 // ============================================
 
-export const TaskRenderer = memo(function TaskRenderer({ part }: ToolRendererProps) {
+export const TaskRenderer = memo(function TaskRenderer({ part, onFullscreenChange }: ToolRendererProps) {
   const { t } = useTranslation('message')
   const { currentSessionId, currentDirectory } = useSessionNavigation()
   const { state } = part
   const [expanded, setExpanded] = useState(() => state.status === 'running' || state.status === 'pending')
-  const shouldRenderBody = useDelayedRender(expanded)
+  const [isContentFullscreen, setIsContentFullscreen] = useState(false)
+  const effectiveExpanded = expanded || isContentFullscreen
+  const shouldRenderBody = useDelayedRender(effectiveExpanded)
 
   // 从 input 中提取任务信息
   const input = state.input as Record<string, unknown> | undefined
@@ -46,6 +48,14 @@ export const TaskRenderer = memo(function TaskRenderer({ part }: ToolRendererPro
   const isRunning = state.status === 'running' || state.status === 'pending'
   const isCompleted = state.status === 'completed'
   const isError = state.status === 'error'
+
+  const handleContentFullscreenChange = useCallback(
+    (isFullscreen: boolean) => {
+      setIsContentFullscreen(isFullscreen)
+      onFullscreenChange?.(isFullscreen)
+    },
+    [onFullscreenChange],
+  )
 
   // Stop handler
   const handleStop = useCallback(
@@ -93,7 +103,7 @@ export const TaskRenderer = memo(function TaskRenderer({ part }: ToolRendererPro
         {/* Body */}
         <div
           className={`grid transition-[grid-template-rows] duration-300 ease-out ${
-            expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+            effectiveExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
           }`}
         >
           <div className="overflow-hidden">
@@ -120,6 +130,8 @@ export const TaskRenderer = memo(function TaskRenderer({ part }: ToolRendererPro
                     label={t('task.result')}
                     content={typeof state.output === 'string' ? state.output : JSON.stringify(state.output, null, 2)}
                     defaultCollapsed={true}
+                    onFullscreenChange={handleContentFullscreenChange}
+                    fullscreenId={`task:${part.sessionID}:${part.messageID}:${part.id}:result`}
                   />
                 )}
 
@@ -129,6 +141,8 @@ export const TaskRenderer = memo(function TaskRenderer({ part }: ToolRendererPro
                     label={t('task.error')}
                     content={typeof state.error === 'string' ? state.error : JSON.stringify(state.error)}
                     variant="error"
+                    onFullscreenChange={handleContentFullscreenChange}
+                    fullscreenId={`task:${part.sessionID}:${part.messageID}:${part.id}:error`}
                   />
                 )}
               </div>

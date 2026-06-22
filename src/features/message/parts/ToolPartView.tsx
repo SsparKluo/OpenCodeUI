@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { diffLines } from 'diff'
 import { ChevronDownIcon, ChevronRightIcon } from '../../../components/Icons'
@@ -123,7 +123,8 @@ export const ToolPartView = memo(function ToolPartView({
 
   const [expanded, setExpanded] = useState(() => shouldStartExpanded)
   const hasAutoExpandedReadableRef = useRef(shouldStartExpanded && immersiveMode && descriptive && isReadable)
-  const effectiveExpanded = expanded || hasPendingInteraction || permissionResolved
+  const [isChildFullscreen, setIsChildFullscreen] = useState(false)
+  const effectiveExpanded = expanded || hasPendingInteraction || permissionResolved || isChildFullscreen
   const shouldRenderBody = useDelayedRender(effectiveExpanded)
 
   useEffect(() => {
@@ -172,9 +173,15 @@ export const ToolPartView = memo(function ToolPartView({
   // Memoize once — shared by both the descriptive header (diffStats) and ToolBody.
   const toolData = useMemo(() => extractToolData(part), [part])
 
+  const handleFullscreenChange = useCallback((isFullscreen: boolean) => {
+    setIsChildFullscreen(isFullscreen)
+  }, [])
+
   const bodyContent = (
     <>
-      {!hideToolBodyForPermission && <ToolBody part={part} data={toolData} />}
+      {!hideToolBodyForPermission && (
+        <ToolBody part={part} data={toolData} onFullscreenChange={handleFullscreenChange} />
+      )}
       {displayPermission && (
         <div className={hideToolBodyForPermission && !permissionContentHidden ? '' : 'pt-2'}>
           <InlinePermission
@@ -495,25 +502,33 @@ function computeDiffPair(before: string, after: string): { additions: number; de
 // ToolBody - 根据工具类型选择渲染器
 // ============================================
 
-const ToolBody = memo(function ToolBody({ part, data }: { part: ToolPart; data: ReturnType<typeof extractToolData> }) {
+const ToolBody = memo(function ToolBody({
+  part,
+  data,
+  onFullscreenChange,
+}: {
+  part: ToolPart
+  data: ReturnType<typeof extractToolData>
+  onFullscreenChange?: (isFullscreen: boolean) => void
+}) {
   const { tool } = part
   const lowerTool = tool.toLowerCase()
 
   if (lowerTool === 'task') {
-    return <TaskRenderer part={part} data={data} />
+    return <TaskRenderer part={part} data={data} onFullscreenChange={onFullscreenChange} />
   }
 
   if (lowerTool.includes('todo') && hasTodos(part)) {
-    return <TodoRenderer part={part} data={data} />
+    return <TodoRenderer part={part} data={data} onFullscreenChange={onFullscreenChange} />
   }
 
   const config = getToolConfig(tool)
   if (config?.renderer) {
     const CustomRenderer = config.renderer
-    return <CustomRenderer part={part} data={data} />
+    return <CustomRenderer part={part} data={data} onFullscreenChange={onFullscreenChange} />
   }
 
-  return <DefaultRenderer part={part} data={data} />
+  return <DefaultRenderer part={part} data={data} onFullscreenChange={onFullscreenChange} />
 })
 
 function getTaskChildSessionId(part: ToolPart): string | undefined {

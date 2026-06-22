@@ -58,6 +58,8 @@ export interface FileDiff {
 export interface ToolRendererProps {
   part: ToolPart
   data: ExtractedToolData
+  /** 子组件全屏状态变化时回调，用于阻止父级自动收起 */
+  onFullscreenChange?: (isFullscreen: boolean) => void
 }
 
 /**

@@ -8,10 +8,10 @@
  * - exit code 内联在输出末尾
  */
 
-import { useMemo, useState, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FullscreenViewer } from '../../../../components/FullscreenViewer'
 import { MaximizeIcon, MinimizeIcon } from '../../../../components/Icons'
+import { useFullscreen } from '../../../../contexts'
 import { useSyntaxHighlight } from '../../../../hooks/useSyntaxHighlight'
 import { useResponsiveMaxHeight } from '../../../../hooks/useResponsiveMaxHeight'
 import { parseAnsi, type AnsiSegment } from '../../../../utils/ansiUtils'
@@ -22,7 +22,7 @@ import type { ToolRendererProps } from '../types'
 // Main
 // ============================================
 
-export function BashRenderer({ part, data }: ToolRendererProps) {
+export function BashRenderer({ part, data, onFullscreenChange }: ToolRendererProps) {
   const { t } = useTranslation(['components'])
   const { state } = part
   const isActive = state.status === 'running' || state.status === 'pending'
@@ -32,7 +32,17 @@ export function BashRenderer({ part, data }: ToolRendererProps) {
   const cwd = data.cwd?.trim()
   const exitCode = data.exitCode
   const maxHeight = useResponsiveMaxHeight()
-  const [fullscreenOpen, setFullscreenOpen] = useState(false)
+  const fullscreenId = `bash:${part.sessionID}:${part.messageID}:${part.id}:${part.callID}`
+  const { activeId, openFullscreen, updateFullscreen, closeFullscreen } = useFullscreen()
+  const fullscreenOpen = activeId === fullscreenId
+
+  // 全屏状态变化时通知父级，防止自动折叠
+  useEffect(() => {
+    onFullscreenChange?.(fullscreenOpen)
+    return () => {
+      if (fullscreenOpen) onFullscreenChange?.(false)
+    }
+  }, [fullscreenOpen, onFullscreenChange])
 
   // 解析 ANSI
   const outputSegments = useMemo(() => {
@@ -40,13 +50,63 @@ export function BashRenderer({ part, data }: ToolRendererProps) {
     return parseAnsi(output)
   }, [output])
 
-  // 空状态
-  if (!isActive && !hasError && !command && !output) {
-    return null
-  }
-
   const hasOutput = !!(outputSegments && outputSegments.length > 0)
   const isDone = !isActive
+
+  const handleCloseFullscreen = useCallback(() => {
+    closeFullscreen(fullscreenId)
+  }, [closeFullscreen, fullscreenId])
+
+  const fullscreenContent = useMemo(
+    () => (
+      <div className="h-full p-4">
+        <TerminalSurface
+          command={command}
+          cwd={cwd}
+          outputSegments={outputSegments}
+          isActive={isActive}
+          hasOutput={hasOutput}
+          hasError={hasError}
+          error={data.error}
+          isDone={isDone}
+          exitCode={exitCode}
+          outputKey={output ?? ''}
+          fullHeight
+          isFullscreen
+          onToggleFullscreen={handleCloseFullscreen}
+          exitCodeLabel={exitCode !== undefined ? t('contentBlock.exitCode', { code: exitCode }) : undefined}
+        />
+      </div>
+    ),
+    [
+      command,
+      cwd,
+      data.error,
+      exitCode,
+      handleCloseFullscreen,
+      hasError,
+      hasOutput,
+      isActive,
+      isDone,
+      output,
+      outputSegments,
+      t,
+    ],
+  )
+
+  const handleToggleFullscreen = useCallback(() => {
+    if (fullscreenOpen) {
+      closeFullscreen(fullscreenId)
+      return
+    }
+
+    openFullscreen({ id: fullscreenId, showHeader: false, content: fullscreenContent })
+  }, [closeFullscreen, fullscreenContent, fullscreenId, fullscreenOpen, openFullscreen])
+
+  useEffect(() => {
+    if (!fullscreenOpen) return
+    updateFullscreen({ id: fullscreenId, showHeader: false, content: fullscreenContent })
+  }, [fullscreenContent, fullscreenId, fullscreenOpen, updateFullscreen])
 
   const surface = (isFullscreen: boolean) => (
     <TerminalSurface
@@ -59,24 +119,21 @@ export function BashRenderer({ part, data }: ToolRendererProps) {
       error={data.error}
       isDone={isDone}
       exitCode={exitCode}
+      outputKey={output ?? ''}
       maxHeight={isFullscreen ? undefined : maxHeight}
       fullHeight={isFullscreen}
       isFullscreen={isFullscreen}
-      onToggleFullscreen={() => setFullscreenOpen(open => !open)}
+      onToggleFullscreen={handleToggleFullscreen}
       exitCodeLabel={exitCode !== undefined ? t('contentBlock.exitCode', { code: exitCode }) : undefined}
     />
   )
 
-  return (
-    <>
-      {surface(false)}
-      {fullscreenOpen && (
-        <FullscreenViewer isOpen onClose={() => setFullscreenOpen(false)} showHeader={false}>
-          <div className="h-full p-4">{surface(true)}</div>
-        </FullscreenViewer>
-      )}
-    </>
-  )
+  // 空状态
+  if (!isActive && !hasError && !command && !output) {
+    return null
+  }
+
+  return surface(false)
 }
 
 function TerminalSurface({
@@ -89,6 +146,7 @@ function TerminalSurface({
   error,
   isDone,
   exitCode,
+  outputKey,
   maxHeight,
   fullHeight = false,
   isFullscreen = false,
@@ -104,6 +162,7 @@ function TerminalSurface({
   error?: string
   isDone: boolean
   exitCode?: number
+  outputKey: string
   maxHeight?: number | string
   fullHeight?: boolean
   isFullscreen?: boolean
@@ -112,6 +171,22 @@ function TerminalSurface({
 }) {
   const fullscreenLabel = isFullscreen ? 'Exit fullscreen' : 'Fullscreen'
 
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const isAtBottomRef = useRef(true)
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
+  }, [])
+
+  useEffect(() => {
+    if (!isActive) return
+    const el = scrollRef.current
+    if (!el || !isAtBottomRef.current) return
+    el.scrollTop = el.scrollHeight
+  }, [isActive, outputKey])
+
   return (
     <div
       className={`rounded-md border border-border-200/40 bg-bg-100 overflow-hidden font-mono text-[length:var(--fs-code)] leading-[1.6] ${
@@ -119,6 +194,8 @@ function TerminalSurface({
       }`}
     >
       <div
+        ref={scrollRef}
+        onScroll={handleScroll}
         className={`px-3 py-2 overflow-y-auto custom-scrollbar ${fullHeight ? 'flex-1 min-h-0' : ''}`}
         style={fullHeight ? undefined : { maxHeight }}
       >

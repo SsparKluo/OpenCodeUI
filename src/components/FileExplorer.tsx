@@ -11,9 +11,9 @@ import { useVerticalSplitResize } from '../hooks/useVerticalSplitResize'
 import { layoutStore, type PreviewFile } from '../store/layoutStore'
 import { ChevronRightIcon, ChevronDownIcon, RetryIcon, AlertCircleIcon, DownloadIcon, MaximizeIcon } from './Icons'
 import { CodePreview } from './CodePreview'
-import { FullscreenViewer } from './FullscreenViewer'
 import { PreviewTabsBar, type PreviewTabsBarItem } from './PreviewTabsBar'
 import { MarkdownRenderer } from './MarkdownRenderer'
+import { useFullscreenLayer } from '../contexts'
 import { getMaterialIconUrl } from '../utils/materialIcons'
 import { detectLanguage } from '../utils/languageUtils'
 import {
@@ -420,7 +420,6 @@ function FilePreview({
 }: FilePreviewProps) {
   const { t } = useTranslation(['components', 'common'])
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [fullscreenOpen, setFullscreenOpen] = useState(false)
 
   // 获取文件名
   const fileName = path?.split(/[/\\]/).pop() || 'Untitled'
@@ -543,6 +542,34 @@ function FilePreview({
     }
   }, [displayContent, fileName, language, handleDownload])
 
+  const fullscreenHeaderRight = useMemo(
+    () =>
+      content ? (
+        <button
+          onClick={handleDownload}
+          className="p-1.5 text-text-400 hover:text-text-100 hover:bg-bg-200/60 rounded-lg transition-colors"
+          title={`${t('common:save')} ${fileName}`}
+        >
+          <DownloadIcon size={14} />
+        </button>
+      ) : null,
+    [content, fileName, handleDownload, t],
+  )
+
+  const fullscreenLayer = useMemo(
+    () =>
+      fullscreenContent
+        ? {
+            id: `file-preview:${path || fileName}`,
+            title: fileName,
+            headerRight: fullscreenHeaderRight,
+            content: fullscreenContent,
+          }
+        : null,
+    [fileName, fullscreenContent, fullscreenHeaderRight, path],
+  )
+  const { open: openFullscreen } = useFullscreenLayer(fullscreenLayer)
+
   return (
     <div className="flex flex-col h-full relative">
       <PreviewTabsBar
@@ -558,7 +585,7 @@ function FilePreview({
           content ? (
             <>
               <button
-                onClick={() => setFullscreenOpen(true)}
+                onClick={openFullscreen}
                 className="p-1 text-text-400 hover:text-text-100 hover:bg-bg-300/50 rounded transition-colors"
                 title={t('contentBlock.fullscreen')}
               >
@@ -617,25 +644,6 @@ function FilePreview({
           </div>
         )}
       </div>
-
-      <FullscreenViewer
-        isOpen={fullscreenOpen}
-        onClose={() => setFullscreenOpen(false)}
-        title={fileName}
-        headerRight={
-          content ? (
-            <button
-              onClick={handleDownload}
-              className="p-1.5 text-text-400 hover:text-text-100 hover:bg-bg-200/60 rounded-lg transition-colors"
-              title={`${t('common:save')} ${fileName}`}
-            >
-              <DownloadIcon size={14} />
-            </button>
-          ) : null
-        }
-      >
-        {fullscreenContent}
-      </FullscreenViewer>
     </div>
   )
 }

@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useDelayedRender } from './useDelayedRender'
+import { useBackClose } from './useBackClose'
 
 /**
  * useModalAnimation - modal 打开/关闭动画逻辑
  *
  * 通过 requestAnimationFrame 触发 visibility 动画，
  * 结合 useDelayedRender 控制 mount/unmount 过渡。
- * 同时处理 ESC 关闭。
+ * 同时处理 ESC 关闭和系统返回键关闭。
  */
 export function useModalAnimation(isOpen: boolean, onClose: () => void, delayMs = 200) {
   const [isVisible, setIsVisible] = useState(false)
@@ -35,6 +36,8 @@ export function useModalAnimation(isOpen: boolean, onClose: () => void, delayMs 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, onClose])
+
+  useBackClose(isOpen, onClose)
 
   return { isVisible, shouldRender }
 }

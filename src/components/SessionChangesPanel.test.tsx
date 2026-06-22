@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionChangesPanel } from './SessionChangesPanel'
 import { changeScopeStore } from '../store/changeScopeStore'
+import { FullscreenProvider } from '../contexts'
 
 const { getCurrentProject, initGitProject, getSessionDiff, getLastTurnDiff, getVcsInfo, getVcsDiff } = vi.hoisted(
   () => ({
@@ -39,6 +40,14 @@ vi.mock('./DiffViewer', () => ({
     lineNumberWidth: 1,
   }),
 }))
+
+function renderSessionChangesPanel() {
+  return render(
+    <FullscreenProvider>
+      <SessionChangesPanel sessionId="session-1" directory="/repo" />
+    </FullscreenProvider>,
+  )
+}
 
 describe('SessionChangesPanel', () => {
   beforeEach(() => {
@@ -124,7 +133,7 @@ describe('SessionChangesPanel', () => {
   })
 
   it('loads last turn diffs and shows the first file preview by default', async () => {
-    render(<SessionChangesPanel sessionId="session-1" directory="/repo" />)
+    renderSessionChangesPanel()
 
     await act(async () => {
       vi.runAllTimers()
@@ -142,7 +151,7 @@ describe('SessionChangesPanel', () => {
   })
 
   it('switches to session changes on demand', async () => {
-    render(<SessionChangesPanel sessionId="session-1" directory="/repo" />)
+    renderSessionChangesPanel()
 
     await act(async () => {
       vi.runAllTimers()
@@ -172,7 +181,7 @@ describe('SessionChangesPanel', () => {
   })
 
   it('switches to branch changes when available', async () => {
-    render(<SessionChangesPanel sessionId="session-1" directory="/repo" />)
+    renderSessionChangesPanel()
 
     await act(async () => {
       vi.runAllTimers()
@@ -201,7 +210,7 @@ describe('SessionChangesPanel', () => {
   })
 
   it('supports keyboard navigation in the change mode menu and exposes toggle state', async () => {
-    render(<SessionChangesPanel sessionId="session-1" directory="/repo" />)
+    renderSessionChangesPanel()
 
     await act(async () => {
       vi.runAllTimers()
@@ -243,7 +252,7 @@ describe('SessionChangesPanel', () => {
   })
 
   it('opens the change mode menu from ArrowUp with focus on the last option', async () => {
-    render(<SessionChangesPanel sessionId="session-1" directory="/repo" />)
+    renderSessionChangesPanel()
 
     await act(async () => {
       vi.runAllTimers()
@@ -270,7 +279,7 @@ describe('SessionChangesPanel', () => {
       sandboxes: [],
     })
 
-    render(<SessionChangesPanel sessionId="session-1" directory="/repo" />)
+    renderSessionChangesPanel()
 
     await act(async () => {
       vi.runAllTimers()

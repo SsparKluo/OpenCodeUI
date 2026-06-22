@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AttachmentDetailModal } from './AttachmentDetailModal'
 import type { Attachment } from './types'
+import { FullscreenProvider } from '../../contexts'
 
 describe('AttachmentDetailModal', () => {
   beforeEach(() => {
@@ -28,7 +29,11 @@ describe('AttachmentDetailModal', () => {
       content: 'hello world',
     }
 
-    const { rerender } = render(<AttachmentDetailModal attachment={attachment} isOpen={true} onClose={vi.fn()} />)
+    const { rerender } = render(
+      <FullscreenProvider>
+        <AttachmentDetailModal attachment={attachment} isOpen={true} onClose={vi.fn()} />
+      </FullscreenProvider>,
+    )
 
     act(() => {
       vi.runAllTimers()
@@ -37,7 +42,11 @@ describe('AttachmentDetailModal', () => {
     expect(screen.getByText('notes.txt')).toBeInTheDocument()
     expect(screen.getByText('hello world')).toBeInTheDocument()
 
-    rerender(<AttachmentDetailModal attachment={attachment} isOpen={false} onClose={vi.fn()} />)
+    rerender(
+      <FullscreenProvider>
+        <AttachmentDetailModal attachment={attachment} isOpen={false} onClose={vi.fn()} />
+      </FullscreenProvider>,
+    )
 
     act(() => {
       vi.advanceTimersByTime(199)
@@ -59,7 +68,11 @@ describe('AttachmentDetailModal', () => {
       url: 'https://example.com/diagram.png',
     }
 
-    render(<AttachmentDetailModal attachment={attachment} isOpen={true} onClose={vi.fn()} />)
+    render(
+      <FullscreenProvider>
+        <AttachmentDetailModal attachment={attachment} isOpen={true} onClose={vi.fn()} />
+      </FullscreenProvider>,
+    )
 
     const image = screen.getByAltText('diagram.png')
     fireEvent.load(image)

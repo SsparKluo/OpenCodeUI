@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { CloseIcon } from '../Icons'
 import { useDelayedRender } from '../../hooks/useDelayedRender'
+import { useBackClose } from '../../hooks/useBackClose'
 
 interface DialogProps {
   isOpen: boolean
@@ -249,6 +250,8 @@ export function Dialog({
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [isOpen, requestClose, handleFocusTrap, getTopOpenDialog])
+
+  useBackClose(isOpen, requestClose)
 
   useEffect(() => {
     if (!isOpen || !isVisible) return
