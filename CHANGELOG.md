@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.6.20] - 2026-06-22
+
+- fix: bottom panel tabs should not have top safe-area padding (34a6d98)
+- fix: stabilize fullscreen overlays (7e1ca42)
+- perf: switch terminal to WebGL2 GPU-accelerated renderer (84b0a21)
+- docs: add macOS quarantine removal note to READMEs (9341044)
+
 ## [v0.6.19] - 2026-06-21
 
 - perf: move outline fisheye animation to CSS variables (cebf4b8)
