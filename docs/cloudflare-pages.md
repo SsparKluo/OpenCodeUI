@@ -169,5 +169,13 @@ pnpm dev
 | 静态资源 | Caddy | Pages 原生 |
 | API 代理 | Caddy `reverse_proxy` | Pages Function → Worker → VPC |
 | 后端暴露 | `host.docker.internal`（仅本机） | 私网 + Tunnel（任意位置） |
-| 鉴权 | 容器内 HTTP Basic（`OPENCODE_SERVER_PASSWORD`） | 透传到后端，依赖后端配置 |
+| 鉴权 | 容器内 HTTP Basic（`OPENCODE_SERVER_PASSWORD`） | UI 配 → 前端 SDK 加 header → Worker 透传 |
 | 适用 | 单机本地 | 全球 CDN + 私网后端 |
+
+## 鉴权
+
+后端 `opencode serve` 如果开启了 Basic Auth（`OPENCODE_SERVER_USERNAME` / `OPENCODE_SERVER_PASSWORD`），前端在 UI 设置里给 default server 配同样的 username / password（`main` 的 ff1d7c3 起支持）。前端 SDK (`src/api/sdk.ts:buildHeaders`) 会自动给所有 fetch / SSE / WebSocket 请求加 `Authorization: Basic <base64>` header，Worker (`workers/api-proxy/src/index.ts`) 透传到后端。
+
+**不要在 Worker 侧（`wrangler.toml` / `wrangler secret`）单独配凭证**。保持 UI 为单一配置源，凭证不会被同时存到多处，避免某处漏改导致 401。
+
+无后端 auth 时，浏览器和 proxy 都不加 `Authorization`，与原版行为一致。
