@@ -57,6 +57,7 @@
     "httpsIpWarning": "HTTPS direct IP connections require a certificate that includes that IP. Private or self-signed CAs may not be trusted by desktop/mobile clients.",
     "credentialsStorage": "Credentials are stored in localStorage and sent via HTTP Basic Auth.",
     "editServer": "Edit server",
+    "defaultServerAuthHint": "Configure authentication for the default server. The name and URL are fixed.",
     "deleteServer": "Delete Server",
     "deleteServerConfirm": "Remove \"{{name}}\" from the server list? This cannot be undone."
   },

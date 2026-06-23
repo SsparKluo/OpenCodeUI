@@ -57,6 +57,7 @@
     "httpsIpWarning": "HTTPS 直连 IP 需要证书包含该 IP；私有或自签 CA 可能不被桌面/移动客户端信任。",
     "credentialsStorage": "凭证存储在 localStorage 中，通过 HTTP Basic Auth 发送。",
     "editServer": "编辑服务器",
+    "defaultServerAuthHint": "为默认服务器配置认证。名称和 URL 已固定。",
     "deleteServer": "删除服务器",
     "deleteServerConfirm": "确定从列表中移除「{{name}}」？此操作无法撤销。"
   },
