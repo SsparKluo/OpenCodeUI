@@ -2,7 +2,7 @@ name: Deploy API Proxy Worker
 
 on:
   push:
-    branches: [main]
+    branches: [deploy/cloudflare]
     paths:
       - 'workers/api-proxy/**'
       - '.github/workflows/deploy-worker.yml'
