@@ -1,0 +1,24 @@
+name = "opencode-api-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# 关闭 Worker 的公网 *.workers.dev 入口。
+# 此 Worker 只能通过 service binding 被 Pages Function 调用，外部无法直连。
+# 公网访问入口由 Cloudflare Pages 提供，前面用 Cloudflare Access 保护。
+workers_dev = false
+
+# Workers VPC Service binding: 通过 Cloudflare Tunnel 访问私网/本地的 opencode serve。
+#
+# 使用前需先在 Cloudflare 注册一个 VPC Service（详见 docs/cloudflare-pages.md）：
+#   1. Zero Trust → Networks → Tunnels 创建/启动 tunnel
+#   2. Workers VPC → VPC Services 创建 service，指定 tunnel + 目标 host
+#   3. 把生成的 service_id 填到下方
+#
+# remote = true 让 wrangler dev 本地开发时也能访问远端 VPC Service
+[[vpc_services]]
+binding = "BACKEND_VPC"
+service_id = "019ef2c1-c2c9-7b50-8be7-e2203330156b"
+remote = true
+
+[observability]
+enabled = true

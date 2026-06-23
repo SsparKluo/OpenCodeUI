@@ -29,6 +29,12 @@ src-router/target/
 # Generated material icons (copied from node_modules at postinstall)
 public/material-icons/
 
+# Cloudflare Worker subproject
+workers/api-proxy/node_modules/
+workers/api-proxy/.wrangler/
+workers/api-proxy/wrangler.toml.local
+workers/api-proxy/.dev.vars
+
 # Editor directories and files
 .zed/*
 .vscode/*
