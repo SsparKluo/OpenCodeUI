@@ -348,6 +348,8 @@ npm run tauri build
 > xattr -d com.apple.quarantine /Applications/OpenCode.app
 > ```
 
+> **工具链版本**：Tauri 本地构建需要 Node 22 + Rust 1.85。仓库根目录的 `.tool-versions.bak` 记录了这套版本（asdf/mise 格式），把它恢复成 `.tool-versions` 或用 rustup 单独安装 `1.85.0`。之所以不直接用 `.tool-versions` 是因为 Cloudflare Pages 部署会读取这个文件触发 asdf 安装失败。
+
 ## 项目结构
 
 ```

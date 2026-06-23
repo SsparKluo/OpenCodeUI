@@ -297,6 +297,8 @@ npm run tauri build
 > xattr -d com.apple.quarantine /Applications/OpenCode.app
 > ```
 
+> **Toolchain versions**: Tauri local builds require Node 22 + Rust 1.85. The repo's `.tool-versions.bak` at the root records these versions (asdf/mise format) — restore it to `.tool-versions` or install Rust 1.85 via rustup. The reason it isn't committed as `.tool-versions` is that Cloudflare Pages deployments read that file and fail trying to install via asdf.
+
 ## Project Structure
 
 ```
