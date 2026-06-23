@@ -93,8 +93,10 @@ pnpm wrangler deploy
 **B. GitHub Actions 自动**
 
 仓库 Settings → Secrets 添加：
-- `CLOUDFLARE_API_TOKEN`：需要 `Workers Scripts:Edit` + `Account Settings:Read` + `Connectivity Directory:Read` 权限
+- `CLOUDFLARE_API_TOKEN`：需要 `Workers Scripts:Edit` + `Workers VPC Services:Bind` + `Account Settings:Read` 权限
 - `CLOUDFLARE_ACCOUNT_ID`：账户首页右侧
+
+> `Workers VPC Services:Bind` 是绑定 VPC Service 到 Worker 必需的权限（不是 Read）。Token 权限不够会报 `[code: 10196] credentials are not authorized for the requested VPC resource`。
 
 推送到 `main` 分支且 `workers/api-proxy/**` 有变更时自动部署（见 `.github/workflows/deploy-worker.yml`）。
 
