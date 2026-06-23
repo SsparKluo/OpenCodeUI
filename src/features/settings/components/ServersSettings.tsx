@@ -83,6 +83,7 @@ function ServerItem({
     return (
       <EditServerForm
         server={server}
+        isDefault={!!server.isDefault}
         onSave={updates => {
           onEdit(updates)
           setEditing(false)
@@ -138,33 +139,31 @@ function ServerItem({
         >
           {statusIcon()}
         </button>
+        <button
+          type="button"
+          className="p-2 rounded text-text-400 hover:text-accent-main-100 hover:bg-accent-main-100/10 transition-all"
+          onClick={e => {
+            e.stopPropagation()
+            setEditing(true)
+          }}
+          title={t('servers.editServer')}
+          aria-label={t('servers.editServer')}
+        >
+          <PencilIcon size={12} />
+        </button>
         {!server.isDefault && (
-          <>
-            <button
-              type="button"
-              className="p-2 rounded text-text-400 hover:text-accent-main-100 hover:bg-accent-main-100/10 transition-all"
-              onClick={e => {
-                e.stopPropagation()
-                setEditing(true)
-              }}
-              title={t('servers.editServer')}
-              aria-label={t('servers.editServer')}
-            >
-              <PencilIcon size={12} />
-            </button>
-            <button
-              type="button"
-              className="p-2 rounded text-text-400 hover:text-danger-100 hover:bg-danger-100/10 transition-all"
-              onClick={e => {
-                e.stopPropagation()
-                setConfirmDelete(true)
-              }}
-              title={t('common:remove')}
-              aria-label={t('common:remove')}
-            >
-              <TrashIcon size={12} />
-            </button>
-          </>
+          <button
+            type="button"
+            className="p-2 rounded text-text-400 hover:text-danger-100 hover:bg-danger-100/10 transition-all"
+            onClick={e => {
+              e.stopPropagation()
+              setConfirmDelete(true)
+            }}
+            title={t('common:remove')}
+            aria-label={t('common:remove')}
+          >
+            <TrashIcon size={12} />
+          </button>
         )}
       </div>
 
@@ -191,10 +190,12 @@ function ServerItem({
 
 function EditServerForm({
   server,
+  isDefault,
   onSave,
   onCancel,
 }: {
   server: ServerConfig
+  isDefault: boolean
   onSave: (updates: { name: string; url: string; username?: string; password?: string }) => void
   onCancel: () => void
 }) {
@@ -203,29 +204,31 @@ function EditServerForm({
   const [url, setUrl] = useState(server.url)
   const [username, setUsername] = useState(server.auth?.username || '')
   const [password, setPassword] = useState(server.auth?.password || '')
-  const [showAuth, setShowAuth] = useState(!!server.auth?.password)
+  const [showAuth, setShowAuth] = useState(!!server.auth?.password || isDefault)
   const [error, setError] = useState('')
-  const showHttpsIpWarning = isHttpsIpUrl(url)
+  const showHttpsIpWarning = !isDefault && isHttpsIpUrl(url)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim()) {
+    if (!isDefault && !name.trim()) {
       setError(t('servers.nameRequired'))
       return
     }
-    if (!url.trim()) {
-      setError(t('servers.urlRequired'))
-      return
-    }
-    try {
-      new URL(url)
-    } catch {
-      setError(t('servers.invalidUrl'))
-      return
+    if (!isDefault) {
+      if (!url.trim()) {
+        setError(t('servers.urlRequired'))
+        return
+      }
+      try {
+        new URL(url)
+      } catch {
+        setError(t('servers.invalidUrl'))
+        return
+      }
     }
     onSave({
-      name: name.trim(),
-      url: url.trim(),
+      name: isDefault ? server.name : name.trim(),
+      url: isDefault ? server.url : url.trim(),
       username: password.trim() ? username.trim() || 'opencode' : undefined,
       password: password.trim() || undefined,
     })
@@ -239,47 +242,65 @@ function EditServerForm({
       onSubmit={handleSubmit}
       className="p-3 rounded-lg border border-accent-main-100/30 bg-accent-main-100/[0.02] space-y-2.5"
     >
-      <div>
-        <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">{t('servers.name')}</label>
-        <input
-          type="text"
-          value={name}
-          onChange={e => {
-            setName(e.target.value)
-            setError('')
-          }}
-          placeholder={t('servers.namePlaceholder')}
-          className={inputCls}
-          autoFocus
-        />
-      </div>
-      <div>
-        <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">{t('servers.url')}</label>
-        <input
-          type="text"
-          value={url}
-          onChange={e => {
-            setUrl(e.target.value)
-            setError('')
-          }}
-          placeholder={t('servers.urlPlaceholder')}
-          className={`${inputCls} font-mono`}
-        />
-      </div>
+      {isDefault && (
+        <div className="text-[length:var(--fs-xs)] text-text-400 leading-relaxed">
+          {t('servers.defaultServerAuthHint')}
+        </div>
+      )}
 
-      <button
-        type="button"
-        onClick={() => setShowAuth(!showAuth)}
-        className="flex items-center gap-1.5 text-[length:var(--fs-xs)] text-accent-main-100 hover:text-accent-main-200 transition-colors"
-      >
-        <KeyIcon size={10} />
-        {showAuth ? t('servers.hideAuth') : t('servers.addAuth')}
-      </button>
+      {!isDefault && (
+        <>
+          <div>
+            <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">
+              {t('servers.name')}
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => {
+                setName(e.target.value)
+                setError('')
+              }}
+              placeholder={t('servers.namePlaceholder')}
+              className={inputCls}
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">
+              {t('servers.url')}
+            </label>
+            <input
+              type="text"
+              value={url}
+              onChange={e => {
+                setUrl(e.target.value)
+                setError('')
+              }}
+              placeholder={t('servers.urlPlaceholder')}
+              className={`${inputCls} font-mono`}
+            />
+          </div>
+        </>
+      )}
+
+      {!isDefault && (
+        <button
+          type="button"
+          onClick={() => setShowAuth(!showAuth)}
+          className="flex items-center gap-1.5 text-[length:var(--fs-xs)] text-accent-main-100 hover:text-accent-main-200 transition-colors"
+        >
+          <KeyIcon size={10} />
+          {showAuth ? t('servers.hideAuth') : t('servers.addAuth')}
+        </button>
+      )}
 
       {showAuth && (
         <>
           <div>
-            <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">{t('servers.username')}</label>
+            <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">
+              {t('servers.username')}
+            </label>
             <input
               type="text"
               value={username}
@@ -289,10 +310,13 @@ function EditServerForm({
               }}
               placeholder={t('servers.usernamePlaceholder')}
               className={inputCls}
+              autoFocus={isDefault}
             />
           </div>
           <div>
-            <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">{t('servers.password')}</label>
+            <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">
+              {t('servers.password')}
+            </label>
             <input
               type="password"
               value={password}
@@ -426,7 +450,9 @@ function AddServerForm({
       {showAuth && (
         <>
           <div>
-            <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">{t('servers.username')}</label>
+            <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">
+              {t('servers.username')}
+            </label>
             <input
               type="text"
               value={username}
@@ -439,7 +465,9 @@ function AddServerForm({
             />
           </div>
           <div>
-            <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">{t('servers.password')}</label>
+            <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">
+              {t('servers.password')}
+            </label>
             <input
               type="password"
               value={password}
@@ -466,7 +494,9 @@ function AddServerForm({
             </div>
           )}
 
-          <div className="text-[length:var(--fs-xs)] text-text-400 leading-relaxed">{t('servers.credentialsStorage')}</div>
+          <div className="text-[length:var(--fs-xs)] text-text-400 leading-relaxed">
+            {t('servers.credentialsStorage')}
+          </div>
         </>
       )}
 
@@ -593,7 +623,9 @@ export function ServersSettings() {
           )}
 
           {servers.length === 0 && !addingServer && (
-            <div className="text-[length:var(--fs-md)] text-text-400 text-center py-8">{t('servers.noServersConfigured')}</div>
+            <div className="text-[length:var(--fs-md)] text-text-400 text-center py-8">
+              {t('servers.noServersConfigured')}
+            </div>
           )}
         </div>
       </SettingsCard>
