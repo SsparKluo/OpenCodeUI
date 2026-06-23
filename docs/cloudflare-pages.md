@@ -98,7 +98,7 @@ pnpm wrangler deploy
 
 > `Workers VPC Services:Bind` 是绑定 VPC Service 到 Worker 必需的权限（不是 Read）。Token 权限不够会报 `[code: 10196] credentials are not authorized for the requested VPC resource`。
 
-推送到 `main` 分支且 `workers/api-proxy/**` 有变更时自动部署（见 `.github/workflows/deploy-worker.yml`）。
+推送到 `deploy/cloudflare` 分支且 `workers/api-proxy/**` 有变更时自动部署（见 `.github/workflows/deploy-worker.yml`）。
 
 ### 5. 创建 Pages 项目
 
@@ -107,7 +107,7 @@ Cloudflare Dashboard → **Workers & Pages** → **Create** → **Pages** → **
 | 字段 | 填写 |
 |---|---|
 | Repository | `OpenCodeUI` |
-| Branch | `main` |
+| Branch | `deploy/cloudflare` |
 | Build command | `npm run build` |
 | Build output directory | `dist` |
 | Environment variables | `VITE_API_BASE_URL` = `/api` |
