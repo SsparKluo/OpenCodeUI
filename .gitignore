@@ -34,6 +34,8 @@ workers/api-proxy/node_modules/
 workers/api-proxy/.wrangler/
 workers/api-proxy/wrangler.toml.local
 workers/api-proxy/.dev.vars
+# pnpm 11+ generates this for build-script allowlist; CI uses pnpm 9 which doesn't need it
+workers/api-proxy/pnpm-workspace.yaml
 
 # Editor directories and files
 .zed/*
