@@ -314,7 +314,7 @@ const SubSessionView = memo(function SubSessionView({ sessionId }: SubSessionVie
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
-    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 32
+    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
   }, [])
 
   // 自动滚动（仅在用户已在底部时跟随）

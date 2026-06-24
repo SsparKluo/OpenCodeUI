@@ -75,7 +75,7 @@ export const ReasoningPartView = memo(function ReasoningPartView({ part, isStrea
   const handleCapsuleScroll = useCallback(() => {
     const el = scrollAreaRef.current
     if (!el) return
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 32
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60
     setIsAtBottom(atBottom)
   }, [])
 
