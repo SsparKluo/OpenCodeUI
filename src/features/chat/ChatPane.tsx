@@ -223,7 +223,7 @@ export const ChatPane = memo(function ChatPane({
   }, [])
 
   // ============================================
-  // Input Box Height
+  // Input Box Height (for padding-bottom clearance)
   // ============================================
   const [inputBoxHeight, setInputBoxHeight] = useState(0)
   const inputBoxWrapperRef = useRef<HTMLDivElement>(null)
@@ -239,6 +239,15 @@ export const ChatPane = memo(function ChatPane({
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+
+  // Sync detected InputBox height → virtualizer clearance item.
+  // `resizeItem` bypasses the virtualizer's item-size cache, which
+  // `estimateSize` alone cannot update after the initial measurement.
+  useEffect(() => {
+    if (inputBoxHeight > 0) {
+      chatAreaRef.current?.updateClearanceHeight(inputBoxHeight)
+    }
+  }, [inputBoxHeight])
 
   // ============================================
   // Chat Session
