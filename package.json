@@ -29,6 +29,7 @@
     "@codemirror/view": "^6.41.1",
     "@opencode-ai/sdk": "^1.16.0",
     "@streamdown/math": "^1.0.2",
+    "@tanstack/react-virtual": "^3.14.3",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-dialog": "^2.6.0",
     "@tauri-apps/plugin-fs": "^2.4.5",
