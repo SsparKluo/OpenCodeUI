@@ -251,9 +251,22 @@ export const ChatArea = memo(
 
       // When an item above the viewport changes size, adjust scrollTop to keep
       // the visible content stable. Items below the viewport changing size
-      // should NOT trigger any scroll adjustment. This is the core jitter fix.
-      pageVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
-        item.end <= (instance.scrollOffset ?? 0)
+      // should NOT trigger any scroll adjustment by default, because that
+      // causes jitter. The exception is when the user is actively following
+      // content (autoScroll.userScrolled = false) — items growing below the
+      // viewport should push the scroll down so the new content stays visible
+      // instead of being hidden behind the input box.
+      pageVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
+        const scrollOffset = instance.scrollOffset ?? 0
+        // Item is above/at the viewport → adjust to keep visual position stable
+        if (item.end <= scrollOffset) return true
+        // User is following content → allow adjustment for items below
+        // viewport so expanded content stays visible (prevents content from
+        // being hidden behind the input box during auto-expansion).
+        // Does NOT trigger when the user has manually scrolled away.
+        if (!autoScroll.userScrolled) return true
+        return false
+      }
 
       const clearPendingLoadMoreTimer = useCallback(() => {
         if (pendingLoadMoreTimerRef.current === null) return
