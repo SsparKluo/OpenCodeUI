@@ -147,6 +147,18 @@ configureNativeShell()
 
 // 全局错误处理 - 防止未捕获错误导致页面刷新
 window.addEventListener('error', event => {
+  // Chrome fires an `error` event when ResizeObserver callbacks exceed the
+  // browser's internal iteration limit per frame.  This is a benign diagnostic,
+  // not a real JavaScript error — the browser correctly caps the cycle and
+  // continues.  Silently ignore it; there is nothing to fix in app code.
+  if (
+    event.message &&
+    typeof event.message === 'string' &&
+    event.message.includes('ResizeObserver loop')
+  ) {
+    event.preventDefault()
+    return
+  }
   globalErrorHandler('uncaught error', event.error)
   event.preventDefault()
 })

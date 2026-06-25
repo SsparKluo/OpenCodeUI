@@ -15,7 +15,7 @@ import { SlashCommandMenu, type SlashCommandMenuHandle } from '../slash-command'
 import { InputToolbar } from './input/InputToolbar'
 import type { ModelSelectorHandle } from './ModelSelector'
 import { InputFooter } from './input/InputFooter'
-import { FloatingActions, CollapsedCapsule } from './input/InputActions'
+import { FloatingActions, CollapsedBar } from './input/InputActions'
 import { useMobileCollapse } from './input/useMobileCollapse'
 import { useAttachmentRail } from './input/useAttachmentRail'
 import { useInputHistory } from './input/useInputHistory'
@@ -30,6 +30,7 @@ import {
 } from './input/inputUtils'
 import { keybindingStore, matchesKeybinding } from '../../store/keybindingStore'
 import { themeStore } from '../../store/themeStore'
+import { useTheme } from '../../hooks/useTheme'
 import { useChatViewport } from './chatViewport'
 import type { ApiAgent } from '../../api/client'
 import type { ModelInfo, FileCapabilities } from '../../api'
@@ -215,6 +216,7 @@ function InputBoxComponent({
     [fileCapabilitiesProp, supportsImages],
   )
   const { externalFileDropMode } = useSyncExternalStore(themeStore.subscribe, themeStore.getSnapshot)
+  const { isWideMode } = useTheme()
 
   // 是否有任何文件附件能力
   const supportsAnyFile = fileCaps.image || fileCaps.pdf || fileCaps.audio || fileCaps.video
@@ -274,11 +276,9 @@ function InputBoxComponent({
   // ============================================
   // Mobile Input Dock: 滚动收起/展开（逻辑在 useMobileCollapse hook 中）
   // ============================================
-  const hasContent = text.trim().length > 0 || attachments.length > 0
-  const { isCollapsed, expandedHeight, handleExpandInput, handleFocus, handleBlur, handleContainerPointerDown } =
+  const { isCollapsed, handleExpandInput, handleFocus, handleBlur, handleContainerPointerDown } =
     useMobileCollapse({
       enabled: interaction.enableCollapsedInputDock,
-      hasContent,
       isAtBottom,
       textareaRef,
       inputContainerRef,
@@ -1207,18 +1207,17 @@ function InputBoxComponent({
   return (
     <div className="w-full">
       <div
-        className={`mx-auto max-w-3xl pointer-events-auto transition-[max-width] duration-300 ease-in-out ${isCompact ? 'px-2' : 'px-4'}`}
+        className={`mx-auto ${isWideMode ? 'max-w-[1168px]' : 'max-w-[688px]'} pointer-events-auto transition-[max-width] duration-300 ease-in-out ${isCompact ? 'px-2' : 'px-4'}`}
         style={{ paddingBottom: bottomDockPadding }}
       >
         <div
           ref={contentWrapRef}
           onPointerDown={handleContainerPointerDown}
-          className={`relative flex flex-col gap-2 ${isCollapsed ? 'justify-end' : ''}`}
-          style={isCollapsed && expandedHeight > 0 ? { minHeight: expandedHeight } : undefined}
+          className="relative flex flex-col"
         >
-          {/* FloatingActions — 
+          {/* FloatingActions —
               展开态：absolute 定位在内容区上方，不占文档流，避免显隐变化影响高度导致滚动抖动
-              收起态：正常文档流，紧贴胶囊上方
+              收起态：正常文档流，紧贴紧凑栏上方
               始终同一 DOM 节点，切换时 FloatingActions 不 remount，避免入场动画闪烁 */}
           <div
             data-floating-actions
@@ -1243,17 +1242,29 @@ function InputBoxComponent({
             </div>
           </div>
 
-          {/* Collapsed Capsule - 移动端收起状态 */}
-          {isCollapsed && (
-            <CollapsedCapsule
-              onExpand={handleExpandInput}
-              showScrollToBottom={showScrollToBottom}
-              onScrollToBottom={onScrollToBottom}
-            />
-          )}
+          {/* 收起态紧凑栏 track：收起时撑开，展开时坍缩为 0（grid-rows + opacity 过渡，同附件展开所用的 CSS 模式） */}
+          <div
+            className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+              isCollapsed ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+            }`}
+          >
+            <div className="overflow-hidden">
+              <CollapsedBar
+                onExpand={handleExpandInput}
+                placeholder={isCompact ? t('inputBox.replyToAgentMobile') : t('inputBox.replyToAgent')}
+                showScrollToBottom={showScrollToBottom}
+                onScrollToBottom={onScrollToBottom}
+              />
+            </div>
+          </div>
 
-          {!isCollapsed && (
-            <>
+          {/* 展开态完整输入 track：展开时撑开，收起时坍缩为 0；始终挂载避免 remount，靠 0fr + overflow-hidden + pointer-events-none 隐藏 */}
+          <div
+            className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+              !isCollapsed ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+            }`}
+          >
+            <div className="overflow-hidden">
               {/* Wrapper — 菜单在 glass 容器外，避免嵌套 backdrop-filter 导致模糊失效 */}
               <div className="relative z-30">
                 {/* @ Mention Menu */}
@@ -1393,25 +1404,23 @@ function InputBoxComponent({
                   </div>
                 </div>
               </div>
-            </>
-          )}
-        </div>
 
-        {/* Footer: 输入框下方固定高度区域，内容垂直水平居中 */}
-        {!isCollapsed && (
-          <div
-            ref={footerRef}
-            onPointerDown={handleContainerPointerDown}
-            className="h-8 flex items-center justify-center"
-          >
-            <InputFooter
-              paneId={paneId}
-              sessionId={sessionId}
-              onNewChat={onNewChat}
-              inputContainerRef={inputContainerRef}
-            />
+              {/* Footer — 展开态固定高度区域，随 track 一起显隐 */}
+              <div
+                ref={footerRef}
+                onPointerDown={handleContainerPointerDown}
+                className="h-8 flex items-center justify-center"
+              >
+                <InputFooter
+                  paneId={paneId}
+                  sessionId={sessionId}
+                  onNewChat={onNewChat}
+                  inputContainerRef={inputContainerRef}
+                />
+              </div>
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   )
