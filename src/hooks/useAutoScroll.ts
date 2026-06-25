@@ -284,18 +284,19 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
 
     if (distanceFromBottom(el) < bottomThresholdRef.current) {
       if (userScrolledRef.current) setUserScrolled(false)
-      // Deferred snap: once the user stops scrolling within the snap zone,
-      // smoothly scroll to the very bottom so latest content is fully visible.
-      if (snapTimerRef.current === null) {
-        snapTimerRef.current = setTimeout(() => {
-          snapTimerRef.current = null
-          const current = scrollElRef.current
-          if (!current || userScrolledRef.current) return
-          if (distanceFromBottom(current) < bottomThresholdRef.current) {
-            scrollToBottomNow('smooth')
-          }
-        }, 150)
-      }
+      // Deferred snap: debounced — resets on each scroll event so it only
+      // fires 150ms after the user has stopped scrolling. Uses instant
+      // scroll ('auto') so no intermediate scroll events are generated that
+      // could cancel follow mode.
+      if (snapTimerRef.current !== null) clearTimeout(snapTimerRef.current)
+      snapTimerRef.current = setTimeout(() => {
+        snapTimerRef.current = null
+        const current = scrollElRef.current
+        if (!current || userScrolledRef.current) return
+        if (distanceFromBottom(current) < bottomThresholdRef.current) {
+          scrollToBottomNow('auto')
+        }
+      }, 150)
       return
     }
 
