@@ -183,12 +183,12 @@ describe('buildChatPages', () => {
 
     const pages = buildChatPages(messages, 2)
 
-    // render order: newest page first
+    // render order: oldest page first
     expect(pages).toHaveLength(3)
-    expect(pages[0].messageIds).toEqual(['user-2', 'assistant-3'])
+    expect(pages[0].messageIds).toEqual(['user-1'])
     // assistant-1 + assistant-2 应该保持在同一个 group/page，不被拆开
     expect(pages[1].messageIds).toEqual(['assistant-1', 'assistant-2'])
-    expect(pages[2].messageIds).toEqual(['user-1'])
+    expect(pages[2].messageIds).toEqual(['user-2', 'assistant-3'])
   })
 })
 
@@ -441,7 +441,8 @@ describe('reconcileStableChatPages', () => {
     ]
     const nextPages = reconcileStableChatPages({ currentPages, nextMessages, allocateKey: alloc, pageMessageCount: 2 })
 
-    expect(nextPages.slice(0, currentPages.length).map(page => page.key)).toEqual(currentPages.map(page => page.key))
+    // 老的页在 oldest-first 中应保持末尾（新消息 prepend 到开头）
+    expect(nextPages.slice(nextPages.length - currentPages.length).map(page => page.key)).toEqual(currentPages.map(page => page.key))
   })
 
   it('only rebuilds the newest page segment when appending new messages', () => {
@@ -456,8 +457,8 @@ describe('reconcileStableChatPages', () => {
     const nextMessages = [...currentMessages, createUserMessage('user-3', 7), createAssistantMessage('assistant-3', [], 8, 9)]
     const nextPages = reconcileStableChatPages({ currentPages, nextMessages, allocateKey: alloc, pageMessageCount: 2 })
 
-    // 老的第二页 key 应该保住，避免整段历史一起重切
-    expect(nextPages[nextPages.length - 1].key).toBe(currentPages[currentPages.length - 1].key)
+    // 最旧的页 key 应该保住，避免整段历史一起重切
+    expect(nextPages[0].key).toBe(currentPages[0].key)
   })
 })
 
