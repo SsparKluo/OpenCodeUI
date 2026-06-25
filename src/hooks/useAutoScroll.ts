@@ -84,6 +84,7 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
   const settlingRef = useRef(false)
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Mirror `userScrolled` to React state so consumers can re-render on change.
   const [userScrolled, setUserScrolledState] = useState(false)
@@ -206,8 +207,6 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
 
   const scrollToBottom = useCallback(
     (force: boolean) => {
-      if (!force && !active()) return
-
       if (force && userScrolledRef.current) setUserScrolled(false)
 
       const el = scrollElRef.current
@@ -267,6 +266,13 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
   // ============================================================
   // handleScroll — update userScrolled from current scroll position
   // ============================================================
+  const clearSnapTimer = useCallback(() => {
+    if (snapTimerRef.current !== null) {
+      clearTimeout(snapTimerRef.current)
+      snapTimerRef.current = null
+    }
+  }, [])
+
   const handleScroll = useCallback(() => {
     const el = scrollElRef.current
     if (!el) return
@@ -278,8 +284,23 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
 
     if (distanceFromBottom(el) < bottomThresholdRef.current) {
       if (userScrolledRef.current) setUserScrolled(false)
+      // Deferred snap: once the user stops scrolling within the snap zone,
+      // smoothly scroll to the very bottom so latest content is fully visible.
+      if (snapTimerRef.current === null) {
+        snapTimerRef.current = setTimeout(() => {
+          snapTimerRef.current = null
+          const current = scrollElRef.current
+          if (!current || userScrolledRef.current) return
+          if (distanceFromBottom(current) < bottomThresholdRef.current) {
+            scrollToBottomNow('smooth')
+          }
+        }, 150)
+      }
       return
     }
+
+    // User scrolled outside the snap zone → cancel pending snap
+    clearSnapTimer()
 
     // Ignore scroll events triggered by our own scrollToBottom calls — they
     // can fire asynchronously after new content has been inserted, which
@@ -290,7 +311,7 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
     }
 
     stop()
-  }, [scrollToBottom, setUserScrolled, stop])
+  }, [scrollToBottom, setUserScrolled, stop, scrollToBottomNow, clearSnapTimer])
 
   // ============================================================
   // handleInteraction — user is interacting with the content (text
@@ -340,8 +361,10 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
   }, [])
 
   // ============================================================
-  // ResizeObserver on content — keep the bottom locked in the same
-  // frame when content grows while we're following.
+  // ResizeObserver on content — keep the bottom locked in view.
+  // Fires on every content height change (streaming, block expansion,
+  // tool results rendering). Only gated by userScrolled — we always
+  // follow when the user hasn't explicitly scrolled away.
   // ============================================================
   useEffect(() => {
     if (!contentEl || typeof ResizeObserver === 'undefined') return
@@ -352,7 +375,6 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
         if (userScrolledRef.current) setUserScrolled(false)
         return
       }
-      if (!active()) return
       if (userScrolledRef.current) return
       scrollToBottom(false)
     })
@@ -409,14 +431,9 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
   // ============================================================
   useEffect(() => {
     return () => {
-      if (settleTimerRef.current !== null) {
-        clearTimeout(settleTimerRef.current)
-        settleTimerRef.current = null
-      }
-      if (autoTimerRef.current !== null) {
-        clearTimeout(autoTimerRef.current)
-        autoTimerRef.current = null
-      }
+      if (snapTimerRef.current !== null) clearTimeout(snapTimerRef.current)
+      if (settleTimerRef.current !== null) clearTimeout(settleTimerRef.current)
+      if (autoTimerRef.current !== null) clearTimeout(autoTimerRef.current)
     }
   }, [])
 
