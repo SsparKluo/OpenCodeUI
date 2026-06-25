@@ -223,24 +223,6 @@ export const ChatPane = memo(function ChatPane({
   }, [])
 
   // ============================================
-  // Input Box Height
-  // ============================================
-  const [inputBoxHeight, setInputBoxHeight] = useState(0)
-  const inputBoxWrapperRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const el = inputBoxWrapperRef.current
-    if (!el) return
-    const ro = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        setInputBoxHeight(entry.contentRect.height)
-      }
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
-  // ============================================
   // Chat Session
   // ============================================
   const {
@@ -787,7 +769,7 @@ export const ChatPane = memo(function ChatPane({
         </div>
       )}
 
-      <div className="absolute inset-0">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <InlineToolRequestContext.Provider value={inlineToolRequestCtx}>
           <ErrorBoundary onOpenSettings={onOpenSettings}>
             <ChatArea
@@ -811,7 +793,6 @@ export const ChatPane = memo(function ChatPane({
               canUndo={canUndo}
               registerMessage={registerMessage}
               retryStatus={retryStatus}
-              bottomPadding={inputBoxHeight}
               onVisibleMessageIdsChange={handleVisibleIdsChange}
               onAtBottomChange={setIsAtBottom}
             />
@@ -827,7 +808,7 @@ export const ChatPane = memo(function ChatPane({
         onScrollToMessageId={handleOutlineScrollToMessage}
       />
 
-      <div ref={inputBoxWrapperRef} className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
+      <div className="relative z-10 pointer-events-none shrink-0">
         {(showCancelHint || (fullAutoHint && !showCancelHint)) && (
           <div className="absolute bottom-full inset-x-0 flex justify-center pb-2 pointer-events-none z-20">
             <div className="px-3 py-1.5 glass border border-border-200/60 rounded-lg shadow-lg text-[length:var(--fs-sm)] text-text-300 animate-in fade-in slide-in-from-bottom-2 duration-150">

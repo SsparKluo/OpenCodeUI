@@ -110,7 +110,8 @@ export function buildChatPages(messages: Message[], pageMessageCount = PAGE_MESS
     renderPages.push(buildChatPage(currentRows))
   }
 
-  return renderPages
+  // 构建时是按 newest→oldest 顺序 push 的，反转使 pages[0] = 最旧（顶部）
+  return renderPages.reverse()
 }
 
 function buildChatPage(rows: MessageGroupRow[]): ChatPage {
@@ -138,10 +139,8 @@ function flattenPageMessagesChronological(page: ChatPage): Message[] {
 }
 
 function flattenPagesMessageIdsChronological(pages: ChatPage[]): string[] {
-  return pages
-    .slice()
-    .reverse()
-    .flatMap(page => page.messageIds)
+  // pages 已经是 chrono 顺序（oldest first），可直接展开
+  return pages.flatMap(page => page.messageIds)
 }
 
 export function findMessageSequenceOffset(nextIds: string[], previousIds: string[]): number {
@@ -209,17 +208,18 @@ export function reconcileStableChatPages(options: {
 
   let nextPages = refreshedPages
   if (suffixMessages.length > 0) {
+    // suffixed 消息是最新的，应替换页列表末尾（最新页）
     const newestSegmentMessages = [
-      ...(refreshedPages.length > 0 ? flattenPageMessagesChronological(refreshedPages[0]) : []),
+      ...(refreshedPages.length > 0 ? flattenPageMessagesChronological(refreshedPages[refreshedPages.length - 1]) : []),
       ...suffixMessages,
     ]
     const rebuiltNewestPages = buildStableChatPages(newestSegmentMessages, allocateKey, pageMessageCount)
-    nextPages = [...rebuiltNewestPages, ...refreshedPages.slice(1)]
+    nextPages = [...refreshedPages.slice(0, -1), ...rebuiltNewestPages]
   }
 
   if (prefixMessages.length > 0) {
     const prependedOlderPages = buildStableChatPages(prefixMessages, allocateKey, pageMessageCount)
-    nextPages = [...nextPages, ...prependedOlderPages]
+    nextPages = [...prependedOlderPages, ...nextPages]
   }
 
   return nextPages

@@ -48,3 +48,6 @@ workers/api-proxy/pnpm-workspace.yaml
 *.njsproj
 *.sln
 *.sw?
+
+# Worktrees (managed by pm-worktree)
+.agents/worktree/

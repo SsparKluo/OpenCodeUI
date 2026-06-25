@@ -3,14 +3,12 @@ import type { CollapsedDialogInfo } from '../InputBox'
 
 // ============================================
 // useMobileCollapse
-// 移动端输入框滚动收起/展开（胶囊模式）的全部状态与逻辑
+// 移动端输入框滚动收起/展开（紧凑栏模式）的全部状态与逻辑
 // ============================================
 
 interface UseMobileCollapseOptions {
   /** 是否启用移动端输入交互（只代表交互，不代表 UI） */
   enabled: boolean
-  /** 文本内容是否非空 */
-  hasContent: boolean
   /** 是否处于页面底部 */
   isAtBottom: boolean
   /** textarea 的 ref */
@@ -29,11 +27,9 @@ interface UseMobileCollapseOptions {
 }
 
 interface UseMobileCollapseReturn {
-  /** 是否处于收起（胶囊）状态 */
+  /** 是否处于收起（紧凑栏）状态 */
   isCollapsed: boolean
-  /** 展开态时采样到的内容区高度（用于收起时撑占位） */
-  expandedHeight: number
-  /** 点击胶囊展开 */
+  /** 点击紧凑栏展开 */
   handleExpandInput: () => void
   /** textarea onFocus */
   handleFocus: () => void
@@ -45,7 +41,6 @@ interface UseMobileCollapseReturn {
 
 export function useMobileCollapse({
   enabled,
-  hasContent,
   isAtBottom,
   textareaRef,
   inputContainerRef,
@@ -73,12 +68,9 @@ export function useMobileCollapse({
 
   // 直接计算是否收起（纯派生值）
   const hasPendingDialogs = !!collapsedPermission || !!collapsedQuestion
-  const isCollapsed = enabled && !isAtBottom && !hasContent && !isFocused && !hasPendingDialogs
+  const isCollapsed = enabled && !isAtBottom && !isFocused && !hasPendingDialogs
 
-  // 展开态内容区高度（用于收起时占位，防 isAtBottom 反馈循环）
-  const [expandedHeight, setExpandedHeight] = useState(0)
-
-  // ---- 点击胶囊展开 ----
+  // ---- 点击紧凑栏展开 ----
   const handleExpandInput = useCallback(() => {
     setIsFocused(true)
     requestAnimationFrame(() => {
@@ -151,8 +143,14 @@ export function useMobileCollapse({
     const handleOutsidePointerDown = (e: PointerEvent) => {
       if (isInsideInputArea(e.target as Node)) return
 
-      // 光标仍在输入框内时，不清除（移动端滚动/触摸可能不会触发 blur）
-      if (document.activeElement === textareaRef.current) return
+      // textarea 聚焦时，用户触摸聊天区 → 清除 isFocused，允许收起。
+      // 移动端滑动聊天区不会触发 textarea blur，需要靠此逃逸阀兜底。
+      if (document.activeElement === textareaRef.current) {
+        setIsFocused(false)
+        return
+      }
+
+      // activeElement 是输入区内其他元素（如 portal 弹窗）→ 不清除
       if (isInsideInputArea(document.activeElement)) return
 
       setIsFocused(false)
@@ -165,22 +163,6 @@ export function useMobileCollapse({
     }
   }, [isFocused, enabled, isInsideInputArea, textareaRef])
 
-  // ---- 持续追踪展开态内容区高度 ----
-  useEffect(() => {
-    const el = contentWrapRef.current
-    if (!el) return
-    const ro = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        // 只在展开态时采样，收起态的高度不更新
-        if (!isCollapsed) {
-          setExpandedHeight(entry.contentRect.height)
-        }
-      }
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [isCollapsed, contentWrapRef])
-
   // ---- 注册输入框容器用于动画 ----
   useEffect(() => {
     if (registerInputBox) {
@@ -191,7 +173,6 @@ export function useMobileCollapse({
 
   return {
     isCollapsed,
-    expandedHeight,
     handleExpandInput,
     handleFocus,
     handleBlur,
