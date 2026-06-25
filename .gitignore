@@ -40,3 +40,6 @@ public/material-icons/
 *.njsproj
 *.sln
 *.sw?
+
+# Worktrees (managed by pm-worktree)
+.agents/worktree/
