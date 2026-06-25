@@ -23,6 +23,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { AT_BOTTOM_THRESHOLD_PX, BOTTOM_NUDGE_TOLERANCE_PX } from '../constants/ui'
 
 export interface UseAutoScrollOptions {
   /** Whether the content is actively growing (e.g. assistant is streaming). */
@@ -31,7 +32,10 @@ export interface UseAutoScrollOptions {
   onUserInteracted?: () => void
   /** CSS overflow-anchor mode. Defaults to "dynamic" (auto when following, none when user-scrolled). */
   overflowAnchor?: 'none' | 'auto' | 'dynamic'
-  /** Pixel threshold for "is at the bottom". Defaults to 10. */
+  /**
+   * Pixel threshold for "is at the bottom" — shared by the to-bottom button,
+   * auto-follow, and auto-snap (see AT_BOTTOM_THRESHOLD_PX in constants/ui.ts).
+   */
   bottomThreshold?: number
   /**
    * True when the scroll container lays out content in reverse (e.g.
@@ -65,7 +69,7 @@ export interface UseAutoScrollReturn {
 }
 
 export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollReturn {
-  const { working, onUserInteracted, overflowAnchor = 'dynamic', bottomThreshold = 10, reverse = false } = options
+  const { working, onUserInteracted, overflowAnchor = 'dynamic', bottomThreshold = AT_BOTTOM_THRESHOLD_PX, reverse = false } = options
 
   // State-backed refs: when these change, all dependent effects re-attach.
   const [scrollEl, setScrollEl] = useState<HTMLElement | null>(null)
@@ -84,7 +88,6 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
   const settlingRef = useRef(false)
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Mirror `userScrolled` to React state so consumers can re-render on change.
   const [userScrolled, setUserScrolledState] = useState(false)
@@ -172,8 +175,10 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
       autoRef.current = undefined
       return false
     }
-    return Math.abs(el.scrollTop - a.top) < 2
+    return Math.abs(el.scrollTop - a.top) < BOTTOM_NUDGE_TOLERANCE_PX
   }
+
+
 
   // ============================================================
   // Scroll-to-bottom
@@ -185,8 +190,8 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
     if (!el) return
     markAuto(el)
     if (reverseRef.current) {
-      // For `flex-col-reverse` containers, "at bottom" is scrollTop = 0.
-      // `scrollTo({ top: 0, behavior: 'smooth' })` respects smooth behavior;
+      // `flex-col-reverse` containers: "at bottom" is `scrollTop = 0`.
+      // `scrollTo({ top: 0, behavior })` respects smooth behavior;
       // `scrollTop = 0` bypasses CSS `scroll-behavior: smooth`.
       if (behavior === 'smooth') {
         el.scrollTo({ top: 0, behavior })
@@ -215,13 +220,14 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
       if (!force && userScrolledRef.current) return
 
       const distance = distanceFromBottom(el)
-      if (distance < 2) {
+      if (distance < BOTTOM_NUDGE_TOLERANCE_PX) {
         markAuto(el)
         return
       }
 
-      // For auto-following content we prefer immediate updates to avoid
-      // visible "catch up" animations while content is still settling.
+      // OpenCode-style: auto-follow always uses instant scroll.
+      // Smooth scroll generates intermediate scroll events that can
+      // trigger handleScroll → stop(), killing the auto-follow state.
       scrollToBottomNow('auto')
     },
     // `markAuto` reads only refs — identity is stable.
@@ -266,13 +272,6 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
   // ============================================================
   // handleScroll — update userScrolled from current scroll position
   // ============================================================
-  const clearSnapTimer = useCallback(() => {
-    if (snapTimerRef.current !== null) {
-      clearTimeout(snapTimerRef.current)
-      snapTimerRef.current = null
-    }
-  }, [])
-
   const handleScroll = useCallback(() => {
     const el = scrollElRef.current
     if (!el) return
@@ -284,24 +283,8 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
 
     if (distanceFromBottom(el) < bottomThresholdRef.current) {
       if (userScrolledRef.current) setUserScrolled(false)
-      // Deferred snap: debounced — resets on each scroll event so it only
-      // fires 150ms after the user has stopped scrolling. Uses instant
-      // scroll ('auto') so no intermediate scroll events are generated that
-      // could cancel follow mode.
-      if (snapTimerRef.current !== null) clearTimeout(snapTimerRef.current)
-      snapTimerRef.current = setTimeout(() => {
-        snapTimerRef.current = null
-        const current = scrollElRef.current
-        if (!current || userScrolledRef.current) return
-        if (distanceFromBottom(current) < bottomThresholdRef.current) {
-          scrollToBottomNow('auto')
-        }
-      }, 150)
       return
     }
-
-    // User scrolled outside the snap zone → cancel pending snap
-    clearSnapTimer()
 
     // Ignore scroll events triggered by our own scrollToBottom calls — they
     // can fire asynchronously after new content has been inserted, which
@@ -312,7 +295,7 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
     }
 
     stop()
-  }, [scrollToBottom, setUserScrolled, stop, scrollToBottomNow, clearSnapTimer])
+  }, [scrollToBottom, setUserScrolled, stop])
 
   // ============================================================
   // handleInteraction — user is interacting with the content (text
@@ -362,22 +345,29 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
   }, [])
 
   // ============================================================
-  // ResizeObserver on content — keep the bottom locked in view.
-  // Fires on every content height change (streaming, block expansion,
-  // tool results rendering). Only gated by userScrolled — we always
-  // follow when the user hasn't explicitly scrolled away.
+  // ResizeObserver on content — keep the bottom locked in view
+  // whenever the user hasn't scrolled away, regardless of
+  // streaming state. This ensures pressing Enter to send a
+  // message, tool output showing, or any post-stream DOM growth
+  // still keeps the bottom visible.
   // ============================================================
   useEffect(() => {
     if (!contentEl || typeof ResizeObserver === 'undefined') return
 
     const observer = new ResizeObserver(() => {
-      const scrollElLocal = scrollElRef.current
-      if (scrollElLocal && !canScroll(scrollElLocal)) {
-        if (userScrolledRef.current) setUserScrolled(false)
-        return
+      try {
+        const scrollElLocal = scrollElRef.current
+        if (scrollElLocal && !canScroll(scrollElLocal)) {
+          if (userScrolledRef.current) setUserScrolled(false)
+          return
+        }
+        if (userScrolledRef.current) return
+        scrollToBottom(false)
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.trace('[useAutoScroll RO] error', err)
+        }
       }
-      if (userScrolledRef.current) return
-      scrollToBottom(false)
     })
     observer.observe(contentEl)
     return () => observer.disconnect()
@@ -432,9 +422,14 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
   // ============================================================
   useEffect(() => {
     return () => {
-      if (snapTimerRef.current !== null) clearTimeout(snapTimerRef.current)
-      if (settleTimerRef.current !== null) clearTimeout(settleTimerRef.current)
-      if (autoTimerRef.current !== null) clearTimeout(autoTimerRef.current)
+      if (settleTimerRef.current !== null) {
+        clearTimeout(settleTimerRef.current)
+        settleTimerRef.current = null
+      }
+      if (autoTimerRef.current !== null) {
+        clearTimeout(autoTimerRef.current)
+        autoTimerRef.current = null
+      }
     }
   }, [])
 

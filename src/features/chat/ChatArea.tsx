@@ -48,6 +48,7 @@ const LOAD_MORE_ROOT_MARGIN = '240px 0px 0px 0px'
 const LOAD_MORE_WHEEL_COOLDOWN_MS = 90
 const LOAD_MORE_DEFER_MS = 100
 const PENDING_SCROLL_TARGET_KEEPALIVE_MS = 900
+const SCROLL_GESTURE_WINDOW_MS = 250
 
 type LoadMoreAnchorSnapshot = {
   messageId: string
@@ -100,7 +101,6 @@ interface ChatAreaProps {
   canUndo?: boolean
   registerMessage?: (id: string, element: HTMLElement | null) => void
   retryStatus?: RetryStatusInlineData | null
-  bottomPadding?: number
   onVisibleMessageIdsChange?: (ids: string[]) => void
   onAtBottomChange?: (atBottom: boolean) => void
 }
@@ -111,8 +111,6 @@ export type ChatAreaHandle = {
   scrollToLastMessage: () => void
   scrollToMessageIndex: (index: number) => void
   scrollToMessageId: (messageId: string) => void
-  /** Resize the bottom-clearance virtual item (input-box spacer). */
-  updateClearanceHeight: (height: number) => void
 }
 
 export const ChatArea = memo(
@@ -138,7 +136,6 @@ export const ChatArea = memo(
         hasMoreHistory: _hasMoreHistory = false,
         registerMessage,
         retryStatus = null,
-        bottomPadding = 0,
         onVisibleMessageIdsChange,
         onAtBottomChange,
       },
@@ -166,6 +163,7 @@ export const ChatArea = memo(
       const loadMoreRequestIdRef = useRef(0)
       const topSentinelVisibleRef = useRef(false)
       const lastWheelInputAtRef = useRef(0)
+      const lastUserGestureAtRef = useRef(0)
       const tryLoadMoreRef = useRef<() => void>(NOOP)
 
       useEffect(() => {
@@ -176,8 +174,8 @@ export const ChatArea = memo(
 
       const { isWideMode } = useTheme()
       const { presentation } = useChatViewport()
-      const atBottomThreshold = presentation.isCompact ? 150 : AT_BOTTOM_THRESHOLD_PX
-      const messagePaddingClass = presentation.isCompact ? 'px-3' : 'px-5'
+      const atBottomThreshold = AT_BOTTOM_THRESHOLD_PX
+      const messagePaddingClass = presentation.isCompact ? 'px-3' : 'px-6'
       const messageMaxWidthClass = isWideMode ? 'max-w-[95%] xl:max-w-6xl' : 'max-w-2xl'
       const autoScroll = useAutoScroll({
         working: _isStreaming,
@@ -232,41 +230,24 @@ export const ChatArea = memo(
       // Each page is a virtual item. `anchorTo: 'end'` pins the bottom when
       // the last item grows (streaming). `measureElement` tracks dynamic heights.
       const pageVirtualizer = useVirtualizer({
-        // One extra virtual item at the end for input-box clearance.
-        count: activePages.length + (bottomPadding > 0 ? 1 : 0),
+        count: activePages.length,
         getScrollElement: () => scrollRef.current,
         estimateSize: (index) => {
-          if (index === activePages.length) return bottomPadding
           const page = activePages[index]
           return measuredPageHeights[page.key] ?? page.estimatedHeight
         },
-        getItemKey: (index) => {
-          if (index === activePages.length) return '__clearance__'
-          return activePages[index]?.key ?? index
-        },
+        getItemKey: (index) => activePages[index]?.key ?? index,
         anchorTo: 'end',
+        followOnAppend: true,
         overscan: 20,
         scrollEndThreshold: atBottomThreshold,
       })
 
       // When an item above the viewport changes size, adjust scrollTop to keep
       // the visible content stable. Items below the viewport changing size
-      // should NOT trigger any scroll adjustment by default, because that
-      // causes jitter. The exception is when the user is actively following
-      // content (autoScroll.userScrolled = false) — items growing below the
-      // viewport should push the scroll down so the new content stays visible
-      // instead of being hidden behind the input box.
-      pageVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
-        const scrollOffset = instance.scrollOffset ?? 0
-        // Item is above/at the viewport → adjust to keep visual position stable
-        if (item.end <= scrollOffset) return true
-        // User is following content → allow adjustment for items below
-        // viewport so expanded content stays visible (prevents content from
-        // being hidden behind the input box during auto-expansion).
-        // Does NOT trigger when the user has manually scrolled away.
-        if (!autoScroll.userScrolled) return true
-        return false
-      }
+      // should NOT trigger any scroll adjustment. This is the core jitter fix.
+      pageVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
+        item.end <= (instance.scrollOffset ?? 0)
 
       const clearPendingLoadMoreTimer = useCallback(() => {
         if (pendingLoadMoreTimerRef.current === null) return
@@ -305,6 +286,7 @@ export const ChatArea = memo(
           if (scrollSnapshotRafRef.current !== null) cancelAnimationFrame(scrollSnapshotRafRef.current)
           if (pendingAnchorClearRafRef.current !== null) cancelAnimationFrame(pendingAnchorClearRafRef.current)
           if (pendingSessionResetRafRef.current !== null) cancelAnimationFrame(pendingSessionResetRafRef.current)
+          if (heightBatchRafRef.current !== null) cancelAnimationFrame(heightBatchRafRef.current)
         }
       }, [clearPendingLoadMoreTimer, clearPendingScrollTimer])
 
@@ -330,18 +312,28 @@ export const ChatArea = memo(
       }, [])
 
       const handleScrollContainerScroll = useCallback(() => {
-        // `useAutoScroll` owns the userScrolled state machine. The page
-        // virtualization snapshot is driven from the same scroll event so
-        // premeasure direction updates in lockstep with auto-follow.
+        // OpenCode-style gate: only process scroll events that were triggered
+        // by a recent user gesture (wheel, touch, pointer). Virtualizer-driven
+        // scroll adjustments (from measureElement / anchorTo) generate scroll
+        // events too — those must be ignored, otherwise handleScroll sees the
+        // user "away from bottom" and calls stop(), killing auto-follow.
+        const hasGesture = Date.now() - lastUserGestureAtRef.current < SCROLL_GESTURE_WINDOW_MS
+        if (!hasGesture) return
         autoScroll.handleScroll()
         updateScrollOffsetSnapshot()
       }, [autoScroll, updateScrollOffsetSnapshot])
 
       const handleScrollContainerWheel = useCallback(() => {
-        // Orthogonal to auto-follow: only feeds the load-more cooldown so
-        // history loads don't fire mid-scroll. `useAutoScroll` adds its own
-        // passive wheel listener internally for the follow-mode toggle.
+        // Mark a user scroll gesture so the next batch of scroll events
+        // pass the gesture gate above. Also feeds load-more cooldown.
+        lastUserGestureAtRef.current = Date.now()
         lastWheelInputAtRef.current = Date.now()
+      }, [])
+
+      const handleScrollContainerPointerDown = useCallback(() => {
+        // Scrollbar thumb drag: the onScroll events that follow should be
+        // treated as user-initiated.
+        lastUserGestureAtRef.current = Date.now()
       }, [])
 
       // Sync the offset snapshot once on mount / scrollRoot change so the
@@ -571,14 +563,53 @@ export const ChatArea = memo(
         }, PENDING_SCROLL_TARGET_KEEPALIVE_MS)
       }, [activePages, clearPendingScrollTimer, pendingScrollMessageId])
 
+      const scrollToBottomRef = useRef(autoScroll.scrollToBottom)
+      scrollToBottomRef.current = autoScroll.scrollToBottom
+
+      // rAF-batched height collection.  Multiple pages can grow in the same
+      // frame (SmoothHeight animations, streaming tokens).  Collect all
+      // pending heights and commit them once per frame so we trigger only one
+      // setMeasuredPageHeights, one React render, and one scrollToBottom.
+      const pendingHeightsRef = useRef<Record<string, number> | null>(null)
+      const heightBatchRafRef = useRef<number | null>(null)
+
       const updateMeasuredPageHeight = useCallback((pageKey: string, nextHeight: number) => {
         if (nextHeight <= 0) return
-        setMeasuredPageHeights(previous => {
-          const current = previous[pageKey] ?? null
-          if (current !== null && Math.abs(current - nextHeight) < 1) return previous
-          const next = { ...previous, [pageKey]: nextHeight }
-          measuredPageHeightKeysRef.current = Object.keys(next)
-          return next
+
+        // Collect heights in a ref — no state update yet.  This avoids N
+        // setMeasuredPageHeights calls and N React renders per frame.
+        if (pendingHeightsRef.current === null) {
+          pendingHeightsRef.current = {}
+        }
+        pendingHeightsRef.current[pageKey] = nextHeight
+
+        if (heightBatchRafRef.current !== null) return // rAF already scheduled
+
+        heightBatchRafRef.current = requestAnimationFrame(() => {
+          heightBatchRafRef.current = null
+          const pending = pendingHeightsRef.current
+          pendingHeightsRef.current = null
+          if (!pending) return
+
+          // Commit all collected heights in a single state update.
+          setMeasuredPageHeights(previous => {
+            let changed = false
+            const next = { ...previous }
+            for (const [key, height] of Object.entries(pending)) {
+              const current = previous[key] ?? null
+              if (current !== null && Math.abs(current - height) < 1) continue
+              next[key] = height
+              changed = true
+            }
+            if (!changed) return previous
+            measuredPageHeightKeysRef.current = Object.keys(next)
+            return next
+          })
+
+          // scrollHeight already reflects the new content — scroll now so the
+          // bottom stays visible.  Only one scroll per frame regardless of how
+          // many pages grew.
+          scrollToBottomRef.current()
         })
       }, [])
 
@@ -638,14 +669,8 @@ export const ChatArea = memo(
           scrollToMessageId: (messageId: string) => {
             requestScrollToMessage(messageId, 'smooth')
           },
-          updateClearanceHeight: (height: number) => {
-            const clearanceIndex = activePages.length
-            if (height > 0 && clearanceIndex < pageVirtualizer.options.count) {
-              pageVirtualizer.resizeItem(clearanceIndex, height)
-            }
-          },
         }),
-        [activePages.length, autoScroll, pageVirtualizer, requestScrollToMessage, visibleMessages],
+        [autoScroll, requestScrollToMessage, visibleMessages],
       )
 
       return (
@@ -664,6 +689,7 @@ export const ChatArea = memo(
             ref={setScrollContainerRef}
             onScroll={handleScrollContainerScroll}
             onWheel={handleScrollContainerWheel}
+            onPointerDown={handleScrollContainerPointerDown}
             data-chat-scroll-root="true"
             className="h-full overflow-y-auto overflow-x-hidden custom-scrollbar contain-content flex flex-col"
           >
@@ -686,26 +712,6 @@ export const ChatArea = memo(
               style={{ height: `${pageVirtualizer.getTotalSize()}px` }}
             >
               {pageVirtualizer.getVirtualItems().map(virtualItem => {
-                // Last virtual item is the input-box clearance spacer.
-                if (virtualItem.index === activePages.length) {
-                  return (
-                    <div
-                      key={virtualItem.key}
-                      data-index={virtualItem.index}
-                      ref={pageVirtualizer.measureElement}
-                      className="shrink-0"
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: `${virtualItem.size}px`,
-                        transform: `translateY(${virtualItem.start}px)`,
-                        pointerEvents: 'none',
-                      }}
-                    />
-                  )
-                }
                 const page = activePages[virtualItem.index]
                 if (!page) return null
                 return (
@@ -768,8 +774,6 @@ export const ChatArea = memo(
                 </div>
               </div>
             )}
-
-            <div className="flex-1" />
           </div>
         </div>
       )

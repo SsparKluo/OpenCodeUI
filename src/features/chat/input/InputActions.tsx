@@ -121,30 +121,32 @@ export const FloatingActions = memo(function FloatingActions({
 })
 
 // ============================================
-// CollapsedCapsule — 移动端收起状态的胶囊 UI
+// CollapsedBar — 移动端收起状态的紧凑栏 UI
+// 全宽玻璃栏（圆角与输入框一致），不可输入，点击整栏展开
 // ============================================
 
-interface CollapsedCapsuleProps {
+interface CollapsedBarProps {
   onExpand: () => void
+  placeholder: string
   showScrollToBottom?: boolean
   onScrollToBottom?: () => void
 }
 
-export const CollapsedCapsule = memo(function CollapsedCapsule({
+export const CollapsedBar = memo(function CollapsedBar({
   onExpand,
+  placeholder,
   showScrollToBottom,
   onScrollToBottom,
-}: CollapsedCapsuleProps) {
-  const { t } = useTranslation(['chat', 'common'])
+}: CollapsedBarProps) {
   return (
-    <div className="flex items-center justify-center gap-2">
+    <div className="flex items-center gap-2">
       <button
         type="button"
         onClick={onExpand}
-        className="flex items-center gap-1.5 px-3 h-[32px] rounded-full glass border border-border-200/50 shadow-lg text-text-300 hover:text-text-200 hover:bg-bg-000 active:scale-95 transition-all"
+        className="group flex-1 flex items-center gap-2 px-4 min-h-[40px] rounded-2xl glass border border-border-200/60 shadow-lg text-left active:scale-[0.99] transition-transform"
       >
-        <ArrowUpIcon size={14} />
-        <span className="text-[length:var(--fs-xs)]">{t('inputActions.reply')}</span>
+        <span className="text-[length:var(--fs-sm)] text-text-400 truncate flex-1">{placeholder}</span>
+        <ArrowUpIcon size={16} className="text-text-400 group-active:text-text-200 transition-colors shrink-0" />
       </button>
       {showScrollToBottom && <ScrollToBottomButton onClick={onScrollToBottom} />}
     </div>
