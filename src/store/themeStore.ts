@@ -64,6 +64,8 @@ export interface CustomCSSSnippet {
 
 /** step-finish 信息栏各项显示开关 */
 export interface StepFinishDisplay {
+  /** 关闭时为每一步渲染 step-finish 信息条；开启时只在消息末尾显示一条用真实使用量汇总的 step-finish */
+  aggregateStepFinish: boolean
   tokens: boolean
   cache: boolean
   cost: boolean
@@ -96,6 +98,7 @@ function clampFontScale(n: number): number {
 export type DiffStyle = 'markers' | 'changeBars'
 
 const DEFAULT_STEP_FINISH_DISPLAY: StepFinishDisplay = {
+  aggregateStepFinish: false,
   tokens: true,
   cache: true,
   cost: true,

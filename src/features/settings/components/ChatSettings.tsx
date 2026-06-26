@@ -125,6 +125,27 @@ export function ChatSettings() {
 
       {/* Step 完成信息 */}
       <SettingsSection title={t('chat.stepFinishInfo')}>
+        <p className="text-[length:var(--fs-sm)] text-text-400">{t('chat.stepFinishInfoDesc')}</p>
+
+        <SettingRow
+          label={t('chat.aggregateStepFinish')}
+          description={t('chat.aggregateStepFinishDesc')}
+          onClick={() => {
+            const next = { aggregateStepFinish: !stepFinishDisplay.aggregateStepFinish }
+            setStepFinishDisplay(prev => ({ ...prev, ...next }))
+            themeStore.setStepFinishDisplay(next)
+          }}
+        >
+          <Toggle
+            enabled={stepFinishDisplay.aggregateStepFinish}
+            onChange={() => {
+              const next = { aggregateStepFinish: !stepFinishDisplay.aggregateStepFinish }
+              setStepFinishDisplay(prev => ({ ...prev, ...next }))
+              themeStore.setStepFinishDisplay(next)
+            }}
+          />
+        </SettingRow>
+
         {(
           [
             { key: 'agent', label: t('chat.agent'), desc: t('chat.showAgent') },
