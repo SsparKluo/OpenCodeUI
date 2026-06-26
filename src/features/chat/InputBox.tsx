@@ -1264,32 +1264,33 @@ function InputBoxComponent({
               !isCollapsed ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'
             }`}
           >
-            <div className="overflow-hidden">
-              {/* Wrapper — 菜单在 glass 容器外，避免嵌套 backdrop-filter 导致模糊失效 */}
-              <div className="relative z-30">
-                {/* @ Mention Menu */}
-                <MentionMenu
-                  ref={mentionMenuRef}
-                  isOpen={mentionOpen}
-                  query={mentionQuery}
-                  agents={agents}
-                  rootPath={rootPath}
-                  excludeValues={excludeValues}
-                  onSelect={handleMentionSelect}
-                  onNavigate={updateMentionQuery}
-                  onClose={handleMentionClose}
-                />
+            {/* relative positioning ancestor for menus, outside overflow-hidden */}
+            <div className="relative z-30">
+              {/* @ Mention Menu — 在 overflow-hidden 外部，防止被裁剪 */}
+              <MentionMenu
+                ref={mentionMenuRef}
+                isOpen={mentionOpen}
+                query={mentionQuery}
+                agents={agents}
+                rootPath={rootPath}
+                excludeValues={excludeValues}
+                onSelect={handleMentionSelect}
+                onNavigate={updateMentionQuery}
+                onClose={handleMentionClose}
+              />
 
-                {/* / Slash Command Menu */}
-                <SlashCommandMenu
-                  ref={slashMenuRef}
-                  isOpen={slashOpen}
-                  query={slashQuery}
-                  rootPath={rootPath}
-                  onSelect={handleSlashSelect}
-                  onClose={handleSlashClose}
-                />
+              {/* / Slash Command Menu — 在 overflow-hidden 外部，防止被裁剪 */}
+              <SlashCommandMenu
+                ref={slashMenuRef}
+                isOpen={slashOpen}
+                query={slashQuery}
+                rootPath={rootPath}
+                onSelect={handleSlashSelect}
+                onClose={handleSlashClose}
+              />
 
+              {/* overflow-hidden 只包裹实际输入内容，不影响上方 absolute 菜单 */}
+              <div className="overflow-hidden">
                 {/* Input Container */}
                 <div
                   ref={inputContainerRef}
@@ -1403,20 +1404,20 @@ function InputBoxComponent({
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Footer — 展开态固定高度区域，随 track 一起显隐 */}
-              <div
-                ref={footerRef}
-                onPointerDown={handleContainerPointerDown}
-                className="h-8 flex items-center justify-center"
-              >
-                <InputFooter
-                  paneId={paneId}
-                  sessionId={sessionId}
-                  onNewChat={onNewChat}
-                  inputContainerRef={inputContainerRef}
-                />
+                {/* Footer — 展开态固定高度区域，随 track 一起显隐 */}
+                <div
+                  ref={footerRef}
+                  onPointerDown={handleContainerPointerDown}
+                  className="h-8 flex items-center justify-center"
+                >
+                  <InputFooter
+                    paneId={paneId}
+                    sessionId={sessionId}
+                    onNewChat={onNewChat}
+                    inputContainerRef={inputContainerRef}
+                  />
+                </div>
               </div>
             </div>
           </div>
