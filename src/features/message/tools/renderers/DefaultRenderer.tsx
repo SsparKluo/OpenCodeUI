@@ -4,7 +4,7 @@ import { ContentBlock } from '../../../../components'
 import { AlertCircleIcon } from '../../../../components/Icons'
 import { detectLanguage } from '../../../../utils/languageUtils'
 import { getMaterialIconUrl } from '../../../../utils/materialIcons'
-import { themeStore } from '../../../../store/themeStore'
+import { themeStore, useSessionState } from '../../../../store'
 import type { ToolRendererProps, ExtractedToolData } from '../types'
 
 // ============================================
@@ -18,6 +18,8 @@ export function DefaultRenderer({ part, data, onFullscreenChange }: ToolRenderer
   const { toolCardStyle } = useSyncExternalStore(themeStore.subscribe, themeStore.getSnapshot)
   const isCompact = toolCardStyle === 'compact'
   const isActive = state.status === 'running' || state.status === 'pending'
+  const sessionState = useSessionState(part.sessionID)
+  const projectDirectory = sessionState?.directory
 
   const hasInput = !!data.input?.trim()
   const hasError = !!data.error
@@ -58,6 +60,7 @@ export function DefaultRenderer({ part, data, onFullscreenChange }: ToolRenderer
           compact={isCompact}
           onFullscreenChange={onFullscreenChange}
           fullscreenBaseId={`tool:${part.sessionID}:${part.messageID}:${part.id}:output`}
+          projectDirectory={projectDirectory}
         />
       )}
 
@@ -80,6 +83,7 @@ interface OutputBlockProps {
   compact?: boolean
   onFullscreenChange?: (isFullscreen: boolean) => void
   fullscreenBaseId: string
+  projectDirectory?: string
 }
 
 function OutputBlock({
@@ -91,6 +95,7 @@ function OutputBlock({
   compact,
   onFullscreenChange,
   fullscreenBaseId,
+  projectDirectory,
 }: OutputBlockProps) {
   const { t } = useTranslation('message')
 
@@ -136,6 +141,7 @@ function OutputBlock({
               labelIcon={<FileResultIcon filePath={file.filePath} />}
               hideLabel
               filePath={file.filePath}
+              projectDirectory={projectDirectory}
               diff={
                 file.diff ||
                 file.patch ||
@@ -161,6 +167,7 @@ function OutputBlock({
           labelIcon={data.filePath ? <FileResultIcon filePath={data.filePath} /> : undefined}
           hideLabel={!!data.filePath}
           filePath={data.filePath}
+          projectDirectory={projectDirectory}
           diff={data.diff}
           diffStats={data.diffStats}
           language={data.outputLang}

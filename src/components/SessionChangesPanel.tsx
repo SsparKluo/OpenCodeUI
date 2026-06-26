@@ -875,6 +875,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
                 onClosePreview={handleClosePreviewTab}
                 onReorderPreview={handleReorderPreviewTabs}
                 onClose={handleClosePreview}
+                projectDirectory={directory}
               />
             </div>
           ))}
@@ -897,6 +898,9 @@ interface DiffPreviewPanelProps {
   onClosePreview: (file: string) => void
   onReorderPreview: (draggedFile: string, targetFile: string) => void
   onClose: () => void
+  /** Session project root. Absolute `diff.file` paths are converted to
+   *  relative paths in the diff copy header. */
+  projectDirectory?: string
 }
 
 const DiffPreviewPanel = memo(function DiffPreviewPanel({
@@ -908,6 +912,7 @@ const DiffPreviewPanel = memo(function DiffPreviewPanel({
   onClosePreview,
   onReorderPreview,
   onClose,
+  projectDirectory,
 }: DiffPreviewPanelProps) {
   const language = detectLanguage(diff.file) || 'text'
   // 优先用 patch 提取 before/after，回退到直接的 before/after 字段（旧版后端兼容）
@@ -938,11 +943,24 @@ const DiffPreviewPanel = memo(function DiffPreviewPanel({
           after={after}
           language={language}
           viewMode={fullscreenViewMode}
+          filePath={diff.file}
+          projectDirectory={projectDirectory}
           data={diffViewerData}
         />
       ),
     }),
-    [after, before, diff.additions, diff.deletions, diff.file, diffViewerData, fileName, fullscreenViewMode, language],
+    [
+      after,
+      before,
+      diff.additions,
+      diff.deletions,
+      diff.file,
+      diffViewerData,
+      fileName,
+      fullscreenViewMode,
+      language,
+      projectDirectory,
+    ],
   )
   const { open: openFullscreen } = useFullscreenLayer(fullscreenLayer)
   const previewTabItems = useMemo<PreviewTabsBarItem[]>(
@@ -998,7 +1016,16 @@ const DiffPreviewPanel = memo(function DiffPreviewPanel({
 
       {/* Diff Content - DiffViewer 自带滚动 */}
       <div className="flex-1 min-h-0">
-        <DiffViewer before={before} after={after} language={language} viewMode={viewMode} isResizing={isResizing} data={diffViewerData} />
+        <DiffViewer
+          before={before}
+          after={after}
+          language={language}
+          viewMode={viewMode}
+          isResizing={isResizing}
+          filePath={diff.file}
+          projectDirectory={projectDirectory}
+          data={diffViewerData}
+        />
       </div>
     </div>
   )
