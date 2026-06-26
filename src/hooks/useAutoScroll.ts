@@ -189,21 +189,11 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
     const el = scrollElRef.current
     if (!el) return
     markAuto(el)
-    if (reverseRef.current) {
-      // `flex-col-reverse` containers: "at bottom" is `scrollTop = 0`.
-      // `scrollTo({ top: 0, behavior })` respects smooth behavior;
-      // `scrollTop = 0` bypasses CSS `scroll-behavior: smooth`.
-      if (behavior === 'smooth') {
-        el.scrollTo({ top: 0, behavior })
-      } else {
-        el.scrollTop = 0
-      }
-      return
-    }
+    const targetTop = bottomScrollTop(el)
     if (behavior === 'smooth') {
-      el.scrollTo({ top: el.scrollHeight, behavior })
+      el.scrollTo({ top: targetTop, behavior })
     } else {
-      el.scrollTop = el.scrollHeight
+      el.scrollTop = targetTop
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -345,14 +335,26 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
   }, [])
 
   // ============================================================
-  // ResizeObserver on content — keep the bottom locked in view
-  // whenever the user hasn't scrolled away, regardless of
-  // streaming state. This ensures pressing Enter to send a
-  // message, tool output showing, or any post-stream DOM growth
-  // still keeps the bottom visible.
+  // ResizeObserver — keep the bottom locked in view when the
+  // user hasn't scrolled away, regardless of streaming state.
+  // This ensures pressing Enter to send a message, tool output
+  // showing, or any post-stream DOM growth still keeps the
+  // bottom visible.
+  //
+  // Two observation targets:
+  // - contentEl: fires on content size changes (new messages,
+  //   block expansion, tool output). The total scrollHeight
+  //   changed, so the bottom moved.
+  // - scrollEl: fires on container size changes (window resize,
+  //   InputBox auto-resize, virtualizer-driven layout shifts).
+  //   The bottom of the same content is now at a different
+  //   scrollTop, so the user can end up stranded above the new
+  //   bottom — observed scrollTop stays at the old max. Snap
+  //   them back when they were following.
   // ============================================================
   useEffect(() => {
-    if (!contentEl || typeof ResizeObserver === 'undefined') return
+    if (typeof ResizeObserver === 'undefined') return
+    if (!contentEl && !scrollEl) return
 
     const observer = new ResizeObserver(() => {
       try {
@@ -369,9 +371,10 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
         }
       }
     })
-    observer.observe(contentEl)
+    if (contentEl) observer.observe(contentEl)
+    if (scrollEl) observer.observe(scrollEl)
     return () => observer.disconnect()
-  }, [contentEl, scrollToBottom, setUserScrolled])
+  }, [contentEl, scrollEl, scrollToBottom, setUserScrolled])
 
   // ============================================================
   // working edge — start/clear the settle window

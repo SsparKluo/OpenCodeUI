@@ -289,19 +289,19 @@ describe('useAutoScroll (normal flow mode)', () => {
     vi.useFakeTimers()
   })
 
-  it('snaps to scrollHeight when working starts', () => {
+  it('snaps to the bottom (scrollHeight - clientHeight) when working starts', () => {
     const { scrollEl, rerender } = mountAutoScroll(
       { scrollHeight: 1000, clientHeight: 300, scrollTop: 0 },
       { working: false, reverse: false },
     )
     rerender({ working: true })
-    // Normal flow: bottom is scrollHeight, not 0.
-    expect(scrollEl.scrollTop).toBe(1000)
+    // Normal flow: bottom is scrollHeight - clientHeight, not 0.
+    expect(scrollEl.scrollTop).toBe(700)
   })
 
   it('marks userScrolled on wheel up', () => {
     const { scrollEl, result } = mountAutoScroll(
-      { scrollHeight: 1000, clientHeight: 300, scrollTop: 1000 },
+      { scrollHeight: 1000, clientHeight: 300, scrollTop: 700 },
       { reverse: false },
     )
     scrollEl.scrollTop = 500
