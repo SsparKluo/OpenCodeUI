@@ -30,6 +30,7 @@ import { MessageErrorView } from '../message/parts'
 import { messageStore } from '../../store'
 import { useTheme } from '../../hooks/useTheme'
 import { useAutoScroll } from '../../hooks/useAutoScroll'
+import { useScrollGestureDetector } from './useScrollGestureDetector'
 import type { Message, MessageError } from '../../types/message'
 import { RetryStatusInline, type RetryStatusInlineData } from './RetryStatusInline'
 import { buildVisibleMessageEntries, getVisibleMessageForkTargetId } from './chatAreaVisibility'
@@ -48,7 +49,6 @@ const LOAD_MORE_ROOT_MARGIN = '240px 0px 0px 0px'
 const LOAD_MORE_WHEEL_COOLDOWN_MS = 90
 const LOAD_MORE_DEFER_MS = 100
 const PENDING_SCROLL_TARGET_KEEPALIVE_MS = 900
-const SCROLL_GESTURE_WINDOW_MS = 250
 
 type LoadMoreAnchorSnapshot = {
   messageId: string
@@ -163,7 +163,6 @@ export const ChatArea = memo(
       const loadMoreRequestIdRef = useRef(0)
       const topSentinelVisibleRef = useRef(false)
       const lastWheelInputAtRef = useRef(0)
-      const lastUserGestureAtRef = useRef(0)
       const tryLoadMoreRef = useRef<() => void>(NOOP)
 
       useEffect(() => {
@@ -183,6 +182,7 @@ export const ChatArea = memo(
         bottomThreshold: atBottomThreshold,
         overflowAnchor: 'dynamic',
       })
+      const gestureDetector = useScrollGestureDetector()
       const shouldUseExternalViewModel = pageRecords != null && visibleMessagesProp != null
       const visibleMessageEntries = useMemo(
         () => (shouldUseExternalViewModel ? [] : buildVisibleMessageEntries(messages)),
@@ -294,7 +294,8 @@ export const ChatArea = memo(
         scrollRef.current = node
         setScrollRoot(prev => (prev === node ? prev : node))
         autoScroll.scrollRef(node)
-      }, [autoScroll])
+        gestureDetector.setRoot(node)
+      }, [autoScroll, gestureDetector])
 
       const setContentWrapperRef = useCallback((node: HTMLDivElement | null) => {
         autoScroll.contentRef(node)
@@ -317,24 +318,55 @@ export const ChatArea = memo(
         // scroll adjustments (from measureElement / anchorTo) generate scroll
         // events too — those must be ignored, otherwise handleScroll sees the
         // user "away from bottom" and calls stop(), killing auto-follow.
-        const hasGesture = Date.now() - lastUserGestureAtRef.current < SCROLL_GESTURE_WINDOW_MS
-        if (!hasGesture) return
+        if (!gestureDetector.hasGesture()) return
         autoScroll.handleScroll()
         updateScrollOffsetSnapshot()
-      }, [autoScroll, updateScrollOffsetSnapshot])
+      }, [autoScroll, gestureDetector, updateScrollOffsetSnapshot])
 
-      const handleScrollContainerWheel = useCallback(() => {
-        // Mark a user scroll gesture so the next batch of scroll events
-        // pass the gesture gate above. Also feeds load-more cooldown.
-        lastUserGestureAtRef.current = Date.now()
-        lastWheelInputAtRef.current = Date.now()
-      }, [])
+      const handleScrollContainerWheel = useCallback(
+        (event: React.WheelEvent<HTMLDivElement>) => {
+          gestureDetector.onWheel({
+            deltaY: event.deltaY,
+            deltaMode: event.deltaMode,
+            target: event.target,
+          })
+          // Feed load-more cooldown (also depends on wheel, not just touch/key).
+          lastWheelInputAtRef.current = Date.now()
+        },
+        [gestureDetector],
+      )
 
-      const handleScrollContainerPointerDown = useCallback(() => {
-        // Scrollbar thumb drag: the onScroll events that follow should be
-        // treated as user-initiated.
-        lastUserGestureAtRef.current = Date.now()
-      }, [])
+      const handleScrollContainerPointerDown = useCallback(
+        (event: React.PointerEvent<HTMLDivElement>) => {
+          gestureDetector.onPointerDown({ target: event.target })
+        },
+        [gestureDetector],
+      )
+
+      const handleScrollContainerTouchStart = useCallback(
+        (event: React.TouchEvent<HTMLDivElement>) => {
+          gestureDetector.onTouchStart({ touches: event.touches })
+        },
+        [gestureDetector],
+      )
+
+      const handleScrollContainerTouchMove = useCallback(
+        (event: React.TouchEvent<HTMLDivElement>) => {
+          gestureDetector.onTouchMove({ touches: event.touches, target: event.target })
+        },
+        [gestureDetector],
+      )
+
+      const handleScrollContainerTouchEnd = useCallback(() => {
+        gestureDetector.onTouchEnd()
+      }, [gestureDetector])
+
+      const handleScrollContainerKeyDown = useCallback(
+        (event: React.KeyboardEvent<HTMLDivElement>) => {
+          gestureDetector.onKeyDown({ key: event.key })
+        },
+        [gestureDetector],
+      )
 
       // Sync the offset snapshot once on mount / scrollRoot change so the
       // first frame has accurate data.
@@ -690,6 +722,11 @@ export const ChatArea = memo(
             onScroll={handleScrollContainerScroll}
             onWheel={handleScrollContainerWheel}
             onPointerDown={handleScrollContainerPointerDown}
+            onTouchStart={handleScrollContainerTouchStart}
+            onTouchMove={handleScrollContainerTouchMove}
+            onTouchEnd={handleScrollContainerTouchEnd}
+            onKeyDown={handleScrollContainerKeyDown}
+            tabIndex={-1}
             data-chat-scroll-root="true"
             className="h-full overflow-y-auto overflow-x-hidden custom-scrollbar contain-content flex flex-col"
           >
