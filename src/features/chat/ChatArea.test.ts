@@ -7,6 +7,8 @@ import {
   computeAnchorRestoreScrollDelta,
   computeExpandedPageRange,
   computePremeasureMessageBudget,
+  expandSelectionWithNearbyStalePages,
+  expandSelectionWithPageKeys,
   findPageToPremeasure,
   findPagesToPremeasure,
   findMessageSequenceOffset,
@@ -478,6 +480,37 @@ describe('buildPageRenderSegments', () => {
       { kind: 'collapsed', key: 'collapsed:page-1:page-2', height: 230 },
       { kind: 'expanded', key: 'page-3', page: pages[3], measuredHeight: 130 },
     ])
+  })
+})
+
+describe('lightweight render selection', () => {
+  const pages = [
+    { key: 'page-0', rows: [], messageIds: ['m0'], estimatedHeight: 100 },
+    { key: 'page-1', rows: [], messageIds: ['m1'], estimatedHeight: 110 },
+    { key: 'page-2', rows: [], messageIds: ['m2'], estimatedHeight: 120 },
+    { key: 'page-3', rows: [], messageIds: ['m3'], estimatedHeight: 130 },
+    { key: 'page-4', rows: [], messageIds: ['m4'], estimatedHeight: 140 },
+  ]
+
+  it('expands only stale pages near the active selection', () => {
+    const selection = expandSelectionWithNearbyStalePages({
+      pages,
+      expandedPageSelection: buildExpandedPageSelection({ startIndex: 1, endIndex: 1 }),
+      stalePageKeys: new Set(['page-2', 'page-4']),
+      radius: 1,
+    })
+
+    expect(Array.from(selection)).toEqual([1, 2])
+  })
+
+  it('expands explicit page keys without widening unrelated pages', () => {
+    const selection = expandSelectionWithPageKeys({
+      pages,
+      expandedPageSelection: buildExpandedPageSelection({ startIndex: 1, endIndex: 1 }),
+      pageKeys: new Set(['page-4']),
+    })
+
+    expect(Array.from(selection)).toEqual([1, 4])
   })
 })
 
