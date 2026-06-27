@@ -555,29 +555,19 @@ body {
   display: none !important;
 }
 
-/* overflow 方向空壳
- *  - iOS Safari 下，position: fixed 弹层里的 overflow:auto 子元素
- *    触摸滑动经常失效（拖滚动条可以），必须显式声明 touch-action: pan-y
- *    才能让浏览器认纵向 pan 手势并把滚动交给原生层。
- *  - pan-y 保留纵向 pan，禁用横向 pan（与 overflow-y 配合避免误触）。
- *  - pinch-zoom / double-tap-zoom 仍受父级 viewport 限制。
- */
+/* overflow 方向空壳 */
 .custom-scrollbar {
   overflow-y: auto;
-  touch-action: pan-y;
 }
 .panel-scrollbar {
   overflow: auto;
-  touch-action: pan-y;
 }
 .panel-scrollbar-y {
   overflow-y: auto;
   overflow-x: hidden;
-  touch-action: pan-y;
 }
 .code-scrollbar {
   overflow: auto;
-  touch-action: pan-y;
 }
 
 /* ── Overlay thumb (vertical, default) ── */
