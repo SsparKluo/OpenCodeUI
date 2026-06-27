@@ -360,8 +360,7 @@ export const ContentBlock = memo(function ContentBlock({
           {/* Content */}
           {shouldRenderContent && hasContent && (
             <div ref={contentRef} className="relative group/content">
-              {content && <CopyButton text={content} position="absolute" groupName="content" />
-
+              {content && <CopyButton text={content} position="absolute" groupName="content" />}
 
               {isDiff && resolvedDiff ? (
                 <DiffViewer
