@@ -740,7 +740,7 @@ export const ChatArea = memo(
             onKeyDown={handleScrollContainerKeyDown}
             tabIndex={-1}
             data-chat-scroll-root="true"
-            className="h-full overflow-y-auto overflow-x-hidden custom-scrollbar contain-content flex flex-col"
+            className="h-full overflow-y-auto overflow-x-hidden custom-scrollbar contain-content flex flex-col touch-pan-y"
           >
             <div ref={topSentinelRef} className="h-px shrink-0" aria-hidden="true" />
             <div className="mobile-chat-top-spacer shrink-0" />
