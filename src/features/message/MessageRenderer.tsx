@@ -441,9 +441,57 @@ const AssistantMessageView = memo(function AssistantMessageView({
   const modelLabel = assistantInfo?.modelID || undefined
 
   const hasStepFinishPart = parts.some(part => part.type === 'step-finish')
+  const aggregate = stepFinishDisplay.aggregateStepFinish
+  // footer 触发条件：
+  // - 默认：消息无 step-finish part 时用 message-level 时长/完成时间兜底
+  // - 聚合模式：只要消息结束就 footer 一次，用真实使用量展示
+  const footerEligible = !isStreaming && (aggregate ? hasStepFinishPart : !hasStepFinishPart)
   const showTurnDurationFooter =
-    !isStreaming && !hasStepFinishPart && stepFinishDisplay.turnDuration && turnDuration != null && turnDuration > 0
-  const showCompletedAtFooter = !isStreaming && !hasStepFinishPart && stepFinishDisplay.completedAt && completed != null
+    footerEligible && stepFinishDisplay.turnDuration && turnDuration != null && turnDuration > 0
+  const showCompletedAtFooter = footerEligible && stepFinishDisplay.completedAt && completed != null
+  // 聚合模式下渲染 message-level 真实汇总 (info.tokens + info.cost)
+  const aggregatedStepFinish: StepFinishPart | undefined = useMemo(() => {
+    if (!aggregate || isStreaming || !hasStepFinishPart || !assistantInfo) return undefined
+    const totalTokens = assistantInfo.tokens
+    const totalCost = assistantInfo.cost
+    const anyUsageOrIdentityEnabled =
+      stepFinishDisplay.tokens ||
+      stepFinishDisplay.cache ||
+      stepFinishDisplay.cost ||
+      stepFinishDisplay.agent ||
+      stepFinishDisplay.model ||
+      stepFinishDisplay.turnDuration ||
+      stepFinishDisplay.completedAt
+    const hasUsableValue =
+      totalCost > 0 ||
+      totalTokens.input + totalTokens.output + totalTokens.reasoning + totalTokens.cache.read + totalTokens.cache.write > 0 ||
+      (stepFinishDisplay.turnDuration && turnDuration != null && turnDuration > 0) ||
+      (stepFinishDisplay.completedAt && completed != null)
+    if (!anyUsageOrIdentityEnabled || !hasUsableValue) return undefined
+    return {
+      id: `${assistantInfo.id}-aggregated-step-finish`,
+      sessionID: assistantInfo.sessionID,
+      messageID: assistantInfo.id,
+      type: 'step-finish',
+      reason: 'aggregated',
+      cost: totalCost,
+      tokens: totalTokens,
+    }
+  }, [
+    aggregate,
+    isStreaming,
+    hasStepFinishPart,
+    assistantInfo,
+    turnDuration,
+    completed,
+    stepFinishDisplay.tokens,
+    stepFinishDisplay.cache,
+    stepFinishDisplay.cost,
+    stepFinishDisplay.agent,
+    stepFinishDisplay.model,
+    stepFinishDisplay.turnDuration,
+    stepFinishDisplay.completedAt,
+  ])
 
   if (!isStreaming && parts.length === 0) {
     // 有错误时直接显示错误信息
@@ -477,7 +525,7 @@ const AssistantMessageView = memo(function AssistantMessageView({
                 <ToolGroup
                   key={item.parts[0].id}
                   parts={item.parts}
-                  stepFinish={item.stepFinish}
+                  stepFinish={aggregate ? undefined : item.stepFinish}
                   duration={isLastStepFinish ? duration : undefined}
                   turnDuration={isLastStepFinish ? turnDuration : undefined}
                   isStreaming={isStreaming}
@@ -497,6 +545,7 @@ const AssistantMessageView = memo(function AssistantMessageView({
                 return <ReasoningPartView key={part.id} part={part} isStreaming={isStreaming && !reasoningDone} />
               }
               case 'step-finish':
+                if (aggregate) return null
                 return (
                   <StepFinishPartView
                     key={part.id}
@@ -524,7 +573,17 @@ const AssistantMessageView = memo(function AssistantMessageView({
       {/* Message-level error */}
       {messageError && <MessageErrorView error={messageError} />}
 
-      {(showTurnDurationFooter || showCompletedAtFooter) && (
+      {aggregatedStepFinish && (
+        <StepFinishPartView
+          part={aggregatedStepFinish}
+          turnDuration={turnDuration}
+          agent={agent}
+          modelLabel={modelLabel}
+          completedAt={completed}
+        />
+      )}
+
+      {!aggregatedStepFinish && (showTurnDurationFooter || showCompletedAtFooter) && (
         <div className="flex items-center gap-3 py-0.5 text-[length:var(--fs-xxs)] text-text-500">
           {showTurnDurationFooter && (
             <span>{t('stepFinish.totalDuration', { duration: formatDuration(turnDuration!) })}</span>

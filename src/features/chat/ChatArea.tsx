@@ -59,6 +59,18 @@ type LoadMoreAnchorSnapshot = {
 /** Stable no-op to avoid creating a new closure on every render. */
 const NOOP = () => {}
 
+function pageHasStreamingMessage(page: ChatPage): boolean {
+  return page.rows.some(row =>
+    row.messages.some(
+      message => message.isStreaming || (message.info.role === 'assistant' && message.info.time.completed == null),
+    ),
+  )
+}
+
+function pageHasUserMessage(page: ChatPage): boolean {
+  return page.rows.some(row => row.messages.some(message => message.info.role === 'user'))
+}
+
 function captureLoadMoreAnchor(root: HTMLElement, pageCountBefore = 0): LoadMoreAnchorSnapshot | null {
   const rootRect = root.getBoundingClientRect()
   const candidates = root.querySelectorAll<HTMLElement>('[data-message-id]')
@@ -832,6 +844,39 @@ interface PageBlockProps {
   onMeasuredHeightChange: (pageKey: string, nextHeight: number) => void
 }
 
+interface PageDerivedValueProps {
+  page: ChatPage
+  turnDurationMap: Map<string, number>
+  forkTargetIdMap: Map<string, string | undefined>
+}
+
+function pageMessageDerivedValuesEqual(previous: PageDerivedValueProps, next: PageDerivedValueProps) {
+  return previous.page.messageIds.every(messageId => {
+    return (
+      previous.turnDurationMap.get(messageId) === next.turnDurationMap.get(messageId) &&
+      previous.forkTargetIdMap.get(messageId) === next.forkTargetIdMap.get(messageId)
+    )
+  })
+}
+
+export function arePageBlockPropsEqual(previous: PageBlockProps, next: PageBlockProps) {
+  if (previous.page !== next.page) return false
+  if (previous.messageMaxWidthClass !== next.messageMaxWidthClass) return false
+  if (previous.messagePaddingClass !== next.messagePaddingClass) return false
+  if (previous.registerMessage !== next.registerMessage) return false
+  if (previous.onUndo !== next.onUndo && pageHasUserMessage(next.page)) return false
+  if (previous.onFork !== next.onFork) return false
+  if (previous.canUndo !== next.canUndo && pageHasUserMessage(next.page)) return false
+  if (
+    previous.allowStreamingLayoutAnimation !== next.allowStreamingLayoutAnimation &&
+    (pageHasStreamingMessage(previous.page) || pageHasStreamingMessage(next.page))
+  ) {
+    return false
+  }
+  if (previous.onMeasuredHeightChange !== next.onMeasuredHeightChange) return false
+  return pageMessageDerivedValuesEqual(previous, next)
+}
+
 function usePageHeightMeasurement(pageKey: string, onMeasuredHeightChange: (pageKey: string, nextHeight: number) => void) {
   const wrapperRef = useRef<HTMLDivElement | null>(null)
 
@@ -887,12 +932,12 @@ const PageBlock = memo(function PageBlock({
                   <RenderedMessageItem key={message.info.id} messageId={message.info.id} registerMessage={registerMessage}>
                     <MessageRenderer
                       message={message}
-                      allowStreamingLayoutAnimation={allowStreamingLayoutAnimation}
+                      allowStreamingLayoutAnimation={message.isStreaming ? allowStreamingLayoutAnimation : false}
                       turnDuration={turnDurationMap.get(message.info.id)}
-                      onUndo={onUndo}
+                      onUndo={message.info.role === 'user' ? onUndo : undefined}
                       onFork={onFork}
                       forkMessageId={forkTargetIdMap.get(message.info.id)}
-                      canUndo={canUndo}
+                      canUndo={message.info.role === 'user' ? canUndo : undefined}
                       onEnsureParts={NOOP}
                     />
                   </RenderedMessageItem>
@@ -904,7 +949,7 @@ const PageBlock = memo(function PageBlock({
       })}
     </div>
   )
-})
+}, arePageBlockPropsEqual)
 
 interface RenderedMessageItemProps {
   messageId: string

@@ -1,6 +1,18 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DiffViewer } from './DiffViewer'
+
+const { copyTextToClipboardMock } = vi.hoisted(() => ({
+  copyTextToClipboardMock: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('../utils/clipboard', async importOriginal => {
+  const actual = await importOriginal<typeof import('../utils/clipboard')>()
+  return {
+    ...actual,
+    copyTextToClipboard: copyTextToClipboardMock,
+  }
+})
 
 vi.mock('../store/themeStore', async importOriginal => {
   const actual = await importOriginal<typeof import('../store/themeStore')>()
@@ -22,6 +34,10 @@ vi.mock('../hooks/useSyntaxHighlight', () => ({
 }))
 
 describe('DiffViewer', () => {
+  beforeEach(() => {
+    copyTextToClipboardMock.mockClear()
+  })
+
   it('uses wrapped rendering without proxy horizontal scrollbar when word wrap is enabled', () => {
     const { container } = render(
       <DiffViewer
@@ -93,5 +109,147 @@ describe('DiffViewer', () => {
 
     expect(container.textContent).toContain('if (!enabled) return')
     expect(container.textContent).not.toContain('returnn')
+  })
+
+  it('exposes a copy button that copies a unified diff (unified view)', async () => {
+    render(
+      <DiffViewer
+        before={'const value = oldResult'}
+        after={'const value = newResult'}
+        language="ts"
+        viewMode="unified"
+        wordWrap={false}
+        filePath="src/foo.ts"
+      />,
+    )
+
+    const copyButton = screen.getByRole('button', { name: 'Copy to clipboard' })
+    expect(copyButton).toBeInTheDocument()
+
+    fireEvent.click(copyButton)
+
+    await waitFor(() => {
+      expect(copyTextToClipboardMock).toHaveBeenCalledTimes(1)
+    })
+
+    const copiedText = copyTextToClipboardMock.mock.calls[0]?.[0] as string
+    expect(copiedText).toContain('Index: src/foo.ts')
+    expect(copiedText).toContain('--- src/foo.ts')
+    expect(copiedText).toContain('+++ src/foo.ts')
+    expect(copiedText).toContain('@@')
+    expect(copiedText).toContain('-const value = oldResult')
+    expect(copiedText).toContain('+const value = newResult')
+  })
+
+  it('exposes a copy button that copies a unified diff (split view)', async () => {
+    render(
+      <DiffViewer
+        before={'line one'}
+        after={'line one\nline two'}
+        language="ts"
+        viewMode="split"
+        wordWrap={false}
+        filePath="src/bar.ts"
+      />,
+    )
+
+    const copyButton = screen.getByRole('button', { name: 'Copy to clipboard' })
+    fireEvent.click(copyButton)
+
+    await waitFor(() => {
+      expect(copyTextToClipboardMock).toHaveBeenCalledTimes(1)
+    })
+
+    const copiedText = copyTextToClipboardMock.mock.calls[0]?.[0] as string
+    expect(copiedText).toContain('Index: src/bar.ts')
+    expect(copiedText).toContain('+line two')
+  })
+
+  it('exposes a copy button in the wrapped unified view', async () => {
+    render(
+      <DiffViewer
+        before={'const value = old'}
+        after={'const value = wrapped'}
+        language="ts"
+        viewMode="unified"
+        wordWrap={true}
+        filePath="x.ts"
+      />,
+    )
+
+    const copyButton = screen.getByRole('button', { name: 'Copy to clipboard' })
+    fireEvent.click(copyButton)
+
+    await waitFor(() => {
+      expect(copyTextToClipboardMock).toHaveBeenCalledTimes(1)
+    })
+
+    const copiedText = copyTextToClipboardMock.mock.calls[0]?.[0] as string
+    expect(copiedText).toContain('Index: x.ts')
+    expect(copiedText).toContain('+const value = wrapped')
+  })
+
+  it('exposes a copy button in the wrapped split view', async () => {
+    render(
+      <DiffViewer
+        before={'wrapped split before'}
+        after={'wrapped split after'}
+        language="ts"
+        viewMode="split"
+        wordWrap={true}
+        filePath="y.ts"
+      />,
+    )
+
+    const copyButton = screen.getByRole('button', { name: 'Copy to clipboard' })
+    fireEvent.click(copyButton)
+
+    await waitFor(() => {
+      expect(copyTextToClipboardMock).toHaveBeenCalledTimes(1)
+    })
+
+    const copiedText = copyTextToClipboardMock.mock.calls[0]?.[0] as string
+    expect(copiedText).toContain('Index: y.ts')
+  })
+
+  it('falls back to "file" as the path when filePath is omitted', async () => {
+    render(
+      <DiffViewer before={'a'} after={'b'} language="ts" viewMode="unified" wordWrap={false} />,
+    )
+
+    const copyButton = screen.getByRole('button', { name: 'Copy to clipboard' })
+    fireEvent.click(copyButton)
+
+    await waitFor(() => {
+      expect(copyTextToClipboardMock).toHaveBeenCalledTimes(1)
+    })
+
+    const copiedText = copyTextToClipboardMock.mock.calls[0]?.[0] as string
+    expect(copiedText).toContain('Index: file')
+  })
+
+  it('rewrites an absolute filePath to a path relative to projectDirectory', async () => {
+    render(
+      <DiffViewer
+        before={'a'}
+        after={'b'}
+        language="ts"
+        viewMode="unified"
+        wordWrap={false}
+        filePath="/repo/src/foo.ts"
+        projectDirectory="/repo"
+      />,
+    )
+
+    const copyButton = screen.getByRole('button', { name: 'Copy to clipboard' })
+    fireEvent.click(copyButton)
+
+    await waitFor(() => {
+      expect(copyTextToClipboardMock).toHaveBeenCalledTimes(1)
+    })
+
+    const copiedText = copyTextToClipboardMock.mock.calls[0]?.[0] as string
+    expect(copiedText).toContain('Index: src/foo.ts')
+    expect(copiedText).not.toContain('/repo/')
   })
 })

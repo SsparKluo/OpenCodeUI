@@ -17,6 +17,8 @@ import { CodePreview } from './CodePreview'
 import { detectLanguage } from '../utils/languageUtils'
 import { ViewModeSwitch } from './FullscreenViewer'
 import { extractContentFromUnifiedDiff } from '../utils/diffUtils'
+import { buildUnifiedDiff } from '../utils/diffFormat'
+import { useDelayedRender } from '../hooks/useDelayedRender'
 import { useResponsiveMaxHeight } from '../hooks/useResponsiveMaxHeight'
 import { useFullscreenLayer } from '../contexts'
 
@@ -49,6 +51,9 @@ export interface ContentBlockProps {
   onFullscreenChange?: (isFullscreen: boolean) => void
   /** 稳定的全屏层 ID，避免源组件重挂后全屏状态丢失 */
   fullscreenId?: string
+  /** Session project root. Absolute `filePath` is converted to a relative
+   *  path before being embedded in the unified-diff copy header. */
+  projectDirectory?: string
 
   // 内容
   /** 普通文本/代码内容 */
@@ -84,6 +89,7 @@ export const ContentBlock = memo(function ContentBlock({
   compact = false,
   onFullscreenChange,
   fullscreenId,
+  projectDirectory,
   content,
   diff,
   diffStats: providedDiffStats,
@@ -159,13 +165,21 @@ export const ContentBlock = memo(function ContentBlock({
 
   const fullscreenHeaderRight = useMemo(() => {
     if (isDiff && resolvedDiff) {
-      return <ViewModeSwitch viewMode={fullscreenDiffViewMode} onChange={setFullscreenDiffViewMode} />
+      return (
+        <>
+          <ViewModeSwitch viewMode={fullscreenDiffViewMode} onChange={setFullscreenDiffViewMode} />
+          <CopyButton
+            text={buildUnifiedDiff(resolvedDiff.before, resolvedDiff.after, filePath, projectDirectory)}
+            position="static"
+          />
+        </>
+      )
     }
     if (content?.trim()) {
       return <CopyButton text={content} position="static" />
     }
     return undefined
-  }, [content, fullscreenDiffViewMode, isDiff, resolvedDiff])
+  }, [content, filePath, fullscreenDiffViewMode, isDiff, projectDirectory, resolvedDiff])
 
   const fullscreenContent = useMemo(() => {
     if (isDiff && resolvedDiff) {
@@ -175,6 +189,8 @@ export const ContentBlock = memo(function ContentBlock({
           after={resolvedDiff.after}
           language={lang}
           viewMode={fullscreenDiffViewMode}
+          filePath={filePath}
+          projectDirectory={projectDirectory}
           data={diffViewerData}
         />
       )
@@ -183,7 +199,7 @@ export const ContentBlock = memo(function ContentBlock({
       return <CodePreview code={content} language={lang} />
     }
     return null
-  }, [content, diffViewerData, fullscreenDiffViewMode, isDiff, lang, resolvedDiff])
+  }, [content, diffViewerData, filePath, fullscreenDiffViewMode, isDiff, lang, projectDirectory, resolvedDiff])
 
   const fullscreenLayer = useMemo(() => {
     if (!fullscreenContent) return null
@@ -243,6 +259,7 @@ export const ContentBlock = memo(function ContentBlock({
 
   // 是否展开内容区
   const showBody = (hasContent && !collapsed) || (isLoading && !hasContent)
+  const shouldRenderContent = useDelayedRender(showBody)
 
   // 容器样式
   const containerClass = isError
@@ -279,9 +296,7 @@ export const ContentBlock = memo(function ContentBlock({
             </span>
           )}
           {fileName && (
-            <span
-              className={`text-text-500 truncate font-mono leading-4 min-w-0 flex-1 ${hideLabel ? '' : 'ml-0.5'}`}
-            >
+            <span className={`text-text-500 truncate font-mono leading-4 min-w-0 flex-1 ${hideLabel ? '' : 'ml-0.5'}`}>
               {fileName}
             </span>
           )}
@@ -343,9 +358,10 @@ export const ContentBlock = memo(function ContentBlock({
       >
         <div className="overflow-hidden">
           {/* Content */}
-          {hasContent && (
+          {shouldRenderContent && hasContent && (
             <div ref={contentRef} className="relative group/content">
-              {content && <CopyButton text={content} position="absolute" groupName="content" />}
+              {content && <CopyButton text={content} position="absolute" groupName="content" />
+
 
               {isDiff && resolvedDiff ? (
                 <DiffViewer
@@ -354,10 +370,12 @@ export const ContentBlock = memo(function ContentBlock({
                   language={lang}
                   viewMode={diffViewMode}
                   maxHeight={maxHeight}
+                  filePath={filePath}
+                  projectDirectory={projectDirectory}
                   data={diffViewerData}
                 />
               ) : content?.trim() ? (
-                <CodePreview code={content} language={lang} maxHeight={maxHeight} />
+                <CodePreview code={content} language={lang} maxHeight={maxHeight} isVisible={showBody} />
               ) : null}
             </div>
           )}

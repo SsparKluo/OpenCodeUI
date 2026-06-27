@@ -17,6 +17,8 @@ import { useDynamicVirtualScroll } from '../hooks/useDynamicVirtualScroll'
 import { themeStore } from '../store/themeStore'
 import type { DiffStyle } from '../store/themeStore'
 import { getLineCount, getLineNumberColumnWidth } from '../utils/lineNumberUtils'
+import { buildUnifiedDiff } from '../utils/diffFormat'
+import { CopyButton } from './ui'
 
 // ============================================
 // 常量
@@ -44,6 +46,11 @@ export interface DiffViewerProps {
   isResizing?: boolean
   wordWrap?: boolean
   data?: DiffViewerData
+  /** File path used for the unified-diff copy header. Falls back to 'file'. */
+  filePath?: string
+  /** Session project root. When set, `filePath` is converted to a path
+   *  relative to this root in the diff copy header. */
+  projectDirectory?: string
 }
 
 export interface DiffViewerData {
@@ -540,11 +547,19 @@ const DiffViewerContent = memo(function DiffViewerContent({
   isResizing = false,
   wordWrap,
   data,
+  filePath,
+  projectDirectory,
 }: DiffViewerProps & { data: DiffViewerData }) {
   const { diffStyle, codeWordWrap, codeFontScale } = useSyncExternalStore(themeStore.subscribe, themeStore.getSnapshot)
   const resolvedWordWrap = wordWrap ?? codeWordWrap
   const lineHeight = codeLineHeight(codeFontScale)
   const resolvedData = data
+
+  // 预计算复制用 unified diff 文本（git 格式），避免每次渲染都跑 diff
+  const copyText = useMemo(
+    () => buildUnifiedDiff(before, after, filePath, projectDirectory),
+    [before, after, filePath, projectDirectory],
+  )
 
   // 纯增加或纯删除时，split 模式另一边是空的没意义，自动降级为 unified
   const isAddOnly = !before.trim()
@@ -555,6 +570,7 @@ const DiffViewerContent = memo(function DiffViewerContent({
     if (resolvedWordWrap) {
       return (
         <WrappedSplitDiffView
+          copyText={copyText}
           beforeTokens={resolvedData.beforeTokens}
           afterTokens={resolvedData.afterTokens}
           pairedLines={resolvedData.pairedLines}
@@ -569,6 +585,7 @@ const DiffViewerContent = memo(function DiffViewerContent({
 
     return (
       <SplitDiffView
+        copyText={copyText}
         beforeTokens={resolvedData.beforeTokens}
         afterTokens={resolvedData.afterTokens}
         pairedLines={resolvedData.pairedLines}
@@ -584,6 +601,7 @@ const DiffViewerContent = memo(function DiffViewerContent({
   if (resolvedWordWrap) {
     return (
       <WrappedUnifiedDiffView
+        copyText={copyText}
         beforeTokens={resolvedData.beforeTokens}
         afterTokens={resolvedData.afterTokens}
         lines={resolvedData.unifiedLines}
@@ -598,6 +616,7 @@ const DiffViewerContent = memo(function DiffViewerContent({
 
   return (
     <UnifiedDiffView
+      copyText={copyText}
       beforeTokens={resolvedData.beforeTokens}
       afterTokens={resolvedData.afterTokens}
       lines={resolvedData.unifiedLines}
@@ -611,6 +630,7 @@ const DiffViewerContent = memo(function DiffViewerContent({
 })
 
 const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
+  copyText,
   beforeTokens,
   afterTokens,
   pairedLines,
@@ -620,6 +640,7 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
   diffStyle,
   lineHeight,
 }: {
+  copyText: string
   beforeTokens: HighlightTokens | null
   afterTokens: HighlightTokens | null
   pairedLines: PairedLine[]
@@ -761,15 +782,24 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="overflow-y-auto overflow-x-hidden custom-scrollbar font-mono text-[length:var(--fs-code)] h-full"
-      onScroll={handleScroll}
-      style={maxHeight !== undefined ? { maxHeight } : undefined}
-    >
-      <div style={{ height: totalHeight, position: 'relative' }}>
-        <div className="absolute top-0 left-0 right-0" style={{ transform: `translateY(${offsetY}px)` }}>
-          {visibleRows}
+    <div className="relative group/diff h-full">
+      <div className="absolute top-1 right-1 z-10 opacity-0 group-hover/diff:opacity-100 group-focus-within/diff:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
+        <CopyButton
+          text={copyText}
+          position="static"
+          className="!h-7 !w-7 !p-1.5 rounded-md bg-bg-300/70 backdrop-blur-md"
+        />
+      </div>
+      <div
+        ref={containerRef}
+        className="overflow-y-auto overflow-x-hidden custom-scrollbar font-mono text-[length:var(--fs-code)] h-full"
+        onScroll={handleScroll}
+        style={maxHeight !== undefined ? { maxHeight } : undefined}
+      >
+        <div style={{ height: totalHeight, position: 'relative' }}>
+          <div className="absolute top-0 left-0 right-0" style={{ transform: `translateY(${offsetY}px)` }}>
+            {visibleRows}
+          </div>
         </div>
       </div>
     </div>
@@ -793,6 +823,7 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
 // ============================================
 
 const SplitDiffView = memo(function SplitDiffView({
+  copyText,
   beforeTokens,
   afterTokens,
   pairedLines,
@@ -802,6 +833,7 @@ const SplitDiffView = memo(function SplitDiffView({
   diffStyle,
   lineHeight,
 }: {
+  copyText: string
   beforeTokens: HighlightTokens | null
   afterTokens: HighlightTokens | null
   pairedLines: PairedLine[]
@@ -1090,17 +1122,25 @@ const SplitDiffView = memo(function SplitDiffView({
     )
   }
   return (
-    <div
-      ref={containerRef}
-      className="overflow-y-auto overflow-x-hidden custom-scrollbar font-mono text-[length:var(--fs-code)] h-full"
-      style={maxHeight !== undefined ? { maxHeight } : undefined}
-      onScroll={handleScroll}
-    >
-      {/* 虚拟滚动高度占位 */}
-      <div style={{ height: totalHeight, position: 'relative' }}>
-        <div className="absolute top-0 left-0 right-0 flex" style={{ transform: `translateY(${offsetY}px)` }}>
-          {/* 左面板 */}
-          <div className="flex-1 flex min-w-0 border-r border-border-100/30">
+    <div className="relative group/diff h-full">
+      <div className="absolute top-1 right-1 z-10 opacity-0 group-hover/diff:opacity-100 group-focus-within/diff:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
+        <CopyButton
+          text={copyText}
+          position="static"
+          className="!h-7 !w-7 !p-1.5 rounded-md bg-bg-300/70 backdrop-blur-md"
+        />
+      </div>
+      <div
+        ref={containerRef}
+        className="overflow-y-auto overflow-x-hidden custom-scrollbar font-mono text-[length:var(--fs-code)] h-full"
+        style={maxHeight !== undefined ? { maxHeight } : undefined}
+        onScroll={handleScroll}
+      >
+        {/* 虚拟滚动高度占位 */}
+        <div style={{ height: totalHeight, position: 'relative' }}>
+          <div className="absolute top-0 left-0 right-0 flex" style={{ transform: `translateY(${offsetY}px)` }}>
+            {/* 左面板 */}
+            <div className="flex-1 flex min-w-0 border-r border-border-100/30">
             {/* 左 gutter */}
             <div className="shrink-0 overflow-visible" style={{ width: gutterWidth }}>
               {leftGutterRows}
@@ -1160,6 +1200,7 @@ const SplitDiffView = memo(function SplitDiffView({
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 })
@@ -1181,6 +1222,7 @@ const SplitDiffView = memo(function SplitDiffView({
 // ============================================
 
 const UnifiedDiffView = memo(function UnifiedDiffView({
+  copyText,
   beforeTokens,
   afterTokens,
   lines,
@@ -1190,6 +1232,7 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
   diffStyle,
   lineHeight,
 }: {
+  copyText: string
   beforeTokens: HighlightTokens | null
   afterTokens: HighlightTokens | null
   lines: UnifiedLine[]
@@ -1380,45 +1423,55 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="overflow-y-auto overflow-x-hidden custom-scrollbar font-mono text-[length:var(--fs-code)] h-full"
-      style={maxHeight !== undefined ? { maxHeight } : undefined}
-      onScroll={handleScroll}
-    >
-      {/* 虚拟滚动高度占位 */}
-      <div style={{ height: totalHeight, position: 'relative' }}>
-        <div className="absolute top-0 left-0 right-0 flex" style={{ transform: `translateY(${offsetY}px)` }}>
-          {/* Gutter: 固定宽度，不水平滚动 */}
-          <div className="shrink-0 overflow-visible" style={{ width: GUTTER_WIDTH }}>
-            {gutterRows}
-          </div>
-
-          {/* Content: 独立水平滚动，隐藏自身滚动条 */}
-          <div
-            ref={contentRef}
-            className="flex-1 min-w-0 overflow-x-auto scrollbar-none"
-            onScroll={handleContentScroll}
-          >
-            <div className="inline-block min-w-full">{contentRows}</div>
-          </div>
-        </div>
+    <div className="relative group/diff h-full">
+      <div className="absolute top-1 right-1 z-10 opacity-0 group-hover/diff:opacity-100 group-focus-within/diff:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
+        <CopyButton
+          text={copyText}
+          position="static"
+          className="!h-7 !w-7 !p-1.5 rounded-md bg-bg-300/70 backdrop-blur-md"
+        />
       </div>
+      <div
+        ref={containerRef}
+        className="overflow-y-auto overflow-x-hidden custom-scrollbar font-mono text-[length:var(--fs-code)] h-full"
+        style={maxHeight !== undefined ? { maxHeight } : undefined}
+        onScroll={handleScroll}
+      >
+        {/* 虚拟滚动高度占位 */}
+        <div style={{ height: totalHeight, position: 'relative' }}>
+          <div className="absolute top-0 left-0 right-0 flex" style={{ transform: `translateY(${offsetY}px)` }}>
+            {/* Gutter: 固定宽度，不水平滚动 */}
+            <div className="shrink-0 overflow-visible" style={{ width: GUTTER_WIDTH }}>
+              {gutterRows}
+            </div>
 
-      {/* Sticky proxy 横向滚动条 — 只在内容实际溢出时显示 */}
-      {contentWidth > contentClientWidth && (
-        <div className="sticky bottom-0 z-10 flex">
-          <div className="shrink-0" style={{ width: GUTTER_WIDTH }} />
-          <div ref={scrollbarRef} className="flex-1 min-w-0 overflow-x-auto code-scrollbar" onScroll={handleScrollbar}>
-            <div style={{ width: contentWidth, height: 1 }} />
+            {/* Content: 独立水平滚动，隐藏自身滚动条 */}
+            <div
+              ref={contentRef}
+              className="flex-1 min-w-0 overflow-x-auto scrollbar-none"
+              onScroll={handleContentScroll}
+            >
+              <div className="inline-block min-w-full">{contentRows}</div>
+            </div>
           </div>
         </div>
-      )}
+
+        {/* Sticky proxy 横向滚动条 — 只在内容实际溢出时显示 */}
+        {contentWidth > contentClientWidth && (
+          <div className="sticky bottom-0 z-10 flex">
+            <div className="shrink-0" style={{ width: GUTTER_WIDTH }} />
+            <div ref={scrollbarRef} className="flex-1 min-w-0 overflow-x-auto code-scrollbar" onScroll={handleScrollbar}>
+              <div style={{ width: contentWidth, height: 1 }} />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 })
 
 const WrappedUnifiedDiffView = memo(function WrappedUnifiedDiffView({
+  copyText,
   beforeTokens,
   afterTokens,
   lines,
@@ -1428,6 +1481,7 @@ const WrappedUnifiedDiffView = memo(function WrappedUnifiedDiffView({
   diffStyle,
   lineHeight,
 }: {
+  copyText: string
   beforeTokens: HighlightTokens | null
   afterTokens: HighlightTokens | null
   lines: UnifiedLine[]
@@ -1546,15 +1600,24 @@ const WrappedUnifiedDiffView = memo(function WrappedUnifiedDiffView({
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="overflow-y-auto overflow-x-hidden custom-scrollbar font-mono text-[length:var(--fs-code)] h-full"
-      onScroll={handleScroll}
-      style={maxHeight !== undefined ? { maxHeight } : undefined}
-    >
-      <div style={{ height: totalHeight, position: 'relative' }}>
-        <div className="absolute top-0 left-0 right-0" style={{ transform: `translateY(${offsetY}px)` }}>
-          {visibleRows}
+    <div className="relative group/diff h-full">
+      <div className="absolute top-1 right-1 z-10 opacity-0 group-hover/diff:opacity-100 group-focus-within/diff:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
+        <CopyButton
+          text={copyText}
+          position="static"
+          className="!h-7 !w-7 !p-1.5 rounded-md bg-bg-300/70 backdrop-blur-md"
+        />
+      </div>
+      <div
+        ref={containerRef}
+        className="overflow-y-auto overflow-x-hidden custom-scrollbar font-mono text-[length:var(--fs-code)] h-full"
+        onScroll={handleScroll}
+        style={maxHeight !== undefined ? { maxHeight } : undefined}
+      >
+        <div style={{ height: totalHeight, position: 'relative' }}>
+          <div className="absolute top-0 left-0 right-0" style={{ transform: `translateY(${offsetY}px)` }}>
+            {visibleRows}
+          </div>
         </div>
       </div>
     </div>

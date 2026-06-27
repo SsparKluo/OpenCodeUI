@@ -24,6 +24,9 @@ interface DiffViewProps {
   maxHeight?: number
   /** Explicit language */
   language?: string
+  /** Session project root. Absolute `filePath` is converted to a relative
+   *  path in the diff copy header. */
+  projectDirectory?: string
 }
 
 /** 轻量统计 additions/deletions，不做高亮 */
@@ -47,6 +50,7 @@ export const DiffView = memo(function DiffView({
   defaultCollapsed = false,
   maxHeight = 300,
   language: explicitLanguage,
+  projectDirectory,
 }: DiffViewProps) {
   const { t } = useTranslation(['components', 'common'])
   const [collapsed, setCollapsed] = useState(defaultCollapsed)
@@ -97,6 +101,8 @@ export const DiffView = memo(function DiffView({
                 after={content.after}
                 language={language}
                 viewMode={fullscreenViewMode}
+                filePath={filePath}
+                projectDirectory={projectDirectory}
                 data={diffViewerData}
               />
             ),
@@ -106,6 +112,8 @@ export const DiffView = memo(function DiffView({
       content,
       diffViewerData,
       fileName,
+      filePath,
+      projectDirectory,
       fullscreenViewMode,
       generatedFullscreenId,
       language,
@@ -183,6 +191,8 @@ export const DiffView = memo(function DiffView({
             language={language}
             viewMode="unified"
             maxHeight={maxHeight}
+            filePath={filePath}
+            projectDirectory={projectDirectory}
             data={diffViewerData}
           />
         </div>
