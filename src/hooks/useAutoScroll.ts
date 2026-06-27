@@ -345,33 +345,55 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
   }, [])
 
   // ============================================================
-  // ResizeObserver on content — keep the bottom locked in view
-  // whenever the user hasn't scrolled away, regardless of
-  // streaming state. This ensures pressing Enter to send a
-  // message, tool output showing, or any post-stream DOM growth
-  // still keeps the bottom visible.
+  // ResizeObserver — keep the bottom locked in view when the
+  // user hasn't scrolled away. Observes both contentEl and
+  // scrollEl so layout shifts (textarea auto-resize, window
+  // resize) also re-snap to the new bottom.
+  //
+  // Uses requestAnimationFrame to batch multiple RO callbacks
+  // within the same frame — prevents transient intermediate
+  // sizes from overwriting the final scroll position.
   // ============================================================
-  useEffect(() => {
-    if (!contentEl || typeof ResizeObserver === 'undefined') return
-
-    const observer = new ResizeObserver(() => {
-      try {
-        const scrollElLocal = scrollElRef.current
-        if (scrollElLocal && !canScroll(scrollElLocal)) {
-          if (userScrolledRef.current) setUserScrolled(false)
-          return
-        }
-        if (userScrolledRef.current) return
-        scrollToBottom(false)
-      } catch (err) {
-        if (import.meta.env.DEV) {
-          console.trace('[useAutoScroll RO] error', err)
-        }
+  const resizeRafIdRef = useRef<number | null>(null)
+  const handleResizeTick = useCallback(() => {
+    resizeRafIdRef.current = null
+    try {
+      const el = scrollElRef.current
+      if (el && !canScroll(el)) {
+        if (userScrolledRef.current) setUserScrolled(false)
+        return
       }
-    })
-    observer.observe(contentEl)
-    return () => observer.disconnect()
-  }, [contentEl, scrollToBottom, setUserScrolled])
+      if (userScrolledRef.current) return
+      scrollToBottom(false)
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.trace('[useAutoScroll RO] error', err)
+      }
+    }
+  }, [scrollToBottom, setUserScrolled])
+
+  const scheduleResize = useCallback(() => {
+    if (resizeRafIdRef.current === null) {
+      resizeRafIdRef.current = requestAnimationFrame(handleResizeTick)
+    }
+  }, [handleResizeTick])
+
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') return
+    if (!contentEl && !scrollEl) return
+
+    const observer = new ResizeObserver(scheduleResize)
+    if (contentEl) observer.observe(contentEl)
+    if (scrollEl) observer.observe(scrollEl)
+
+    return () => {
+      observer.disconnect()
+      if (resizeRafIdRef.current !== null) {
+        cancelAnimationFrame(resizeRafIdRef.current)
+        resizeRafIdRef.current = null
+      }
+    }
+  }, [contentEl, scrollEl, scheduleResize])
 
   // ============================================================
   // working edge — start/clear the settle window

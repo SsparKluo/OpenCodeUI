@@ -867,6 +867,7 @@ export const ChatPane = memo(function ChatPane({
           onClearRevert={clearRevert}
           registerInputBox={registerInputBox}
           isAtBottom={isAtBottom}
+          onDockResize={() => chatAreaRef.current?.scrollToBottomIfAtBottom()}
           showScrollToBottom={!isAtBottom}
           onScrollToBottom={() => chatAreaRef.current?.scrollToBottom()}
           collapsedPermission={
