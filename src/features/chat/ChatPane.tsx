@@ -749,7 +749,7 @@ export const ChatPane = memo(function ChatPane({
   // Render
   // ============================================
   const chatContent = (
-    <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
+    <div className="flex-1 relative overflow-hidden flex flex-col min-h-0 touch-pan-y">
       {displayMode === 'single' && (
         <div className="absolute top-0 left-0 right-0 z-20 pointer-events-none">
           <div className="pointer-events-auto">
@@ -769,7 +769,7 @@ export const ChatPane = memo(function ChatPane({
         </div>
       )}
 
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden touch-pan-y">
         <InlineToolRequestContext.Provider value={inlineToolRequestCtx}>
           <ErrorBoundary onOpenSettings={onOpenSettings}>
             <ChatArea
