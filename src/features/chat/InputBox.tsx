@@ -19,6 +19,7 @@ import { FloatingActions, CollapsedBar } from './input/InputActions'
 import { useMobileCollapse } from './input/useMobileCollapse'
 import { useAttachmentRail } from './input/useAttachmentRail'
 import { useInputHistory } from './input/useInputHistory'
+import { useTextareaAutoHeight } from './input/useTextareaAutoHeight'
 import {
   TEXT_STYLE,
   bytesToDataUrl,
@@ -155,6 +156,8 @@ export interface InputBoxProps {
   // Animation
   registerInputBox?: (element: HTMLElement | null) => void
   isAtBottom?: boolean
+  /** Called after dock height changes while at bottom; use to re-snap chat scroll. */
+  onDockResize?: () => void
   showScrollToBottom?: boolean
   onScrollToBottom?: () => void
   // Collapsed dialog capsules
@@ -198,6 +201,7 @@ function InputBoxComponent({
   onClearRevert,
   registerInputBox,
   isAtBottom = true,
+  onDockResize,
   showScrollToBottom = false,
   onScrollToBottom,
   collapsedPermission,
@@ -276,14 +280,10 @@ function InputBoxComponent({
   // ============================================
   // Mobile Input Dock: 滚动收起/展开（逻辑在 useMobileCollapse hook 中）
   // ============================================
-  const { isCollapsed, handleExpandInput, handleFocus, handleBlur, handleContainerPointerDown } =
+  const { isCollapsed, toggleCollapse, handleExpandInput, handleFocus, handleBlur, handleContainerPointerDown } =
     useMobileCollapse({
       enabled: interaction.enableCollapsedInputDock,
-      isAtBottom,
       textareaRef,
-      inputContainerRef,
-      contentWrapRef,
-      footerRef,
       registerInputBox,
       collapsedPermission,
       collapsedQuestion,
@@ -332,25 +332,13 @@ function InputBoxComponent({
     [],
   )
 
-  // 自动调整 textarea 高度
-  useEffect(() => {
-    const textarea = textareaRef.current
-    if (!textarea) return
-
-    // 只有真正空字符串时才重置高度；保留仅空格/空行时的换行高度
-    if (text.length === 0) {
-      textarea.style.height = '24px'
-      return
-    }
-
-    textarea.style.height = 'auto'
-    const scrollHeight = textarea.scrollHeight
-    // 原生层已处理键盘 resize，window.innerHeight 即可用高度
-    const viewportH = window.innerHeight
-    // 可用高度 = viewport - header(48px) - toolbar/padding/footer(~100px) - 安全余量
-    const maxH = isCompact ? Math.max(80, viewportH - 48 - 100 - 72) : viewportH * 0.35
-    textarea.style.height = Math.max(24, Math.min(scrollHeight, maxH)) + 'px'
-  }, [text, isCompact])
+  useTextareaAutoHeight({
+    textareaRef,
+    text,
+    isCompact,
+    shouldNudgeChatScroll: isAtBottom,
+    onDockResize,
+  })
 
   // 计算
   const inputDisabled = !!disabled
@@ -1192,17 +1180,11 @@ function InputBoxComponent({
     if (a.agentName) excludeValues.add(a.agentName)
   })
 
-  // 底部 padding 计算：
-  // - isCollapsed (收起态 / 移动端「回复胶囊」)：
-  //   公式 max(12, env)。Safari env()=0 → 12px breathing；PWA env()=34 → 34px，
-  //   胶囊底部刚好贴 safe-area 顶部，避免 env+12 叠加出现的「多一截」间距。
-  // - 展开态：Footer (h-8 = 2rem) 已是一个天然的视觉缓冲，只需补足 safe-area
-  //   超出 Footer 的部分。这避免 PWA 下 Footer + 完整 safe-area 叠加出现
-  //   「双倍 safe-area」的视觉 gap。
-  //   公式：max(0, env - 2rem) → 总缓冲 = Footer + padding = max(32px, env)
-  const bottomDockPadding = isCollapsed
-    ? 'max(12px, var(--safe-area-inset-bottom, 0px))'
-    : 'max(0px, calc(var(--safe-area-inset-bottom, 0px) - 2rem))'
+  // 底部 padding：Footer (h-8 = 2rem) 已是一个天然的视觉缓冲，只需补足 safe-area
+  // 超出 Footer 的部分，避免双倍 safe-area 的视觉 gap。
+  // 现在 Footer 在折叠/展开态都可见，公式统一。
+  // 总底部空间 = Footer(32px) + padding = max(32px, env)
+  const bottomDockPadding = 'max(0px, calc(var(--safe-area-inset-bottom, 0px) - 2rem))'
 
   return (
     <div className="w-full">
@@ -1259,27 +1241,22 @@ function InputBoxComponent({
           </div>
 
           {/* 展开态完整输入 track：展开时撑开，收起时坍缩为 0；始终挂载避免 remount，靠 0fr + overflow-hidden + pointer-events-none 隐藏 */}
-          <div
-            className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
-              !isCollapsed ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'
-            }`}
-          >
-            {/* relative positioning ancestor for menus, outside overflow-hidden */}
-            <div className="relative z-30">
-              {/* @ Mention Menu — 在 overflow-hidden 外部，防止被裁剪 */}
-              <MentionMenu
-                ref={mentionMenuRef}
-                isOpen={mentionOpen}
-                query={mentionQuery}
-                agents={agents}
-                rootPath={rootPath}
-                excludeValues={excludeValues}
-                onSelect={handleMentionSelect}
-                onNavigate={updateMentionQuery}
-                onClose={handleMentionClose}
-              />
+          {/* relative positioning ancestor for menus, outside the grid's overflow-hidden */}
+          <div className="relative z-30">
+            {/* @ Mention Menu — 在 overflow-hidden 外部，防止被裁剪 */}
+            <MentionMenu
+              ref={mentionMenuRef}
+              isOpen={mentionOpen}
+              query={mentionQuery}
+              agents={agents}
+              rootPath={rootPath}
+              excludeValues={excludeValues}
+              onSelect={handleMentionSelect}
+              onNavigate={updateMentionQuery}
+              onClose={handleMentionClose}
+            />
 
-              {/* / Slash Command Menu — 在 overflow-hidden 外部，防止被裁剪 */}
+            {/* / Slash Command Menu — 在 overflow-hidden 外部，防止被裁剪 */}
               <SlashCommandMenu
                 ref={slashMenuRef}
                 isOpen={slashOpen}
@@ -1289,7 +1266,12 @@ function InputBoxComponent({
                 onClose={handleSlashClose}
               />
 
-              {/* overflow-hidden 只包裹实际输入内容，不影响上方 absolute 菜单 */}
+            {/* Grid 自身 overflow-hidden，收起时 0fr 能完全坍缩 */}
+            <div
+              className={`grid overflow-hidden transition-[grid-template-rows,opacity] duration-300 ease-out ${
+                !isCollapsed ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+              }`}
+            >
               <div className="overflow-hidden">
                 {/* Input Container */}
                 <div
@@ -1400,25 +1382,30 @@ function InputBoxComponent({
                         modelsLoading={modelsLoading}
                         inputContainerRef={inputContainerRef}
                         modelSelectorRef={modelSelectorRef}
+                        isCollapsed={isCollapsed}
+                        onToggleCollapse={toggleCollapse}
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Footer — 展开态固定高度区域，随 track 一起显隐 */}
-                <div
-                  ref={footerRef}
-                  onPointerDown={handleContainerPointerDown}
-                  className="h-8 flex items-center justify-center"
-                >
-                  <InputFooter
-                    paneId={paneId}
-                    sessionId={sessionId}
-                    onNewChat={onNewChat}
-                    inputContainerRef={inputContainerRef}
-                  />
-                </div>
               </div>
+            </div>
+
+            {/* Footer — 始终可见（折叠/展开都有），不在折叠 grid 内 */}
+            <div
+              ref={footerRef}
+              onPointerDown={handleContainerPointerDown}
+              className={`transition-[opacity] duration-300 ease-out ${
+                isCollapsed ? 'opacity-100' : 'opacity-100'
+              } h-8 flex items-center justify-center`}
+            >
+              <InputFooter
+                paneId={paneId}
+                sessionId={sessionId}
+                onNewChat={onNewChat}
+                inputContainerRef={inputContainerRef}
+              />
             </div>
           </div>
         </div>
