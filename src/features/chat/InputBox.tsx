@@ -343,7 +343,6 @@ function InputBoxComponent({
       return
     }
 
-    textarea.style.height = 'auto'
     const scrollHeight = textarea.scrollHeight
     // 原生层已处理键盘 resize，window.innerHeight 即可用高度
     const viewportH = window.innerHeight
