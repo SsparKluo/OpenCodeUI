@@ -338,7 +338,23 @@ function InputBoxComponent({
       return
     }
 
-    const scrollHeight = textarea.scrollHeight
+    // 用隐藏 mirror 测量 content 实际高度，避免坍缩 textarea 导致布局抖动。
+    // 读取 textarea 的当前宽度和字号等样式，复制给 mirror 保证测量精度。
+    const textareaWidth = textarea.clientWidth
+    if (textareaWidth <= 0) return // textarea 未渲染（如折叠态），跳过
+    const taStyles = getComputedStyle(textarea)
+    const mirror = document.createElement('div')
+    mirror.style.cssText = taStyles.cssText
+    mirror.style.position = 'absolute'
+    mirror.style.top = '-9999px'
+    mirror.style.left = '-9999px'
+    mirror.style.width = textareaWidth + 'px'
+    mirror.style.height = 'auto'
+    mirror.textContent = text
+    document.body.appendChild(mirror)
+    const scrollHeight = mirror.scrollHeight
+    document.body.removeChild(mirror)
+
     // 原生层已处理键盘 resize，window.innerHeight 即可用高度
     const viewportH = window.innerHeight
     // 可用高度 = viewport - header(48px) - toolbar/padding/footer(~100px) - 安全余量
