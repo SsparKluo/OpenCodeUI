@@ -1253,27 +1253,22 @@ function InputBoxComponent({
           </div>
 
           {/* 展开态完整输入 track：展开时撑开，收起时坍缩为 0；始终挂载避免 remount，靠 0fr + overflow-hidden + pointer-events-none 隐藏 */}
-          <div
-            className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
-              !isCollapsed ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'
-            }`}
-          >
-            {/* relative positioning ancestor for menus, outside overflow-hidden */}
-            <div className="relative z-30">
-              {/* @ Mention Menu — 在 overflow-hidden 外部，防止被裁剪 */}
-              <MentionMenu
-                ref={mentionMenuRef}
-                isOpen={mentionOpen}
-                query={mentionQuery}
-                agents={agents}
-                rootPath={rootPath}
-                excludeValues={excludeValues}
-                onSelect={handleMentionSelect}
-                onNavigate={updateMentionQuery}
-                onClose={handleMentionClose}
-              />
+          {/* relative positioning ancestor for menus, outside the grid's overflow-hidden */}
+          <div className="relative z-30">
+            {/* @ Mention Menu — 在 overflow-hidden 外部，防止被裁剪 */}
+            <MentionMenu
+              ref={mentionMenuRef}
+              isOpen={mentionOpen}
+              query={mentionQuery}
+              agents={agents}
+              rootPath={rootPath}
+              excludeValues={excludeValues}
+              onSelect={handleMentionSelect}
+              onNavigate={updateMentionQuery}
+              onClose={handleMentionClose}
+            />
 
-              {/* / Slash Command Menu — 在 overflow-hidden 外部，防止被裁剪 */}
+            {/* / Slash Command Menu — 在 overflow-hidden 外部，防止被裁剪 */}
               <SlashCommandMenu
                 ref={slashMenuRef}
                 isOpen={slashOpen}
@@ -1283,7 +1278,12 @@ function InputBoxComponent({
                 onClose={handleSlashClose}
               />
 
-              {/* overflow-hidden 只包裹实际输入内容，不影响上方 absolute 菜单 */}
+            {/* Grid 自身 overflow-hidden，收起时 0fr 能完全坍缩 */}
+            <div
+              className={`grid overflow-hidden transition-[grid-template-rows,opacity] duration-300 ease-out ${
+                !isCollapsed ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+              }`}
+            >
               <div className="overflow-hidden">
                 {/* Input Container */}
                 <div
