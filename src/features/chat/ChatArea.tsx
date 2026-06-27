@@ -718,7 +718,7 @@ export const ChatArea = memo(
       )
 
       return (
-        <div className="h-full overflow-hidden contain-strict relative">
+        <div className="h-full overflow-hidden contain-strict relative touch-pan-y">
 
           {loadState === 'loading' && visibleMessages.length === 0 && (
             <div className="absolute inset-0 z-10 flex items-center justify-center">
