@@ -2,6 +2,8 @@
 // 统一错误处理工具
 // ============================================
 
+import { notificationStore } from '../store/notificationStore'
+
 export type ErrorCategory =
   | 'api' // API 调用错误
   | 'session' // Session 相关错误
@@ -26,10 +28,8 @@ export interface ErrorContext {
 /**
  * 统一的错误日志函数
  *
- * 未来可以扩展为：
- * - 发送到错误监控服务
- * - 显示 toast 通知
- * - 根据错误类型做不同处理
+ * - 开发环境输出到控制台
+ * - 非静默错误通过 notificationStore 弹 toast 展示给用户
  */
 export function logError(error: unknown, context: ErrorContext): void {
   const { category, operation, silent = false } = context
@@ -39,11 +39,11 @@ export function logError(error: unknown, context: ErrorContext): void {
     console.error(`[${category}] ${operation}:`, error)
   }
 
-  // 非静默错误，未来可以显示 toast
-  if (!silent) {
-    // TODO: 集成 toast 通知系统
-    // showToast({ type: 'error', message: `${operation} failed` })
-  }
+  // 静默错误不打扰用户
+  if (silent) return
+
+  const message = extractErrorMessage(error)
+  notificationStore.push('error', operation, message, '')
 }
 
 /**
@@ -88,5 +88,19 @@ export const clipboardErrorHandler = createErrorHandler('clipboard')
 export function handleError(operation: string, category: ErrorCategory = 'unknown') {
   return (error: unknown) => {
     logError(error, { category, operation })
+  }
+}
+
+/**
+ * 从 unknown 类型的 error 中提取人类可读的 message。
+ * ApiError / 普通 Error 直接取 .message，其余降级为字符串。
+ */
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return 'Unknown error'
   }
 }
