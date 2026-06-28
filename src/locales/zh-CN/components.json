@@ -6,9 +6,13 @@
   "fileExplorer": {
     "selectProject": "选择项目以浏览文件",
     "explorer": "文件浏览器",
+    "searchFiles": "搜索文件内容",
+    "clearSearch": "清除搜索",
     "noFilesFound": "未找到文件",
+    "noTextMatches": "未找到匹配内容",
     "failedToLoadFiles": "加载文件失败",
     "failedToLoadFile": "加载文件内容失败",
+    "textSearchFailed": "搜索失败",
     "binaryFile": "二进制文件，无法预览",
     "fit": "适应",
     "oneToOne": "1:1"
