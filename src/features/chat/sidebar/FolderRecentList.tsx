@@ -597,10 +597,15 @@ export function FolderRecentList({
         onClose={() => setPendingDelete(null)}
         onConfirm={async () => {
           if (pendingDelete) {
-            await onDeleteSession(pendingDelete.session)
-            pendingDelete.removeLocal()
+            try {
+              await onDeleteSession(pendingDelete.session)
+              pendingDelete.removeLocal()
+            } catch {
+              // 错误已通过 toast 通知
+            } finally {
+              setPendingDelete(null)
+            }
           }
-          setPendingDelete(null)
         }}
         title={t('sidebar.deleteChat')}
         description={t('sidebar.deleteChatConfirm')}

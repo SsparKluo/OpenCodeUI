@@ -141,13 +141,49 @@ export function invalidateSDKClient(): void {
  *
  * SDK 默认返回 { data, error, request, response }
  * 我们的上层 API 函数期望直接返回数据，所以需要 unwrap
+ *
+ * 由于项目未启用 throwOnError，result.error 通常是后端返回的原始 JSON body
+ * （常见形态：{ name, data: { message } } 或 { message }），这里提取人类可读信息
+ * 作为 Error.message，原始对象挂到 cause 上便于调试。
  */
 export function unwrap<T>(result: { data?: T; error?: unknown }): T {
   if (result.error != null) {
-    const err = result.error
-    if (err instanceof Error) throw err
-    if (typeof err === 'string') throw new Error(err)
-    throw new Error(JSON.stringify(err))
+    throw new ApiError(extractApiErrorMessage(result.error), { cause: result.error })
   }
   return result.data as T
+}
+
+/**
+ * OpenCode API 错误。继承 Error 以兼容现有 try/catch + instanceof Error 的用法。
+ */
+export class ApiError extends Error {
+  name = 'ApiError'
+}
+
+function isRecordLike(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * 从后端返回的 error body 中提取人类可读信息。
+ * 优先级：data.message > message > data.error > name > 摘要后的 JSON
+ */
+function extractApiErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+
+  if (isRecordLike(error)) {
+    const data = isRecordLike(error.data) ? error.data : undefined
+    if (typeof data?.message === 'string' && data.message) return data.message
+    if (typeof error.message === 'string' && error.message) return error.message
+    if (typeof data?.error === 'string' && data.error) return data.error
+    if (typeof error.name === 'string' && error.name) return error.name
+  }
+
+  try {
+    const json = JSON.stringify(error)
+    return json.length > 200 ? json.slice(0, 200) + '…' : json
+  } catch {
+    return 'Unknown error'
+  }
 }

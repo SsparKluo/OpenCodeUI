@@ -10,6 +10,7 @@ import {
 import { serverStore } from '../store/serverStore'
 import { pinnedSessionsStore } from '../store/pinnedSessionsStore'
 import { autoDetectPathStyle, isSameDirectory } from '../utils'
+import { sessionErrorHandler } from '../utils/errorHandling'
 
 interface UseSessionsOptions {
   /** 每页数量 */
@@ -278,10 +279,16 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
   const create = useCallback(
     async (title?: string) => {
       // 创建时也要传 directory
-      const newSession = await createSession({
-        title,
-        directory: normalizedDirectory,
-      })
+      let newSession: ApiSession
+      try {
+        newSession = await createSession({
+          title,
+          directory: normalizedDirectory,
+        })
+      } catch (error) {
+        sessionErrorHandler('create session', error)
+        throw error
+      }
 
       if (searchRef.current) {
         void fetchSessionsRef.current({ search: searchRef.current || undefined })
@@ -300,7 +307,12 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
   // 删除会话
   const remove = useCallback(
     async (sessionId: string) => {
-      await deleteSession(sessionId, normalizedDirectory)
+      try {
+        await deleteSession(sessionId, normalizedDirectory)
+      } catch (error) {
+        sessionErrorHandler('delete session', error)
+        throw error
+      }
       pinnedSessionsStore.unpin(sessionId)
       setSessions(prev => prev.filter(s => s.id !== sessionId))
     },
