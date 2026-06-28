@@ -21,6 +21,7 @@ import { buildUnifiedDiff } from '../utils/diffFormat'
 import { useDelayedRender } from '../hooks/useDelayedRender'
 import { useResponsiveMaxHeight } from '../hooks/useResponsiveMaxHeight'
 import { useFullscreenLayer } from '../contexts'
+import { useUiDisclosureState } from '../utils/uiDisclosureState'
 
 // ============================================
 // Types
@@ -54,6 +55,8 @@ export interface ContentBlockProps {
   /** Session project root. Absolute `filePath` is converted to a relative
    *  path before being embedded in the unified-diff copy header. */
   projectDirectory?: string
+  /** 折叠状态缓存 key。消息流内传入稳定 key，避免流式刷新重置用户操作。 */
+  stateKey?: string
 
   // 内容
   /** 普通文本/代码内容 */
@@ -90,6 +93,7 @@ export const ContentBlock = memo(function ContentBlock({
   onFullscreenChange,
   fullscreenId,
   projectDirectory,
+  stateKey,
   content,
   diff,
   diffStats: providedDiffStats,
@@ -99,11 +103,14 @@ export const ContentBlock = memo(function ContentBlock({
 }: ContentBlockProps) {
   const { t } = useTranslation(['components', 'common'])
   const resolvedLoadingText = loadingText ?? t('common:loading')
-  const [collapsed, setCollapsed] = useState(compact ? false : defaultCollapsed)
+  const generatedFullscreenId = useId()
+  const [cachedCollapsed, setCachedCollapsed] = useUiDisclosureState(
+    stateKey ?? `content-block:${generatedFullscreenId}`,
+    compact ? false : defaultCollapsed,
+  )
   const [diffViewMode, setDiffViewMode] = useState<ViewMode>('split')
   const [fullscreenDiffViewMode, setFullscreenDiffViewMode] = useState<ViewMode>('split')
   const contentRef = useRef<HTMLDivElement>(null)
-  const generatedFullscreenId = useId()
 
   // 响应式 maxHeight，外部传入的值优先
   const responsiveMaxHeight = useResponsiveMaxHeight()
@@ -116,6 +123,7 @@ export const ContentBlock = memo(function ContentBlock({
   const lang = language || (filePath ? detectLanguage(filePath) : 'text')
   const fileName = filePath?.split(/[/\\]/).pop()
   const resolvedFullscreenId = fullscreenId ?? `content-block:${generatedFullscreenId}`
+  const collapsed = compact ? false : cachedCollapsed
 
   // Diff 统计
   const diffStats = useMemo(() => {
@@ -192,6 +200,7 @@ export const ContentBlock = memo(function ContentBlock({
           filePath={filePath}
           projectDirectory={projectDirectory}
           data={diffViewerData}
+          stateKey={stateKey ? `${stateKey}:fullscreen-diff` : undefined}
         />
       )
     }
@@ -199,7 +208,7 @@ export const ContentBlock = memo(function ContentBlock({
       return <CodePreview code={content} language={lang} />
     }
     return null
-  }, [content, diffViewerData, filePath, fullscreenDiffViewMode, isDiff, lang, projectDirectory, resolvedDiff])
+  }, [content, diffViewerData, filePath, fullscreenDiffViewMode, isDiff, lang, projectDirectory, resolvedDiff, stateKey])
 
   const fullscreenLayer = useMemo(() => {
     if (!fullscreenContent) return null
@@ -276,7 +285,7 @@ export const ContentBlock = memo(function ContentBlock({
         className={`flex items-center gap-2 px-3 h-8 select-none transition-colors ${
           canCollapse ? 'cursor-pointer' : ''
         } ${headerClass}`}
-        onClick={canCollapse ? () => setCollapsed(!collapsed) : undefined}
+        onClick={canCollapse ? () => setCachedCollapsed(!collapsed) : undefined}
       >
         {/* Left: chevron + label + filename */}
         <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
@@ -372,6 +381,7 @@ export const ContentBlock = memo(function ContentBlock({
                   filePath={filePath}
                   projectDirectory={projectDirectory}
                   data={diffViewerData}
+                  stateKey={stateKey ? `${stateKey}:diff` : undefined}
                 />
               ) : content?.trim() ? (
                 <CodePreview code={content} language={lang} maxHeight={maxHeight} isVisible={showBody} />
