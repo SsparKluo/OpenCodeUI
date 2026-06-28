@@ -1275,11 +1275,7 @@ function InputBoxComponent({
           ref={contentWrapRef}
           onPointerDown={handleContainerPointerDown}
           className={`relative flex flex-col gap-2 ${isCollapsed ? 'justify-end' : ''}`}
-          style={
-            isCollapsed && expandedHeight > 0
-              ? { minHeight: expandedHeight, maxHeight: composerMaxHeight }
-              : { maxHeight: composerMaxHeight }
-          }
+          style={{ maxHeight: composerMaxHeight }}
         >
           {/* FloatingActions —
               展开态：absolute 定位在内容区上方，不占文档流，避免显隐变化影响高度导致滚动抖动
