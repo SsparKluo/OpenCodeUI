@@ -249,11 +249,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // 使用正斜杠格式传给后端
       const targetDir = normalizeToForwardSlash(currentDirectory) || undefined
 
-      const newSession = await apiCreateSession({
-        title,
-        directory: targetDir,
-      })
-      return newSession
+      try {
+        const newSession = await apiCreateSession({
+          title,
+          directory: targetDir,
+        })
+        return newSession
+      } catch (error) {
+        sessionErrorHandler('create session', error)
+        throw error
+      }
     },
     [currentDirectory],
   )
@@ -261,7 +266,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const deleteSession = useCallback(
     async (id: string) => {
       const targetDir = normalizeToForwardSlash(currentDirectory) || undefined
-      await apiDeleteSession(id, targetDir)
+      try {
+        await apiDeleteSession(id, targetDir)
+      } catch (error) {
+        sessionErrorHandler('delete session', error)
+        throw error
+      }
       pinnedSessionsStore.unpin(id)
       clearSessionRuntimeState(id)
       setSessions(prev => prev.filter(s => s.id !== id))

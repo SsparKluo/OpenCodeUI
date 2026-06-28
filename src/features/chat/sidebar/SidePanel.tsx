@@ -774,7 +774,12 @@ export function SidePanel({
 
   const handleDeleteFolderSession = useCallback(
     async (session: ApiSession) => {
-      await apiDeleteSession(session.id, session.directory)
+      try {
+        await apiDeleteSession(session.id, session.directory)
+      } catch (e) {
+        uiErrorHandler('delete session', e)
+        throw e
+      }
       pinnedSessionsStore.unpin(session.id)
 
       if (!currentDirectory || isSameDirectory(currentDirectory, session.directory)) {
