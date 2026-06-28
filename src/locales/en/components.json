@@ -6,9 +6,13 @@
   "fileExplorer": {
     "selectProject": "Select a project to browse files",
     "explorer": "Explorer",
+    "searchFiles": "Search files",
+    "clearSearch": "Clear search",
     "noFilesFound": "No files found",
+    "noTextMatches": "No matches found",
     "failedToLoadFiles": "Failed to load files",
     "failedToLoadFile": "Failed to load file",
+    "textSearchFailed": "Search failed",
     "binaryFile": "Binary file — preview not available",
     "fit": "Fit",
     "oneToOne": "1:1"
