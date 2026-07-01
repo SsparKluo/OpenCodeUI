@@ -157,10 +157,18 @@ pnpm dev
 | 层 | 文件 / 服务 | 职责 |
 |---|---|---|
 | 静态资源 | `dist/`（Vite build） | 浏览器加载 SPA |
+| `_routes.json` | `public/_routes.json` → `dist/` | 仅 `/api/*` 走 Pages Functions，其余静态/HTML 不触发 Function |
+| `_headers` / `_redirects` | `public/` → `dist/` | 静态长缓存；SPA 深链 `/* → /index.html 200`（Cloudflare Pages） |
 | Pages Function | `functions/api/[[path]].ts` | 接收 `/api/*`，转发到 Worker（service binding，无公网） |
-| API Proxy Worker | `workers/api-proxy/src/index.ts` | strip `/api` 前缀，调 `BACKEND_VPC.fetch()` |
+| API Proxy Worker | `workers/api-proxy/src/index.ts` | strip `/api` 前缀，调 `BACKEND_VPC.fetch()`；可缓存 GET 走 Cache API + 可选 KV |
 | VPC Service | Cloudflare 注册 | 指向 tunnel + 目标 host/port |
 | Tunnel | `cloudflared` | 把请求路由到私网后端 |
+
+### 性能与计费
+
+- **静态路径不进 Function**：`include: ["/api/*"]`，避免每次加载 JS/CSS/图标都计一次 Functions 调用。
+- **Worker 缓存**：匿名、无 SSE/WebSocket 的 GET/HEAD（如 `/health`）先查 `caches.default`；可选绑定 `CACHE_KV` 做二级缓存（`expirationTtl` / `CACHE_KV_TTL_SECONDS`）。带 `Authorization`、SSE（`/global/event`）、PTY 等路径不缓存。
+- **重定向**：上游 `fetch` 使用 `redirect: 'manual'`，不在 Worker 内自动跟跳，减少子请求叠加（单请求子请求上限 50）。
 
 ## 对比 Docker Standalone
 

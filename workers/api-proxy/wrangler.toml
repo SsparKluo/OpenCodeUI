@@ -20,5 +20,14 @@ binding = "BACKEND_VPC"
 service_id = "019ef2c1-c2c9-7b50-8be7-e2203330156b"
 remote = true
 
+# 可选：在 Dashboard 创建 KV 后取消注释并填入 namespace id，启用二级缓存
+# [[kv_namespaces]]
+# binding = "CACHE_KV"
+# id = "<KV_NAMESPACE_ID>"
+#
+# [vars]
+# CACHE_KV_TTL_SECONDS = "60"
+# CACHE_EDGE_MAX_AGE_SECONDS = "60"
+
 [observability]
 enabled = true

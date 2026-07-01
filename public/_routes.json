@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "description": "Only /api/* invokes Pages Functions; static assets and SPA HTML are served without Functions.",
+  "include": ["/api/*"],
+  "exclude": []
+}
