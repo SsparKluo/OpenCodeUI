@@ -139,7 +139,7 @@ export const FileExplorer = memo(function FileExplorer({
     clearPreview,
     fileStatus,
     refresh,
-  } = useFileExplorer({ directory, autoLoad: true, sessionId: sessionId || undefined })
+  } = useFileExplorer({ directory, autoLoad: true, sessionId: sessionId || undefined, consumerId: `file-explorer-${panelTabId}` })
 
   // 当 previewFile 改变时加载预览
   useEffect(() => {
