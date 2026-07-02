@@ -241,14 +241,17 @@ export function ProjectDialog({ isOpen, onClose, onSelect, initialPath = '' }: P
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      const hasGoUp = inputValue.split(PATH_SEP).filter(Boolean).length > 0
+      const minIndex = hasGoUp ? -1 : 0
+      const maxIndex = filteredItems.length - 1
       switch (e.key) {
         case 'ArrowDown':
           e.preventDefault()
-          setSelectedIndex(prev => Math.min(prev + 1, filteredItems.length - 1))
+          setSelectedIndex(prev => (prev >= maxIndex ? minIndex : prev + 1))
           break
         case 'ArrowUp':
           e.preventDefault()
-          setSelectedIndex(prev => Math.max(prev - 1, 0))
+          setSelectedIndex(prev => (prev <= minIndex ? maxIndex : prev - 1))
           break
         case 'ArrowRight':
         case 'Tab':
