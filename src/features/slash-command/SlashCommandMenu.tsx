@@ -152,10 +152,10 @@ export const SlashCommandMenu = forwardRef<SlashCommandMenuHandle, SlashCommandM
     ref,
     () => ({
       moveUp: () => {
-        setSelectedIndex(prev => Math.max(prev - 1, 0))
+        setSelectedIndex(prev => (prev <= 0 ? filteredCommands.length - 1 : prev - 1))
       },
       moveDown: () => {
-        setSelectedIndex(prev => Math.min(prev + 1, filteredCommands.length - 1))
+        setSelectedIndex(prev => (prev >= filteredCommands.length - 1 ? 0 : prev + 1))
       },
       selectCurrent: () => {
         const selected = filteredCommands[activeIndex]

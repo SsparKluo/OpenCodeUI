@@ -275,10 +275,10 @@ export const MentionMenu = forwardRef<MentionMenuHandle, MentionMenuProps>(funct
     ref,
     () => ({
       moveUp: () => {
-        setSelectedIndex(prev => Math.max(prev - 1, 0))
+        setSelectedIndex(prev => (prev <= 0 ? items.length - 1 : prev - 1))
       },
       moveDown: () => {
-        setSelectedIndex(prev => Math.min(prev + 1, items.length - 1))
+        setSelectedIndex(prev => (prev >= items.length - 1 ? 0 : prev + 1))
       },
       selectCurrent: () => {
         const selectedItem = items[selectedIndex]
