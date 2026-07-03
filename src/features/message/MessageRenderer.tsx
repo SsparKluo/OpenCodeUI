@@ -678,12 +678,14 @@ const ToolGroup = memo(function ToolGroup({
   // 沉浸模式下：判断工具组是否包含需要用户阅读的工具
   const hasReadableTools = immersiveMode && parts.some(p => isReadableTool(p.tool))
   const isGroupLive = hasActiveTools || !!isStreaming
-  const modeExpanded = resolveBlockCollapseExpanded(toolCallsBlockCollapse, { isLive: isGroupLive, hasContent: true })
+  const immersiveUnreadGroup = descriptiveToolSteps && immersiveMode && !hasReadableTools
   const shouldStartExpanded =
     !descriptiveToolSteps ||
-    hasActiveTools ||
     hasPendingInteraction ||
-    modeExpanded ||
+    (immersiveUnreadGroup
+      ? resolveBlockCollapseExpanded(immersiveUnreadToolCollapse, { isLive: isGroupLive, hasContent: true })
+      : hasActiveTools ||
+        resolveBlockCollapseExpanded(toolCallsBlockCollapse, { isLive: isGroupLive, hasContent: true })) ||
     (immersiveMode && !!isStreaming && hasReadableTools)
 
   // descriptive 模式默认收起，运行时展开，完成后保持展开
@@ -695,8 +697,7 @@ const ToolGroup = memo(function ToolGroup({
   useEffect(() => {
     if (!descriptiveToolSteps) return
 
-    // 沉浸模式下没有可读工具：始终收起，不展开（即使有工具在运行）
-    if (immersiveMode && !hasReadableTools) {
+    if (immersiveUnreadGroup) {
       return scheduleDisclosureSync(
         setExpanded,
         resolveBlockCollapseExpanded(immersiveUnreadToolCollapse, { isLive: isGroupLive, hasContent: true }),
@@ -724,6 +725,7 @@ const ToolGroup = memo(function ToolGroup({
     )
   }, [
     descriptiveToolSteps,
+    immersiveUnreadGroup,
     hasActiveTools,
     hasPendingInteraction,
     immersiveMode,

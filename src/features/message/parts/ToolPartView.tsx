@@ -124,13 +124,16 @@ export const ToolPartView = memo(function ToolPartView({
     compactInlinePermission && !isEditWritePermission && !isTaskTool && !!permissionRequest
   const isReadable = isReadableTool(toolName)
   const immersiveDescriptive = immersiveMode && descriptive
-  const modeExpanded = resolveBlockCollapseExpanded(toolCallsBlockCollapse, { isLive: isActive, hasContent: true })
+  const immersiveUnread = immersiveDescriptive && !isReadable
+  const autoExpandedByMode = resolveBlockCollapseExpanded(
+    immersiveUnread ? immersiveUnreadToolCollapse : toolCallsBlockCollapse,
+    { isLive: isActive, hasContent: true },
+  )
   const shouldStartExpanded =
-    isActive ||
     hasPendingInteraction ||
     permissionResolved ||
-    modeExpanded ||
-    (immersiveDescriptive && isStreaming && isReadable)
+    autoExpandedByMode ||
+    (immersiveDescriptive && !!isStreaming && isReadable)
 
   const [expanded, setExpanded] = useUiDisclosureState(
     `message:${part.messageID}:tool:${part.id}`,
@@ -142,7 +145,18 @@ export const ToolPartView = memo(function ToolPartView({
   const shouldRenderBody = useDelayedRender(effectiveExpanded)
 
   useEffect(() => {
-    if (hasPendingInteraction || permissionResolved || isActive) {
+    if (hasPendingInteraction || permissionResolved) {
+      return scheduleDisclosureSync(setExpanded, true)
+    }
+
+    if (immersiveUnread) {
+      return scheduleDisclosureSync(
+        setExpanded,
+        resolveBlockCollapseExpanded(immersiveUnreadToolCollapse, { isLive: isActive, hasContent: true }),
+      )
+    }
+
+    if (isActive) {
       if (immersiveDescriptive && isReadable) {
         hasAutoExpandedReadableRef.current = true
       }
@@ -150,12 +164,6 @@ export const ToolPartView = memo(function ToolPartView({
     }
 
     if (immersiveDescriptive) {
-      if (!isReadable) {
-        return scheduleDisclosureSync(
-          setExpanded,
-          resolveBlockCollapseExpanded(immersiveUnreadToolCollapse, { isLive: isActive, hasContent: true }),
-        )
-      }
       if (isStreaming && !hasAutoExpandedReadableRef.current) {
         hasAutoExpandedReadableRef.current = true
         return scheduleDisclosureSync(setExpanded, true)
@@ -174,6 +182,7 @@ export const ToolPartView = memo(function ToolPartView({
     immersiveDescriptive,
     isStreaming,
     isReadable,
+    immersiveUnread,
     toolCallsBlockCollapse,
     immersiveUnreadToolCollapse,
     setExpanded,
