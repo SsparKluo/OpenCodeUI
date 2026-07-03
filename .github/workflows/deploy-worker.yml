@@ -30,7 +30,7 @@ jobs:
           key: ${{ runner.os }}-api-proxy-${{ hashFiles('workers/api-proxy/pnpm-lock.yaml') }}
 
       - working-directory: workers/api-proxy
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-workspace
 
       - working-directory: workers/api-proxy
         name: Deploy Worker

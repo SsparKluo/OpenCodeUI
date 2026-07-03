@@ -86,7 +86,7 @@ remote = true
 
 ```bash
 cd workers/api-proxy
-pnpm install
+pnpm install --ignore-workspace
 pnpm wrangler deploy
 ```
 
