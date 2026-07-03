@@ -12,17 +12,22 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - uses: actions/setup-node@v4
+      # 不用 setup-node 的 cache: pnpm：仓库根目录 pnpm-workspace.yaml 不是 monorepo，
+      # 在根目录执行 pnpm store path 会报 packages field missing or empty。
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: workers/api-proxy/pnpm-lock.yaml
+          node-version: 24
+
+      - uses: actions/cache@v4
+        with:
+          path: workers/api-proxy/node_modules
+          key: ${{ runner.os }}-api-proxy-${{ hashFiles('workers/api-proxy/pnpm-lock.yaml') }}
 
       - working-directory: workers/api-proxy
         run: pnpm install --frozen-lockfile
