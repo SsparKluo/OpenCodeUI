@@ -42,20 +42,28 @@ export function SmoothHeight({
     // 不能用 overflow: hidden（会同时裁切水平），用 clip-path 实现单方向裁切
     outer.style.clipPath = 'inset(0 -100% 0 -100%)'
 
-    const update = () => {
-      const target = inner.scrollHeight
-      const current = outer.offsetHeight
-      if (Math.abs(target - current) < 1) return
+    // rAF 批处理：流式期间 ResizeObserver 每帧可能触发多次回调，
+    // 同帧内合并为一次 scrollHeight 读取 + animate，避免 layout thrash
+    let updateRafId: number | null = null
 
-      animRef.current?.stop()
-      animRef.current = animate(
-        outer,
-        { height: `${target}px` },
-        {
-          duration: 0.12,
-          ease: 'easeOut',
-        },
-      )
+    const update = () => {
+      if (updateRafId !== null) return
+      updateRafId = requestAnimationFrame(() => {
+        updateRafId = null
+        const target = inner.scrollHeight
+        const current = outer.offsetHeight
+        if (Math.abs(target - current) < 1) return
+
+        animRef.current?.stop()
+        animRef.current = animate(
+          outer,
+          { height: `${target}px` },
+          {
+            duration: 0.12,
+            ease: 'easeOut',
+          },
+        )
+      })
     }
 
     const ro = new ResizeObserver(update)
@@ -63,6 +71,7 @@ export function SmoothHeight({
 
     return () => {
       ro.disconnect()
+      if (updateRafId !== null) cancelAnimationFrame(updateRafId)
       animRef.current?.stop()
       animRef.current = null
     }

@@ -180,6 +180,9 @@ export const ChatArea = memo(
       const pendingScrollClearTimerRef = useRef<number | null>(null)
       const pendingAnchorClearRafRef = useRef<number | null>(null)
       const pendingSessionResetRafRef = useRef<number | null>(null)
+      // rAF 批处理高度更新：同帧内多次 ResizeObserver 回调合并为一次 setState
+      const pendingHeightUpdatesRef = useRef<Map<string, number>>(new Map())
+      const heightFlushRafRef = useRef<number | null>(null)
       const pendingLayoutAnchorClearTimerRef = useRef<number | null>(null)
       const pendingLayoutAnchorClearRafRef = useRef<number | null>(null)
       const lastScrollRootSizeRef = useRef({ width: 0, height: 0 })
@@ -322,6 +325,18 @@ export const ChatArea = memo(
         [activePages, measuredPageHeights, renderPageSelection],
       )
 
+      // 稳定签名：仅在实际展示的消息集合变化时才变。
+      // 流式期间页面结构不变（相同页面、相同消息 ID），签名保持稳定，
+      // 避免 IntersectionObserver effect 每 token 重订阅。
+      const domMessageSignature = useMemo(() => {
+        const parts: string[] = []
+        for (const pageIndex of renderPageSelection) {
+          const page = activePages[pageIndex]
+          if (page) parts.push(page.messageIds.join(','))
+        }
+        return parts.join('|')
+      }, [renderPageSelection, activePages])
+
       const clearPendingLoadMoreTimer = useCallback(() => {
         if (pendingLoadMoreTimerRef.current === null) return
         window.clearTimeout(pendingLoadMoreTimerRef.current)
@@ -378,6 +393,7 @@ export const ChatArea = memo(
           if (scrollSnapshotRafRef.current !== null) cancelAnimationFrame(scrollSnapshotRafRef.current)
           if (pendingAnchorClearRafRef.current !== null) cancelAnimationFrame(pendingAnchorClearRafRef.current)
           if (pendingSessionResetRafRef.current !== null) cancelAnimationFrame(pendingSessionResetRafRef.current)
+          if (heightFlushRafRef.current !== null) cancelAnimationFrame(heightFlushRafRef.current)
           if (pendingLayoutAnchorClearTimerRef.current !== null) {
             window.clearTimeout(pendingLayoutAnchorClearTimerRef.current)
           }
@@ -660,7 +676,7 @@ export const ChatArea = memo(
         elements.forEach(element => observer.observe(element))
 
         return () => observer.disconnect()
-      }, [activePages, expandedPageRange.endIndex, expandedPageRange.startIndex])
+      }, [domMessageSignature, expandedPageRange.endIndex, expandedPageRange.startIndex])
 
       useEffect(() => {
         if (!pendingScrollMessageId) return
@@ -687,29 +703,62 @@ export const ChatArea = memo(
 
       const updateMeasuredPageHeight = useCallback((pageKey: string, nextHeight: number) => {
         if (nextHeight <= 0) return
-        const current = measuredPageHeightsRef.current[pageKey] ?? null
-        if (current !== null && Math.abs(current - nextHeight) < 1) return
-        const root = scrollRef.current
-        if (root && !isAtBottomRef.current && (current === null || Math.abs(current - nextHeight) >= 1)) {
-          const anchor = captureLoadMoreAnchor(root)
-          if (anchor) {
-            pendingLayoutAnchorRef.current = anchor
-            setPendingLayoutAnchorMessageId(anchor.messageId)
-            if (pendingLayoutAnchorClearTimerRef.current !== null) {
-              window.clearTimeout(pendingLayoutAnchorClearTimerRef.current)
+        // 入队而非立即 setState——同帧内多个 ResizeObserver 回调
+        // 会合并为一次 setMeasuredPageHeights，避免每 token 级联重渲染
+        pendingHeightUpdatesRef.current.set(pageKey, nextHeight)
+
+        if (heightFlushRafRef.current !== null) return
+        heightFlushRafRef.current = requestAnimationFrame(() => {
+          heightFlushRafRef.current = null
+          const pending = pendingHeightUpdatesRef.current
+          pendingHeightUpdatesRef.current = new Map()
+          if (pending.size === 0) return
+
+          const root = scrollRef.current
+          // anchor 捕获在 setState 前，读旧 ref 判断高度是否真变了
+          if (root && !isAtBottomRef.current) {
+            let needsAnchor = false
+            for (const [key, height] of pending) {
+              const current = measuredPageHeightsRef.current[key] ?? null
+              if (current === null || Math.abs(current - height) >= 1) {
+                needsAnchor = true
+                break
+              }
             }
-            pendingLayoutAnchorClearTimerRef.current = window.setTimeout(() => {
-              pendingLayoutAnchorClearTimerRef.current = null
-              pendingLayoutAnchorRef.current = null
-              setPendingLayoutAnchorMessageId(null)
-            }, PENDING_LAYOUT_ANCHOR_TIMEOUT_MS)
+            if (needsAnchor) {
+              const anchor = captureLoadMoreAnchor(root)
+              if (anchor) {
+                pendingLayoutAnchorRef.current = anchor
+                setPendingLayoutAnchorMessageId(anchor.messageId)
+                if (pendingLayoutAnchorClearTimerRef.current !== null) {
+                  window.clearTimeout(pendingLayoutAnchorClearTimerRef.current)
+                }
+                pendingLayoutAnchorClearTimerRef.current = window.setTimeout(() => {
+                  pendingLayoutAnchorClearTimerRef.current = null
+                  pendingLayoutAnchorRef.current = null
+                  setPendingLayoutAnchorMessageId(null)
+                }, PENDING_LAYOUT_ANCHOR_TIMEOUT_MS)
+              }
+            }
           }
-        }
-        setMeasuredPageHeights(previous => {
-          if (previous[pageKey] != null && Math.abs(previous[pageKey] - nextHeight) < 1) return previous
-          const next = { ...previous, [pageKey]: nextHeight }
-          measuredPageHeightsRef.current = next
-          return next
+
+          setMeasuredPageHeights(previous => {
+            let next = previous
+            let changed = false
+            for (const [key, height] of pending) {
+              const current = next[key] ?? null
+              if (current !== null && Math.abs(current - height) < 1) continue
+              if (!changed) {
+                next = { ...previous }
+                changed = true
+              }
+              next[key] = height
+            }
+            if (changed) {
+              measuredPageHeightsRef.current = next
+            }
+            return changed ? next : previous
+          })
         })
       }, [])
 
@@ -951,7 +1000,7 @@ const PageBlock = memo(function PageBlock({
   const wrapperRef = usePageHeightMeasurement(page.key, onMeasuredHeightChange)
 
   return (
-    <div ref={wrapperRef} className="shrink-0" data-page-key={page.key}>
+    <div ref={wrapperRef} className="shrink-0 contain-content" data-page-key={page.key}>
       {page.rows.map(row => {
         const isUser = row.messages[0].info.role === 'user'
         return (
