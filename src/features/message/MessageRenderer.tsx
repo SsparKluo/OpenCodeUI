@@ -695,6 +695,14 @@ const ToolGroup = memo(function ToolGroup({
   useEffect(() => {
     if (!descriptiveToolSteps) return
 
+    // 沉浸模式下没有可读工具：始终收起，不展开（即使有工具在运行）
+    if (immersiveMode && !hasReadableTools) {
+      return scheduleDisclosureSync(
+        setExpanded,
+        resolveBlockCollapseExpanded(immersiveUnreadToolCollapse, { isLive: isGroupLive, hasContent: true }),
+      )
+    }
+
     if (hasActiveTools || hasPendingInteraction) {
       if (immersiveMode && hasReadableTools) {
         hasAutoExpandedReadableRef.current = true
@@ -703,13 +711,7 @@ const ToolGroup = memo(function ToolGroup({
     }
 
     if (immersiveMode) {
-      if (!hasReadableTools) {
-        return scheduleDisclosureSync(
-          setExpanded,
-          resolveBlockCollapseExpanded(immersiveUnreadToolCollapse, { isLive: isGroupLive, hasContent: true }),
-        )
-      }
-      if (isStreaming && !hasAutoExpandedReadableRef.current) {
+      if (isStreaming && hasReadableTools && !hasAutoExpandedReadableRef.current) {
         hasAutoExpandedReadableRef.current = true
         return scheduleDisclosureSync(setExpanded, true)
       }
