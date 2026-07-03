@@ -307,22 +307,8 @@ export function InputToolbar({
 
   return (
     <div className="flex items-center justify-between px-3 pb-3 relative">
-      {/* Left side: Model (mobile) + Agent + Variant selectors */}
+      {/* Left side: Agent + Model + Variant selectors */}
       <div className={`flex items-center min-w-0 ${isCompact ? 'gap-1' : 'gap-2'}`}>
-        {/* Model Selector — 移动端显示在最左边 */}
-        {isCompact && onModelChange && (
-          <ModelSelector
-            ref={modelSelectorRef}
-            models={models}
-            selectedModelKey={selectedModelKey}
-            onSelect={onModelChange}
-            isLoading={modelsLoading}
-            position="top"
-            trigger="toolbar"
-            constrainToRef={inputContainerRef}
-          />
-        )}
-
         {/* Agent Selector */}
         <AnimatedPresence show={selectableAgents.length > 1} className={isCompact ? 'shrink-0' : ''}>
           <div className="relative">
@@ -359,9 +345,9 @@ export function InputToolbar({
                 <AgentIcon />
               </span>
               <span className="text-[length:var(--fs-sm)] text-text-300 capitalize truncate">{selectedAgent || 'build'}</span>
-              <span className={`text-text-400 shrink-0 ${isCompact ? 'hidden' : ''}`}>
-                <ChevronDownIcon />
-              </span>
+              <div className={`shrink-0 opacity-40 transition-transform duration-200 ${isCompact ? 'hidden' : ''} ${agentMenuOpen ? '' : 'rotate-180'}`}>
+                <ChevronDownIcon size={10} />
+              </div>
             </button>
 
             <DropdownMenu
@@ -403,6 +389,20 @@ export function InputToolbar({
           </div>
         </AnimatedPresence>
 
+        {/* Model Selector */}
+        {onModelChange && (
+          <ModelSelector
+            ref={modelSelectorRef}
+            models={models}
+            selectedModelKey={selectedModelKey}
+            onSelect={onModelChange}
+            isLoading={modelsLoading}
+            position="top"
+            trigger="toolbar"
+            constrainToRef={inputContainerRef}
+          />
+        )}
+
         {/* Variant Selector */}
         <AnimatedPresence show={variants.length > 0} className={isCompact ? 'shrink-0' : ''}>
           <div className="relative">
@@ -440,9 +440,9 @@ export function InputToolbar({
                   ? selectedVariant.charAt(0).toUpperCase() + selectedVariant.slice(1)
                   : t('inputToolbar.default')}
               </span>
-              <span className={`text-text-400 shrink-0 ${isCompact ? 'hidden' : ''}`}>
-                <ChevronDownIcon />
-              </span>
+              <div className={`shrink-0 opacity-40 transition-transform duration-200 ${isCompact ? 'hidden' : ''} ${variantMenuOpen ? '' : 'rotate-180'}`}>
+                <ChevronDownIcon size={10} />
+              </div>
             </button>
 
             <DropdownMenu
