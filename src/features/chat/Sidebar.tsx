@@ -23,7 +23,6 @@ interface SidebarProps {
   onNewSession: () => void
   onOpen: () => void
   onClose: () => void
-  contextLimit?: number
   onOpenSettings?: () => void
   projectDialogOpen?: boolean
   onProjectDialogClose?: () => void
@@ -37,7 +36,6 @@ export const Sidebar = memo(function Sidebar({
   onNewSession,
   onOpen,
   onClose,
-  contextLimit,
   onOpenSettings,
   projectDialogOpen,
   onProjectDialogClose,
@@ -288,8 +286,6 @@ export const Sidebar = memo(function Sidebar({
               onAddProject={openProjectDialog}
               isMobile={true}
               isExpanded={true}
-              onToggleSidebar={onClose}
-              contextLimit={contextLimit}
               onOpenSettings={onOpenSettings}
             />
           </div>
@@ -344,7 +340,6 @@ export const Sidebar = memo(function Sidebar({
             isMobile={true}
             isExpanded={true}
             onToggleSidebar={onClose}
-            contextLimit={contextLimit}
             onOpenSettings={onOpenSettings}
           />
         </div>
@@ -364,10 +359,11 @@ export const Sidebar = memo(function Sidebar({
     <>
       <div
         ref={sidebarRef}
+        aria-hidden={!isOpen}
         style={{ width: `${layout.sidebar.dockedWidth}px` }}
         className={`
           relative flex flex-col h-full bg-bg-100 overflow-hidden shrink-0 min-w-0
-          border-r border-border-200/50
+          ${isOpen ? 'border-r border-border-200/50' : 'border-r-0 pointer-events-none'}
           ${isResizing ? 'transition-none' : 'transition-[width] duration-300 ease-out'}
         `}
       >
@@ -379,8 +375,6 @@ export const Sidebar = memo(function Sidebar({
           onAddProject={openProjectDialog}
           isMobile={false}
           isExpanded={isOpen}
-          onToggleSidebar={handleToggle}
-          contextLimit={contextLimit}
           onOpenSettings={onOpenSettings}
         />
 

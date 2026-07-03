@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ChevronDownIcon, SendIcon, StopIcon, PaperclipIcon, AgentIcon, ThinkingIcon } from '../../../components/Icons'
 import { DropdownMenu, MenuItem, IconButton, AnimatedPresence } from '../../../components/ui'
 import { ModelSelector, type ModelSelectorHandle } from '../ModelSelector'
+import { ContextUsageButton } from './ContextUsageButton'
 import { useChatViewport } from '../chatViewport'
 import { isTauri, isTauriMobile, extToMime } from '../../../utils/tauri'
 import type { ApiAgent } from '../../../api/client'
@@ -35,6 +36,7 @@ interface InputToolbarProps {
   // 输入框容器 ref，用于约束菜单边界
   inputContainerRef?: React.RefObject<HTMLDivElement | null>
   modelSelectorRef?: React.RefObject<ModelSelectorHandle | null>
+  contextLimit?: number
 }
 
 export function InputToolbar({
@@ -57,6 +59,7 @@ export function InputToolbar({
   modelsLoading = false,
   inputContainerRef,
   modelSelectorRef,
+  contextLimit,
 }: InputToolbarProps) {
   const { t } = useTranslation(['chat', 'common'])
   const { presentation } = useChatViewport()
@@ -493,6 +496,11 @@ export function InputToolbar({
 
       {/* Action Buttons */}
       <div className="flex items-center gap-1">
+        <ContextUsageButton
+          contextLimit={contextLimit}
+          disabled={controlsDisabled}
+          inputContainerRef={inputContainerRef}
+        />
         <AnimatedPresence show={supportsAnyFile}>
           <>
             {/* 浏览器模式下的隐藏文件输入 */}

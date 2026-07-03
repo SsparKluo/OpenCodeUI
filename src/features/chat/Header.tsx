@@ -5,6 +5,7 @@ import {
   PanelBottomIcon,
   ChevronDownIcon,
   SidebarIcon,
+  PlusIcon,
   SplitHorizontalIcon,
   MaximizeIcon,
   MinimizeIcon,
@@ -17,6 +18,7 @@ import { useLayoutStore, layoutStore } from '../../store/layoutStore'
 import { useSessionContext } from '../../contexts/useSessionContext'
 import { updateSession } from '../../api'
 import { useDirectory } from '../../contexts/useDirectory'
+import { useKeybindingLabel } from '../../hooks'
 import { uiErrorHandler } from '../../utils'
 import { useChatViewport } from './chatViewport'
 import type { ModelInfo } from '../../api'
@@ -26,7 +28,9 @@ interface HeaderProps {
   modelsLoading: boolean
   selectedModelKey: string | null
   onModelChange: (modelKey: string, model: ModelInfo) => void
-  onOpenSidebar?: () => void
+  onToggleSidebar?: () => void
+  sidebarExpanded?: boolean
+  onNewSession?: () => void
   onToggleRightPanel?: () => void
   onSplitPane?: () => void
   isPaneFullscreen?: boolean
@@ -116,7 +120,9 @@ export function Header({
   modelsLoading,
   selectedModelKey,
   onModelChange,
-  onOpenSidebar,
+  onToggleSidebar,
+  sidebarExpanded = false,
+  onNewSession,
   onToggleRightPanel,
   onSplitPane,
   isPaneFullscreen = false,
@@ -137,6 +143,7 @@ export function Header({
 
   const sessionTitle = currentSessionTitle || t('header.newChat')
   const isCompact = presentation.isCompact
+  const newChatShortcut = useKeybindingLabel('newSession')
 
   useEffect(() => {
     document.title = currentSessionTitle ? `${currentSessionTitle} - OpenCode` : 'OpenCode'
@@ -200,13 +207,28 @@ export function Header({
       className={`mobile-safe-topbar-14 flex justify-between items-center z-20 bg-bg-100 transition-colors duration-200 relative ${isCompact ? 'px-2' : 'px-4'}`}
     >
       <div className="flex items-center gap-2 min-w-0 shrink-1 z-20">
-        {interaction.sidebarBehavior === 'overlay' && onOpenSidebar && (
+        {onToggleSidebar && (
           <IconButton
-            aria-label={t('header.openSidebar')}
-            onClick={onOpenSidebar}
-            className="hover:bg-bg-200/50 text-text-400 hover:text-text-100"
+            aria-label={sidebarExpanded ? t('sidebar.collapseSidebar') : t('sidebar.expandSidebar')}
+            onClick={onToggleSidebar}
+            className={`transition-colors ${
+              sidebarExpanded
+                ? 'text-accent-main-100 bg-bg-200/50'
+                : 'text-text-400 hover:text-text-100 hover:bg-bg-200/50'
+            }`}
           >
             <SidebarIcon size={18} />
+          </IconButton>
+        )}
+
+        {onNewSession && (
+          <IconButton
+            aria-label={t('sidebar.newChat')}
+            onClick={onNewSession}
+            className="text-text-400 hover:text-text-100 hover:bg-bg-200/50 transition-colors"
+            title={newChatShortcut ? `${t('sidebar.newChat')} (${newChatShortcut})` : t('sidebar.newChat')}
+          >
+            <PlusIcon size={18} />
           </IconButton>
         )}
 

@@ -153,7 +153,7 @@ function computeChatViewport(input: ComputedViewportInput): Omit<ChatViewportVal
 
   let dockedSidebarOpenWidth = requestedSidebarOpenWidth
   let dockedRightPanelWidth = requestedRightPanelDockedWidth
-  const closedSidebarWidth = SIDEBAR_RAIL_WIDTH
+  const closedSidebarWidth = 0
   const requestedSidebarDockedWidth = sidebarExpanded ? dockedSidebarOpenWidth : closedSidebarWidth
   let remainingSurfaceWidth = viewportWidth - requestedSidebarDockedWidth - dockedRightPanelWidth
 
