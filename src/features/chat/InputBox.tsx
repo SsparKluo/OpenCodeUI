@@ -189,6 +189,7 @@ export interface InputBoxProps {
   // Collapsed dialog capsules
   collapsedPermission?: CollapsedDialogInfo
   collapsedQuestion?: CollapsedDialogInfo
+  contextLimit?: number
 }
 
 // ============================================
@@ -232,6 +233,7 @@ function InputBoxComponent({
   onScrollToBottom,
   collapsedPermission,
   collapsedQuestion,
+  contextLimit,
 }: InputBoxProps) {
   const { t } = useTranslation('chat')
   // 合并文件能力：优先用 fileCapabilities，回退到 supportsImages
@@ -1483,6 +1485,7 @@ function InputBoxComponent({
                         modelSelectorRef={modelSelectorRef}
                         isCollapsed={isCollapsed}
                         onToggleCollapse={toggleCollapse}
+                        contextLimit={contextLimit}
                       />
                       </div>
                     </div>

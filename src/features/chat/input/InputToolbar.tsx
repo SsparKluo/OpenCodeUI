@@ -38,6 +38,7 @@ interface InputToolbarProps {
   // 移动端手动折叠
   isCollapsed?: boolean
   onToggleCollapse?: () => void
+  contextLimit?: number
 }
 
 export function InputToolbar({
@@ -62,6 +63,7 @@ export function InputToolbar({
   modelSelectorRef,
   isCollapsed = false,
   onToggleCollapse,
+  contextLimit,
 }: InputToolbarProps) {
   const { t } = useTranslation(['chat', 'common'])
   const { presentation } = useChatViewport()

@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiAgent } from '../../../api/client'
 import { InputToolbar } from './InputToolbar'
 
+vi.mock('./ContextUsageButton', () => ({
+  ContextUsageButton: () => null,
+}))
+
 const useIsMobileMock = vi.fn()
 const isTauriMock = vi.fn()
 const isTauriMobileMock = vi.fn()

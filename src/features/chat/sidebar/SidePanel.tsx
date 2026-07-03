@@ -57,8 +57,6 @@ interface SidePanelProps {
   onAddProject: () => void
   isMobile?: boolean
   isExpanded?: boolean
-  onToggleSidebar: () => void
-  contextLimit?: number
   onOpenSettings?: () => void
 }
 
@@ -110,8 +108,6 @@ export function SidePanel({
   onAddProject,
   isMobile = false,
   isExpanded = true,
-  onToggleSidebar,
-  contextLimit = 200000,
   onOpenSettings,
 }: SidePanelProps) {
   const { t } = useTranslation(['chat', 'common'])
@@ -843,20 +839,7 @@ export function SidePanel({
           </a>
         </div>
 
-        {!isMobile && (
-          <div
-            className="flex-1 flex items-center transition-all duration-300 ease-out"
-            style={{ justifyContent: showLabels ? 'flex-end' : 'center', paddingRight: showLabels ? 8 : 0 }}
-          >
-            <button
-              onClick={onToggleSidebar}
-              aria-label={isExpanded ? t('sidebar.collapseSidebar') : t('sidebar.expandSidebar')}
-              className="h-8 w-8 flex items-center justify-center rounded-lg text-text-400 hover:text-text-100 hover:bg-bg-200 active:scale-[0.98] transition-all duration-200"
-            >
-              <SidebarIcon size={18} />
-            </button>
-          </div>
-        )}
+        {!isMobile && showLabels && <div className="flex-1" />}
       </div>
 
       {/* ===== Navigation - 图标位置固定 ===== */}
@@ -1160,8 +1143,6 @@ export function SidePanel({
       <SidebarFooter
         showLabels={showLabels}
         connectionState={connectionState?.state || 'disconnected'}
-        stats={stats}
-        hasMessages={hasMessages}
         onOpenSettings={onOpenSettings}
       />
 

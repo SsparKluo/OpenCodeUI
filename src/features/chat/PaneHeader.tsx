@@ -14,6 +14,7 @@ import {
   PanelBottomIcon,
   PanelRightIcon,
   SidebarIcon,
+  PlusIcon,
   MaximizeIcon,
   MinimizeIcon,
 } from '../../components/Icons'
@@ -24,6 +25,7 @@ import { layoutStore, useLayoutStore } from '../../store/layoutStore'
 import { messageStore } from '../../store'
 import { updateSession } from '../../api'
 import { useDirectory } from '../../contexts/useDirectory'
+import { useKeybindingLabel } from '../../hooks'
 import { uiErrorHandler } from '../../utils'
 import { useChatViewport, canUseSplitPane } from './chatViewport'
 import { useSessionHeaderContext } from './sessionHeaderContext'
@@ -43,8 +45,9 @@ interface PaneHeaderProps {
   paneCount: number
   canSplitPane?: boolean
   isPaneFullscreen?: boolean
-  showSidebarButton?: boolean
-  onOpenSidebar?: () => void
+  onToggleSidebar?: () => void
+  sidebarExpanded?: boolean
+  onNewSession?: () => void
   onToggleRightPanel?: () => void
   onTogglePaneFullscreen?: () => void
   onFocus: () => void
@@ -57,8 +60,9 @@ export function PaneHeader({
   paneCount,
   canSplitPane,
   isPaneFullscreen = false,
-  showSidebarButton = false,
-  onOpenSidebar,
+  onToggleSidebar,
+  sidebarExpanded = false,
+  onNewSession,
   onToggleRightPanel,
   onTogglePaneFullscreen,
   onFocus,
@@ -80,6 +84,7 @@ export function PaneHeader({
   const sessionLocation = useSessionHeaderContext(sessionState?.directory)
   const showSessionLocation = viewport.interaction.sidebarBehavior !== 'overlay' && sessionLocation
   const splitEnabled = canSplitPane ?? canUseSplitPane(viewport)
+  const newChatShortcut = useKeybindingLabel('newSession')
 
   // Reset editing when session changes
   useEffect(() => {
@@ -176,6 +181,39 @@ export function PaneHeader({
     >
       {/* Left: Title */}
       <div className="flex items-center min-w-0 flex-1 gap-1.5">
+        {isFocused && onToggleSidebar && (
+          <IconButton
+            size="sm"
+            aria-label={sidebarExpanded ? t('sidebar.collapseSidebar') : t('sidebar.expandSidebar')}
+            onClick={e => {
+              e.stopPropagation()
+              onToggleSidebar()
+            }}
+            className={`transition-colors ${
+              sidebarExpanded
+                ? 'text-accent-main-100 bg-bg-200/50'
+                : 'text-text-400 hover:text-text-100 hover:bg-bg-200/50'
+            }`}
+          >
+            <SidebarIcon size={14} />
+          </IconButton>
+        )}
+
+        {isFocused && onNewSession && (
+          <IconButton
+            size="sm"
+            aria-label={t('sidebar.newChat')}
+            onClick={e => {
+              e.stopPropagation()
+              onNewSession()
+            }}
+            className="text-text-400 hover:text-text-100 hover:bg-bg-200/50 transition-colors"
+            title={newChatShortcut ? `${t('sidebar.newChat')} (${newChatShortcut})` : t('sidebar.newChat')}
+          >
+            <PlusIcon size={14} />
+          </IconButton>
+        )}
+
         {showSessionLocation && (
           <>
             <SessionHeaderLocationPicker
@@ -283,20 +321,6 @@ export function PaneHeader({
 
         {isFocused && (
           <div className="flex items-center gap-0.5 shrink-0">
-            {showSidebarButton && onOpenSidebar && (
-              <IconButton
-                size="sm"
-                aria-label={t('header.openSidebar')}
-                onClick={e => {
-                  e.stopPropagation()
-                  onOpenSidebar()
-                }}
-                className="text-text-400 hover:text-text-100 hover:bg-bg-200/50"
-              >
-                <SidebarIcon size={14} />
-              </IconButton>
-            )}
-
             <IconButton
               size="sm"
               aria-label={bottomPanelOpen ? t('header.closeBottomPanel') : t('header.openBottomPanel')}
