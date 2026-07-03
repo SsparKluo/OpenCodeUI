@@ -36,6 +36,10 @@ interface UseSessionsResult {
   setSearch: (search: string) => void
   /** 加载更多 */
   loadMore: () => Promise<void>
+  /** 收起至默认分页数量 */
+  showLess: () => Promise<void>
+  /** 当前列表是否超过默认分页数量 */
+  canShowLess: boolean
   /** 刷新列表 */
   refresh: () => Promise<void>
   /** 创建新会话 */
@@ -269,6 +273,17 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
     })
   }, [sessions, search, hasMore, isLoadingMore, fetchSessions, enabled, pageSize])
 
+  const canShowLess = sessions.length > pageSize
+
+  const showLess = useCallback(async () => {
+    if (!enabled || isLoadingMore || !canShowLess) return
+
+    currentLimitRef.current = pageSize
+    await fetchSessions({
+      search: search || undefined,
+    })
+  }, [canShowLess, search, fetchSessions, enabled, isLoadingMore, pageSize])
+
   // 刷新
   const refresh = useCallback(async () => {
     if (!enabled) return
@@ -336,6 +351,8 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
     search,
     setSearch,
     loadMore,
+    showLess,
+    canShowLess,
     refresh,
     create,
     remove,

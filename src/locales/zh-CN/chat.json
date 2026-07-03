@@ -8,7 +8,9 @@
     "closeBottomPanel": "关闭底部面板",
     "openBottomPanel": "打开底部面板",
     "closePanel": "关闭面板",
-    "openPanel": "打开面板"
+    "openPanel": "打开面板",
+    "switchWorkspace": "切换 Workspace",
+    "recentWorkspaces": "最近打开的 Workspace"
   },
   "chatArea": {
     "loadingSession": "加载会话中...",
@@ -146,7 +148,9 @@
     "moveFolderUp": "上移文件夹",
     "moveFolderDown": "下移文件夹",
     "noChatsInFolder": "此文件夹中没有对话",
-    "showMoreChats": "展开更多会话",
+    "showMoreChats": "显示更多",
+    "showLessChats": "显示更少",
+    "createNewChat": "创建新对话",
     "selectedSessions": "已选 {{count}} 个会话",
     "selectedProjects": "已选 {{count}} 个项目",
     "selectItems": "选择要管理的项目",
