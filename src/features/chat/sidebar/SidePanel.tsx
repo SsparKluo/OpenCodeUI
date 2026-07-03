@@ -8,23 +8,26 @@ import { ActiveSessionItem } from './ActiveSessionItem'
 import { NotificationItem } from './NotificationItem'
 import { SidebarFooter } from './SidebarFooter'
 import { buildActiveSessionTree } from './activeSessionTree'
-import { getParentPath } from './sidebarUtils'
+
 import {
   SidebarIcon,
-  FolderIcon,
-  GlobeIcon,
   PlusIcon,
   TrashIcon,
   SearchIcon,
-  ChevronDownIcon,
   PencilIcon,
   CheckIcon,
   CloseIcon,
   SpinnerIcon,
 } from '../../../components/Icons'
-import { useDirectory, useSessionStats, useKeybindingLabel, useGitWorkspaceCatalog, useVcsInfo } from '../../../hooks'
+import {
+  useDirectory,
+  useSessionStats,
+  useKeybindingLabel,
+  useGitWorkspaceCatalog,
+} from '../../../hooks'
 import { useSessionContext } from '../../../contexts/useSessionContext'
 import { useLayoutStore, useMessageStore, childSessionStore } from '../../../store'
+import { useSwitchWorkspaceDirectory } from '../useSwitchWorkspaceDirectory'
 import { useBusySessions, useBusyCount } from '../../../store/activeSessionStore'
 import { notificationStore, useNotifications, useUnreadNotificationCount } from '../../../store/notificationStore'
 import { pinnedSessionsStore } from '../../../store/pinnedSessionsStore'
@@ -119,7 +122,6 @@ export function SidePanel({
     removeDirectory,
     addDirectory,
     reorderDirectories,
-    recentProjects,
   } = useDirectory()
   const catalogDirectories = useMemo(
     () =>
@@ -134,18 +136,12 @@ export function SidePanel({
   )
   const { catalog: gitWorkspaceCatalog, isLoading: isGitWorkspaceCatalogLoading } =
     useGitWorkspaceCatalog(catalogDirectories)
-  const { vcsInfo: currentDirectoryVcsInfo, isLoading: isCurrentDirectoryVcsLoading } = useVcsInfo(currentDirectory)
   const { sidebarFolderRecents, sidebarShowChildSessions } = useLayoutStore()
   const normalizedCurrentDirectory = useMemo(
     () => (currentDirectory ? normalizeToForwardSlash(currentDirectory) : undefined),
     [currentDirectory],
   )
   const [connectionState, setConnectionState] = useState<ConnectionInfo | null>(null)
-  const [projectDeleteConfirm, setProjectDeleteConfirm] = useState<{ isOpen: boolean; projectId: string | null }>({
-    isOpen: false,
-    projectId: null,
-  })
-  const [projectsExpanded, setProjectsExpanded] = useState(false)
   const [sidebarTab, setSidebarTab] = useState<'recents' | 'active'>('recents')
   const [expandedRecentProjectIds, setExpandedRecentProjectIds] = useState<string[]>([])
 
@@ -156,8 +152,6 @@ export function SidePanel({
   const sessionSelectionAnchorIdRef = useRef<string | null>(null)
   const projectSelectionAnchorIdRef = useRef<string | null>(null)
   const recentsSelectionRootRef = useRef<HTMLDivElement>(null)
-  const projectToggleRef = useRef<HTMLButtonElement>(null)
-  const projectsDropdownRef = useRef<HTMLDivElement>(null)
   // 批量删除确认弹窗
   const [batchDeleteSessionConfirm, setBatchDeleteSessionConfirm] = useState(false)
   const [batchRemoveProjectConfirm, setBatchRemoveProjectConfirm] = useState(false)
@@ -239,14 +233,6 @@ export function SidePanel({
 
   const showLabels = isExpanded || isMobile
   const newChatShortcut = useKeybindingLabel('newSession')
-
-  useEffect(() => {
-    if (showLabels && projectsExpanded) return
-    const activeElement = document.activeElement as Node | null
-    if (activeElement && projectsDropdownRef.current?.contains(activeElement)) {
-      projectToggleRef.current?.focus()
-    }
-  }, [projectsExpanded, showLabels])
 
   // Session stats
   const { messages } = useMessageStore()
@@ -517,16 +503,6 @@ export function SidePanel({
     return buildProjectGroups(savedDirectories)
   }, [buildProjectGroups, savedDirectories])
 
-  const selectorProjectGroups = useMemo<ProjectItem[]>(() => {
-    const sortedDirectories = [...savedDirectories].sort((a, b) => {
-      const aTime = recentProjects[a.path] || a.addedAt
-      const bTime = recentProjects[b.path] || b.addedAt
-      return bTime - aTime
-    })
-
-    return buildProjectGroups(sortedDirectories)
-  }, [buildProjectGroups, recentProjects, savedDirectories])
-
   const globalProject = useMemo<ProjectItem>(
     () => ({
       id: 'global',
@@ -535,10 +511,6 @@ export function SidePanel({
     }),
     [t],
   )
-
-  const projects = useMemo<ProjectItem[]>(() => {
-    return [globalProject, ...selectorProjectGroups]
-  }, [globalProject, selectorProjectGroups])
 
   const currentProject = useMemo<ProjectItem>(() => {
     if (!currentDirectory) return globalProject
@@ -561,21 +533,6 @@ export function SidePanel({
     }
   }, [currentDirectory, folderProjectGroups, gitWorkspaceCatalog, globalProject, normalizedCurrentDirectory])
 
-  const currentProjectLabel = useMemo(() => {
-    const baseLabel = currentProject?.name || t('sidebar.global')
-    if (!currentDirectory || currentProject?.id === 'global') return baseLabel
-
-    const branchLabel = currentDirectoryVcsInfo?.branch ?? (isCurrentDirectoryVcsLoading ? '...' : undefined)
-    return branchLabel ? `${baseLabel} · ${branchLabel}` : baseLabel
-  }, [
-    currentDirectory,
-    currentDirectoryVcsInfo?.branch,
-    currentProject?.id,
-    currentProject?.name,
-    isCurrentDirectoryVcsLoading,
-    t,
-  ])
-
   const folderProjects = useMemo<ProjectItem[]>(() => {
     const list = [...folderProjectGroups]
 
@@ -586,6 +543,7 @@ export function SidePanel({
     return list
   }, [folderProjectGroups, currentDirectory, currentProject])
   const canShowFolderRecents = sidebarFolderRecents && !search && folderProjects.length > 0
+  const switchWorkspaceDirectory = useSwitchWorkspaceDirectory()
 
   const workspaceDirectoriesByProjectId = useMemo(() => {
     const map = new Map<string, string[]>()
@@ -611,6 +569,7 @@ export function SidePanel({
     currentProjectWorkspaceDirectories.length <= 1 &&
     !!normalizedCurrentDirectory &&
     !gitWorkspaceCatalog.has(normalizedCurrentDirectory)
+  const hideSidebarNewChat = canShowFolderRecents || shouldRenderWorkspaceTreeOnly
 
   const currentProjectTreeProjects = useMemo<ProjectItem[]>(() => {
     if (!shouldRenderWorkspaceTreeOnly || currentProject.id === 'global') return []
@@ -638,6 +597,28 @@ export function SidePanel({
     return [...folderProjects, ...currentProjectTreeProjects]
   }, [folderProjects, currentProjectTreeProjects])
 
+  const handleOpenWorkspace = useCallback(
+    (directory: string) => {
+      switchWorkspaceDirectory(directory)
+
+      const matchedProject =
+        findProjectGroupForDirectory(folderProjects, directory) ??
+        findProjectGroupForDirectory(currentProjectTreeProjects, directory) ??
+        allDisplayedProjects.find(project => isSameDirectory(project.worktree, directory))
+
+      if (matchedProject) {
+        setExpandedRecentProjectIds(prev =>
+          prev.includes(matchedProject.id) ? prev : [...prev, matchedProject.id],
+        )
+      }
+
+      if (window.innerWidth < 768 && onCloseMobile) {
+        onCloseMobile()
+      }
+    },
+    [switchWorkspaceDirectory, onCloseMobile, folderProjects, currentProjectTreeProjects, allDisplayedProjects],
+  )
+
   const handleSelectFolderProject = useCallback(
     (project: ProjectItem) => {
       if (currentDirectory && isSameDirectory(currentDirectory, project.worktree)) return
@@ -652,25 +633,6 @@ export function SidePanel({
       return project?.memberDirectories?.length ? project.memberDirectories : [projectId]
     },
     [allDisplayedProjects],
-  )
-
-  const handleSelectProject = useCallback(
-    (projectId: string) => {
-      if (projectId === 'global') {
-        setCurrentDirectory(undefined)
-      } else {
-        setCurrentDirectory(projectId)
-      }
-      setProjectsExpanded(false)
-    },
-    [setCurrentDirectory],
-  )
-
-  const handleRemoveProject = useCallback(
-    (projectId: string) => {
-      getProjectDirectoriesToRemove(projectId).forEach(directory => removeDirectory(directory))
-    },
-    [getProjectDirectoriesToRemove, removeDirectory],
   )
 
   const handleReorderProjectGroup = useCallback(
@@ -855,20 +817,6 @@ export function SidePanel({
     onToggleProjectSelection: toggleProjectSelection,
   }
 
-  useEffect(() => {
-    let frameId: number | null = null
-
-    if (!isExpanded) {
-      frameId = requestAnimationFrame(() => {
-        setProjectsExpanded(false)
-      })
-    }
-
-    return () => {
-      if (frameId !== null) cancelAnimationFrame(frameId)
-    }
-  }, [isExpanded])
-
   // 统一的结构，通过 CSS 控制显示/隐藏
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -908,18 +856,48 @@ export function SidePanel({
 
       {/* ===== Navigation - 图标位置固定 ===== */}
       <div className="flex flex-col gap-0.5 mx-2">
-        {/* New Chat - 图标始终在 padding-left: 6px 位置，收起时刚好居中 */}
+        {!hideSidebarNewChat && (
+          <button
+            type="button"
+            onClick={onNewSession}
+            aria-label={t('sidebar.newChat')}
+            className="h-8 flex items-center rounded-lg text-text-300 hover:text-text-100 hover:bg-bg-200 active:scale-[0.98] transition-all duration-300 group overflow-hidden"
+            style={{
+              width: showLabels ? '100%' : 32,
+              paddingLeft: 6,
+              paddingRight: 6,
+            }}
+            title={t('sidebar.newChat')}
+          >
+            <span className="size-5 flex items-center justify-center shrink-0">
+              <PlusIcon size={16} />
+            </span>
+            <span
+              className="ml-2 text-[length:var(--fs-base)] whitespace-nowrap transition-opacity duration-300"
+              style={{ opacity: showLabels ? 1 : 0 }}
+            >
+              {t('sidebar.newChat')}
+            </span>
+            <span
+              className="ml-auto text-[length:var(--fs-xxs)] text-text-500 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap"
+              style={{ opacity: showLabels ? undefined : 0 }}
+            >
+              {newChatShortcut}
+            </span>
+          </button>
+        )}
+
         <button
           type="button"
-          onClick={onNewSession}
-          aria-label={t('sidebar.newChat')}
-          className="h-8 flex items-center rounded-lg text-text-300 hover:text-text-100 hover:bg-bg-200 active:scale-[0.98] transition-all duration-300 group overflow-hidden"
+          onClick={onAddProject}
+          aria-label={t('sidebar.addProject')}
+          className="h-8 flex items-center rounded-lg text-text-300 hover:text-text-100 hover:bg-bg-200 active:scale-[0.98] transition-all duration-300 overflow-hidden"
           style={{
             width: showLabels ? '100%' : 32,
             paddingLeft: 6,
             paddingRight: 6,
           }}
-          title={t('sidebar.newChat')}
+          title={t('sidebar.addProject')}
         >
           <span className="size-5 flex items-center justify-center shrink-0">
             <PlusIcon size={16} />
@@ -928,151 +906,9 @@ export function SidePanel({
             className="ml-2 text-[length:var(--fs-base)] whitespace-nowrap transition-opacity duration-300"
             style={{ opacity: showLabels ? 1 : 0 }}
           >
-            {t('sidebar.newChat')}
-          </span>
-          <span
-            className="ml-auto text-[length:var(--fs-xxs)] text-text-500 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap"
-            style={{ opacity: showLabels ? undefined : 0 }}
-          >
-            {newChatShortcut}
+            {t('sidebar.addProject')}
           </span>
         </button>
-
-        {/* Project Selector - 只在展开时显示 */}
-        {showLabels && (
-          <button
-            ref={projectToggleRef}
-            type="button"
-            onClick={() => setProjectsExpanded(!projectsExpanded)}
-            aria-expanded={projectsExpanded}
-            className={`h-8 flex items-center rounded-lg active:scale-[0.98] transition-all duration-300 overflow-hidden ${
-              projectsExpanded ? 'bg-bg-200 text-text-100' : 'text-text-300 hover:text-text-100 hover:bg-bg-200'
-            }`}
-            style={{ paddingLeft: 6, paddingRight: 6 }}
-            title={currentProjectLabel}
-          >
-            <span className="size-5 flex items-center justify-center shrink-0">
-              {currentProject?.id === 'global' ? (
-                <GlobeIcon size={16} className="text-accent-main-100" />
-              ) : (
-                <FolderIcon size={16} />
-              )}
-            </span>
-            <div className="ml-2 min-w-0 flex-1 text-left text-[length:var(--fs-base)]">
-              <div
-                className="block overflow-hidden whitespace-nowrap text-left"
-                style={{
-                  WebkitMaskImage: 'linear-gradient(to right, black 82%, transparent 100%)',
-                  maskImage: 'linear-gradient(to right, black 82%, transparent 100%)',
-                }}
-              >
-                {currentProjectLabel}
-              </div>
-            </div>
-            <ChevronDownIcon
-              size={14}
-              className={`ml-auto text-text-400 transition-transform duration-200 shrink-0 ${projectsExpanded ? '' : '-rotate-90'}`}
-            />
-          </button>
-        )}
-
-        {/* Projects Dropdown */}
-        <div
-          ref={projectsDropdownRef}
-          className="overflow-hidden pb-px transition-all duration-300 ease-out"
-          style={{
-            maxHeight: showLabels && projectsExpanded ? 304 : 0,
-            opacity: showLabels && projectsExpanded ? 1 : 0,
-            marginTop: showLabels && projectsExpanded ? 4 : 0,
-            visibility: showLabels && projectsExpanded ? 'visible' : 'hidden',
-            pointerEvents: showLabels && projectsExpanded ? 'auto' : 'none',
-          }}
-          aria-hidden={!showLabels || !projectsExpanded}
-        >
-          <div className="rounded-lg border border-border-200/60 glass-alt shadow-sm overflow-hidden">
-            <div className="max-h-48 overflow-y-auto custom-scrollbar p-1">
-              {projects.map(project => {
-                const isGlobal = project.id === 'global'
-                const isActive = currentProject?.id === project.id
-                const itemLabel =
-                  isActive && !isGlobal
-                    ? currentProjectLabel
-                    : project.name || (isGlobal ? t('sidebar.global') : project.worktree)
-                return (
-                  <div
-                    key={project.id}
-                    onClick={() => handleSelectProject(project.id)}
-                    className={`group w-full flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors ${
-                      isActive ? 'bg-bg-200/60 text-text-100' : 'text-text-300 hover:text-text-100 hover:bg-bg-200/50'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={e => {
-                        e.stopPropagation()
-                        handleSelectProject(project.id)
-                      }}
-                      aria-current={isActive ? 'true' : undefined}
-                      className="min-w-0 flex flex-1 items-center gap-2 text-left bg-transparent border-none p-0"
-                      title={project.worktree}
-                    >
-                      <span className="w-5 h-5 flex items-center justify-center shrink-0">
-                        {isGlobal ? <GlobeIcon size={14} className="text-accent-main-100" /> : <FolderIcon size={14} />}
-                      </span>
-                      <div className="flex-1 min-w-0 text-left">
-                        <div className="text-left text-[length:var(--fs-sm)]">
-                          <div
-                            className="overflow-hidden whitespace-nowrap text-left"
-                            style={{
-                              WebkitMaskImage: 'linear-gradient(to right, black 82%, transparent 100%)',
-                              maskImage: 'linear-gradient(to right, black 82%, transparent 100%)',
-                            }}
-                          >
-                            {itemLabel}
-                          </div>
-                        </div>
-                        <div
-                          className={`text-[length:var(--fs-xxs)] text-text-400 truncate opacity-70 ${isGlobal ? '' : 'font-mono'}`}
-                        >
-                          {isGlobal
-                            ? t('sidebar.globalProjectHint')
-                            : project.worktree
-                              ? getParentPath(project.worktree)
-                              : ''}
-                        </div>
-                      </div>
-                    </button>
-                    {!isGlobal && (
-                      <button
-                        type="button"
-                        onClick={e => {
-                          e.stopPropagation()
-                          setProjectDeleteConfirm({ isOpen: true, projectId: project.id })
-                        }}
-                        aria-label={t('sidebar.removeProject')}
-                        className="p-1 rounded text-text-400 hover:text-danger-100 hover:bg-danger-100/10 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:focus-visible:opacity-100 transition-all"
-                        title={t('common:remove')}
-                      >
-                        <TrashIcon size={12} />
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-            <div className="relative p-1 pt-1.5">
-              <div className="pointer-events-none absolute inset-x-3 top-0 h-px bg-border-200/30" />
-              <button
-                type="button"
-                onClick={onAddProject}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[length:var(--fs-sm)] text-text-300 hover:text-text-100 hover:bg-bg-200/50 transition-colors"
-              >
-                <PlusIcon size={14} />
-                {t('sidebar.addProject')}
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* ===== Main Content ===== */}
@@ -1208,6 +1044,7 @@ export function SidePanel({
                   workspaceDirectoriesByProjectId={workspaceDirectoriesByProjectId}
                   pinnedSessions={resolvedPinnedSessions}
                   unavailablePinnedEntries={unavailablePinnedEntries}
+                  onOpenWorkspace={handleOpenWorkspace}
                 />
               ) : shouldRenderWorkspaceTreeOnly ? (
                 <FolderRecentList
@@ -1216,6 +1053,7 @@ export function SidePanel({
                   onReorderProject={reorderDirectories}
                   pinnedSessions={resolvedPinnedSessions}
                   unavailablePinnedEntries={unavailablePinnedEntries}
+                  onOpenWorkspace={handleOpenWorkspace}
                 />
               ) : shouldWaitForWorkspaceResolution ? (
                 <div className="flex h-full items-center justify-center text-text-400/70">
@@ -1320,22 +1158,6 @@ export function SidePanel({
         stats={stats}
         hasMessages={hasMessages}
         onOpenSettings={onOpenSettings}
-      />
-
-      {/* Confirm Dialog */}
-      <ConfirmDialog
-        isOpen={projectDeleteConfirm.isOpen}
-        onClose={() => setProjectDeleteConfirm({ isOpen: false, projectId: null })}
-        onConfirm={() => {
-          if (projectDeleteConfirm.projectId) {
-            handleRemoveProject(projectDeleteConfirm.projectId)
-          }
-          setProjectDeleteConfirm({ isOpen: false, projectId: null })
-        }}
-        title={t('sidebar.removeProject')}
-        description={t('sidebar.removeProjectConfirm')}
-        confirmText={t('common:remove')}
-        variant="danger"
       />
 
       {/* 批量删除会话确认弹窗 */}

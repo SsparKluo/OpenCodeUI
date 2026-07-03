@@ -8,7 +8,9 @@
     "closeBottomPanel": "Close bottom panel",
     "openBottomPanel": "Open bottom panel",
     "closePanel": "Close panel",
-    "openPanel": "Open panel"
+    "openPanel": "Open panel",
+    "switchWorkspace": "Switch workspace",
+    "recentWorkspaces": "Recent workspaces"
   },
   "chatArea": {
     "loadingSession": "Loading session...",
@@ -146,7 +148,9 @@
     "moveFolderUp": "Move folder up",
     "moveFolderDown": "Move folder down",
     "noChatsInFolder": "No chats in this folder",
-    "showMoreChats": "Show more chats",
+    "showMoreChats": "Show more",
+    "showLessChats": "Show less",
+    "createNewChat": "New chat",
     "selectedSessions": "{{count}} session(s) selected",
     "selectedProjects": "{{count}} project(s) selected",
     "selectItems": "Select items to manage",

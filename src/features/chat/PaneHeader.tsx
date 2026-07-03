@@ -26,6 +26,8 @@ import { updateSession } from '../../api'
 import { useDirectory } from '../../contexts/useDirectory'
 import { uiErrorHandler } from '../../utils'
 import { useChatViewport, canUseSplitPane } from './chatViewport'
+import { useSessionHeaderContext } from './sessionHeaderContext'
+import { SessionHeaderLocationPicker } from './SessionHeaderLocationPicker'
 import {
   getInternalDragSnapshot,
   isPointInsideElement,
@@ -75,6 +77,8 @@ export function PaneHeader({
   const [isDragOver, setIsDragOver] = useState(false)
 
   const title = sessionState?.title || t('header.newChat')
+  const sessionLocation = useSessionHeaderContext(sessionState?.directory)
+  const showSessionLocation = viewport.interaction.sidebarBehavior !== 'overlay' && sessionLocation
   const splitEnabled = canSplitPane ?? canUseSplitPane(viewport)
 
   // Reset editing when session changes
@@ -171,7 +175,20 @@ export function PaneHeader({
       onPointerDown={handlePointerDragStart}
     >
       {/* Left: Title */}
-      <div className="flex items-center min-w-0 flex-1">
+      <div className="flex items-center min-w-0 flex-1 gap-1.5">
+        {showSessionLocation && (
+          <>
+            <SessionHeaderLocationPicker
+              currentDirectory={sessionState?.directory || currentDirectory}
+              location={sessionLocation}
+              textClassName="text-[length:var(--fs-sm)]"
+              iconSize={12}
+              workspaceMaxWidthClass="max-w-[100px]"
+              branchMaxWidthClass="max-w-[100px]"
+            />
+            <span className="shrink-0 text-text-200 opacity-70">·</span>
+          </>
+        )}
         {isEditing ? (
           <input
             ref={inputRef}
@@ -183,12 +200,16 @@ export function PaneHeader({
               if (e.key === 'Enter') handleRename()
               if (e.key === 'Escape') setIsEditing(false)
             }}
-            className="px-1.5 py-0.5 text-[length:var(--fs-sm)] font-medium text-text-100 bg-transparent border-none outline-none w-[140px]"
+            onClick={e => e.stopPropagation()}
+            className="min-w-0 flex-1 px-1.5 py-0.5 text-[length:var(--fs-sm)] font-medium text-text-100 bg-transparent border-none outline-none max-w-[200px]"
           />
         ) : (
           <button
-            onClick={handleStartEdit}
-            className="px-1.5 py-0.5 text-[length:var(--fs-sm)] font-medium text-text-200 hover:text-text-100 transition-colors truncate max-w-[200px] cursor-text select-none"
+            onClick={e => {
+              e.stopPropagation()
+              handleStartEdit()
+            }}
+            className="px-1.5 py-0.5 text-[length:var(--fs-sm)] font-medium text-text-200 hover:text-text-100 transition-colors truncate max-w-[200px] cursor-text select-none min-w-0"
             title={t('header.clickToRename')}
           >
             {title}

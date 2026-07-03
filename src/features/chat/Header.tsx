@@ -19,6 +19,9 @@ import { updateSession } from '../../api'
 import { useDirectory } from '../../contexts/useDirectory'
 import { uiErrorHandler } from '../../utils'
 import { useChatViewport } from './chatViewport'
+import { useSessionHeaderContext } from './sessionHeaderContext'
+import { SessionHeaderLocationPicker } from './SessionHeaderLocationPicker'
+import type { SessionHeaderLocation } from './SessionHeaderLocation'
 import type { ModelInfo } from '../../api'
 
 interface HeaderProps {
@@ -39,6 +42,8 @@ interface SessionTitleControlProps {
   isEditingTitle: boolean
   editTitle: string
   sessionTitle: string
+  workspaceDirectory?: string
+  sessionLocation?: SessionHeaderLocation | null
   titleInputRef: React.RefObject<HTMLInputElement | null>
   setEditTitle: (value: string) => void
   setIsEditingTitle: (value: boolean) => void
@@ -54,6 +59,8 @@ function SessionTitleControl({
   isEditingTitle,
   editTitle,
   sessionTitle,
+  workspaceDirectory,
+  sessionLocation,
   titleInputRef,
   setEditTitle,
   setIsEditingTitle,
@@ -80,33 +87,44 @@ function SessionTitleControl({
     <div
       className={`flex items-center group ${isEditingTitle ? 'bg-bg-200/50 ring-1 ring-accent-main-100' : 'bg-transparent hover:bg-bg-200/50 border border-transparent hover:border-border-200/50'} rounded-lg transition-all duration-200 p-0.5 min-w-0 shrink`}
     >
-      {isEditingTitle ? (
-        <input
-          ref={titleInputRef}
-          type="text"
-          value={editTitle}
-          onChange={e => setEditTitle(e.target.value)}
-          onBlur={handleRename}
-          onKeyDown={e => {
-            if (e.key === 'Enter') handleRename()
-            if (e.key === 'Escape') setIsEditingTitle(false)
-          }}
-          className={inputClass}
-        />
-      ) : (
+      <div className="flex items-center min-w-0 gap-1.5">
+        {sessionLocation && (
+          <>
+            <SessionHeaderLocationPicker
+              currentDirectory={workspaceDirectory}
+              location={sessionLocation}
+              textClassName="text-[length:var(--fs-base)]"
+              iconSize={compact ? 11 : 12}
+              workspaceMaxWidthClass={compact ? 'max-w-[88px]' : 'max-w-[140px]'}
+              branchMaxWidthClass={compact ? 'max-w-[88px]' : 'max-w-[140px]'}
+            />
+            <span className="shrink-0 text-text-200 opacity-70">·</span>
+          </>
+        )}
+        {isEditingTitle ? (
+          <input
+            ref={titleInputRef}
+            type="text"
+            value={editTitle}
+            onChange={e => setEditTitle(e.target.value)}
+            onBlur={handleRename}
+            onKeyDown={e => {
+              if (e.key === 'Enter') handleRename()
+              if (e.key === 'Escape') setIsEditingTitle(false)
+            }}
+            className={inputClass}
+          />
+        ) : (
           <button type="button" onClick={handleStartEdit} className={buttonClass} title={clickToRenameTitle}>
             {sessionTitle}
           </button>
-      )}
+        )}
+      </div>
 
-      {!isEditingTitle && (
-        <>
-          <div className={dividerClass} />
-          <button type="button" className={shareButtonClass} title={shareTitle} aria-label={shareTitle} onClick={onShare}>
-            <ChevronDownIcon size={12} />
-          </button>
-        </>
-      )}
+      <div className={dividerClass} />
+      <button type="button" className={shareButtonClass} title={shareTitle} aria-label={shareTitle} onClick={onShare}>
+        <ChevronDownIcon size={12} />
+      </button>
     </div>
   )
 }
@@ -136,6 +154,7 @@ export function Header({
   const titleInputRef = useRef<HTMLInputElement>(null)
 
   const sessionTitle = currentSessionTitle || t('header.newChat')
+  const sessionLocation = useSessionHeaderContext(sessionDirectory || currentDirectory)
   const isCompact = presentation.isCompact
 
   useEffect(() => {
@@ -184,6 +203,8 @@ export function Header({
       isEditingTitle={isEditingTitle}
       editTitle={editTitle}
       sessionTitle={sessionTitle}
+      workspaceDirectory={sessionDirectory || currentDirectory}
+      sessionLocation={interaction.sidebarBehavior === 'overlay' ? null : sessionLocation}
       titleInputRef={titleInputRef}
       setEditTitle={setEditTitle}
       setIsEditingTitle={setIsEditingTitle}
