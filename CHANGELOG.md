@@ -1,5 +1,26 @@
 # Changelog
 
+## [v0.6.24] - 2026-07-03
+
+- perf: reduce layout thrash in streaming render (95994a8)
+- fix: improve streaming render performance under heavy usage (9bb161a)
+- feat: search file names alongside content, drag results to input as @mention (3f38eb1)
+- feat: auto-refresh file tree and changes panel (a3f0d3b)
+- fix: prevent invisible window after closing in fullscreen (987f966)
+- fix: account for container padding in scrollItemIntoView (8c54441)
+- fix: stop mention menu selection reset during streaming (a6838f8)
+- fix: ensure keyboard-selected menu items are fully visible (90105ae)
+- fix: wrap arrow key navigation in popup menus (a45815a)
+- fix: shrink divider hit area in horizontal split for outline index (8ccca70)
+- fix: stabilize scroll anchor when page heights change (4096b71)
+- Revert "fix: premeasure chat pages during scroll" (440be3d)
+- fix: premeasure chat pages during scroll (59e2260)
+- fix: link subtask titles to sessions (0a0a5f7)
+- fix: tighten outline index hit area (7cd3271)
+- fix: mute permission sounds during full auto (7b0e78f)
+- feat: show MCP resources (807e2f5)
+- feat: add file content search (df843d3)
+
 ## [v0.6.23] - 2026-06-27
 
 - fix: constrain mobile dialog content height (52d6a5e)
