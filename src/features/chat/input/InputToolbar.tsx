@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ChevronDownIcon, SendIcon, StopIcon, PaperclipIcon, AgentIcon, ThinkingIcon, MinusIcon } from '../../../components/Icons'
 import { DropdownMenu, MenuItem, IconButton, AnimatedPresence } from '../../../components/ui'
 import { ModelSelector, type ModelSelectorHandle } from '../ModelSelector'
+import { ContextUsageButton } from './ContextUsageButton'
 import { useChatViewport } from '../chatViewport'
 import { isTauri, isTauriMobile, extToMime } from '../../../utils/tauri'
 import type { ApiAgent } from '../../../api/client'
@@ -500,6 +501,10 @@ export function InputToolbar({
 
       {/* Action Buttons */}
       <div className="flex items-center gap-1">
+        <ContextUsageButton
+          contextLimit={contextLimit}
+          disabled={controlsDisabled}
+        />
         {isCompact && !isCollapsed && onToggleCollapse && (
           <IconButton
             aria-label="Collapse input"

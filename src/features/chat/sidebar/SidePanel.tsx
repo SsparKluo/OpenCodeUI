@@ -10,7 +10,6 @@ import { SidebarFooter } from './SidebarFooter'
 import { buildActiveSessionTree } from './activeSessionTree'
 
 import {
-  SidebarIcon,
   PlusIcon,
   TrashIcon,
   SearchIcon,
@@ -21,12 +20,11 @@ import {
 } from '../../../components/Icons'
 import {
   useDirectory,
-  useSessionStats,
   useKeybindingLabel,
   useGitWorkspaceCatalog,
 } from '../../../hooks'
 import { useSessionContext } from '../../../contexts/useSessionContext'
-import { useLayoutStore, useMessageStore, childSessionStore } from '../../../store'
+import { useLayoutStore, childSessionStore } from '../../../store'
 import { useSwitchWorkspaceDirectory } from '../useSwitchWorkspaceDirectory'
 import { useBusySessions, useBusyCount } from '../../../store/activeSessionStore'
 import { notificationStore, useNotifications, useUnreadNotificationCount } from '../../../store/notificationStore'
@@ -229,11 +227,6 @@ export function SidePanel({
 
   const showLabels = isExpanded || isMobile
   const newChatShortcut = useKeybindingLabel('newSession')
-
-  // Session stats
-  const { messages } = useMessageStore()
-  const stats = useSessionStats(contextLimit)
-  const hasMessages = messages.length > 0
 
   // Active sessions
   const busySessions = useBusySessions()

@@ -133,10 +133,6 @@ function SessionTitleControl({
 }
 
 export function Header({
-  models,
-  modelsLoading,
-  selectedModelKey,
-  onModelChange,
   onToggleSidebar,
   sidebarExpanded = false,
   onNewSession,

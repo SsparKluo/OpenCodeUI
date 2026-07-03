@@ -4,6 +4,7 @@ import { codeLineHeight } from './codeMirrorReadonlyExtensions'
 import { useSyntaxHighlightRef } from '../hooks/useSyntaxHighlight'
 import { themeStore } from '../store/themeStore'
 import { CopyButton } from './ui'
+import type { TargetLineRange } from './codeMirrorReadonlyExtensions'
 
 interface CodePreviewProps {
   code: string
@@ -12,6 +13,9 @@ interface CodePreviewProps {
   isResizing?: boolean
   isVisible?: boolean
   wordWrap?: boolean
+  targetLine?: number | null
+  targetKey?: string
+  targetRanges?: readonly TargetLineRange[]
 }
 
 export function CodePreview({
@@ -21,6 +25,9 @@ export function CodePreview({
   isResizing = false,
   isVisible = true,
   wordWrap,
+  targetLine,
+  targetKey,
+  targetRanges,
 }: CodePreviewProps) {
   const { codeWordWrap, codeFontScale } = useSyncExternalStore(themeStore.subscribe, themeStore.getSnapshot)
   const resolvedWordWrap = wordWrap ?? codeWordWrap
@@ -47,6 +54,9 @@ export function CodePreview({
         maxHeight={maxHeight}
         isResizing={isResizing}
         isVisible={isVisible}
+        targetLine={targetLine}
+        targetKey={targetKey}
+        targetRanges={targetRanges}
       />
     </div>
   )

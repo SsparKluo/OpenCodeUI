@@ -9,13 +9,11 @@ import { IconButton, DropdownMenu } from '../../../components/ui'
 interface ContextUsageButtonProps {
   contextLimit?: number
   disabled?: boolean
-  inputContainerRef?: React.RefObject<HTMLElement | null>
 }
 
 export const ContextUsageButton = memo(function ContextUsageButton({
   contextLimit = 200000,
   disabled = false,
-  inputContainerRef,
 }: ContextUsageButtonProps) {
   const { t } = useTranslation('chat')
   const { messages } = useMessageStore()
