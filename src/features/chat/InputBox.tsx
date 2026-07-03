@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo, useSyncExternalStore, useLayoutEffect, memo } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, useSyncExternalStore, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DragDropEvent } from '@tauri-apps/api/webview'
 import { AttachmentPreview, type Attachment } from '../attachment'
@@ -67,32 +67,6 @@ interface DroppedPathInfo {
 }
 
 type TauriDropPosition = Extract<DragDropEvent, { type: 'drop' }>['position']
-
-const TEXTAREA_MIN_HEIGHT = 24
-const TEXTAREA_VERTICAL_CHROME = 24
-const INPUT_TOOLBAR_FALLBACK_HEIGHT = 36
-const INPUT_FOOTER_FALLBACK_HEIGHT = 32
-const COMPOSER_MIN_HEIGHT = 144
-const COMPOSER_DESKTOP_MAX_HEIGHT = 420
-const COMPOSER_COMPACT_MAX_HEIGHT = 320
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max)
-}
-
-function getComposerPaneHeight(anchor: HTMLElement | null): number {
-  const paneRoot = anchor?.closest<HTMLElement>('[data-chat-pane-root]')
-  const paneHeight = paneRoot?.getBoundingClientRect().height
-  if (paneHeight && paneHeight > 0) return paneHeight
-  return window.innerHeight || 800
-}
-
-function getComposerMaxHeight(paneHeight: number, isCompact: boolean): number {
-  const ratio = isCompact ? 0.44 : 0.4
-  const hardMax = isCompact ? COMPOSER_COMPACT_MAX_HEIGHT : COMPOSER_DESKTOP_MAX_HEIGHT
-  const availableMax = Math.max(COMPOSER_MIN_HEIGHT, paneHeight - 96)
-  return clamp(Math.floor(paneHeight * ratio), COMPOSER_MIN_HEIGHT, Math.min(hardMax, availableMax))
-}
 
 function getDropClientPoints(position: TauriDropPosition): Array<{ x: number; y: number }> {
   const directPoint = { x: position.x, y: position.y }
@@ -280,8 +254,6 @@ function InputBoxComponent({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const inputContainerRef = useRef<HTMLDivElement>(null)
   const attachmentRailRef = useRef<HTMLDivElement>(null)
-  const attachmentSectionRef = useRef<HTMLDivElement>(null)
-  const toolbarRef = useRef<HTMLDivElement>(null)
   const mentionMenuRef = useRef<MentionMenuHandle>(null)
   const slashMenuRef = useRef<SlashCommandMenuHandle>(null)
   const prevRevertedTextRef = useRef<string | undefined>(undefined)
@@ -290,9 +262,6 @@ function InputBoxComponent({
   const footerRef = useRef<HTMLDivElement>(null)
   const isComposingRef = useRef(false)
   const compositionEndTimerRef = useRef<number | null>(null)
-  const [composerMaxHeight, setComposerMaxHeight] = useState(280)
-  const [inputContainerMaxHeight, setInputContainerMaxHeight] = useState(240)
-  const [textareaMaxHeight, setTextareaMaxHeight] = useState(180)
 
   // 附件横向轨道
   const {
@@ -367,57 +336,9 @@ function InputBoxComponent({
     textareaRef,
     text,
     isCompact,
-    maxHeight: textareaMaxHeight,
     shouldNudgeChatScroll: isAtBottom,
     onDockResize,
   })
-
-  const updateComposerHeightBudget = useCallback(() => {
-    const paneHeight = getComposerPaneHeight(inputContainerRef.current ?? contentWrapRef.current)
-    const nextComposerMaxHeight = getComposerMaxHeight(paneHeight, isCompact)
-    const attachmentHeight = attachments.length > 0 ? (attachmentSectionRef.current?.offsetHeight ?? 0) : 0
-    const toolbarHeight = toolbarRef.current?.offsetHeight || INPUT_TOOLBAR_FALLBACK_HEIGHT
-    const footerHeight = isCollapsed ? 0 : footerRef.current?.offsetHeight || INPUT_FOOTER_FALLBACK_HEIGHT
-    const inputContainerChrome = attachmentHeight + toolbarHeight + TEXTAREA_VERTICAL_CHROME
-    const nextInputContainerMaxHeight = Math.max(
-      TEXTAREA_MIN_HEIGHT + TEXTAREA_VERTICAL_CHROME + toolbarHeight,
-      nextComposerMaxHeight - footerHeight,
-    )
-    const nextTextareaMaxHeight = Math.max(
-      TEXTAREA_MIN_HEIGHT,
-      nextInputContainerMaxHeight - inputContainerChrome,
-    )
-
-    setComposerMaxHeight(prev => (Math.abs(prev - nextComposerMaxHeight) < 1 ? prev : nextComposerMaxHeight))
-    setInputContainerMaxHeight(prev =>
-      Math.abs(prev - nextInputContainerMaxHeight) < 1 ? prev : nextInputContainerMaxHeight,
-    )
-    setTextareaMaxHeight(prev => (Math.abs(prev - nextTextareaMaxHeight) < 1 ? prev : nextTextareaMaxHeight))
-  }, [attachments.length, isCollapsed, isCompact])
-
-  useLayoutEffect(() => {
-    updateComposerHeightBudget()
-  }, [updateComposerHeightBudget, text])
-
-  useEffect(() => {
-    updateComposerHeightBudget()
-
-    const observed = [
-      inputContainerRef.current?.closest<HTMLElement>('[data-chat-pane-root]'),
-      inputContainerRef.current,
-      attachmentSectionRef.current,
-      toolbarRef.current,
-      footerRef.current,
-    ].filter((element): element is HTMLElement => !!element)
-
-    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateComposerHeightBudget) : null
-    observed.forEach(element => observer?.observe(element))
-    window.addEventListener('resize', updateComposerHeightBudget)
-    return () => {
-      observer?.disconnect()
-      window.removeEventListener('resize', updateComposerHeightBudget)
-    }
-  }, [updateComposerHeightBudget])
 
   // 计算
   const inputDisabled = !!disabled
@@ -1274,8 +1195,7 @@ function InputBoxComponent({
         <div
           ref={contentWrapRef}
           onPointerDown={handleContainerPointerDown}
-          className={`relative flex flex-col gap-2 ${isCollapsed ? 'justify-end' : ''}`}
-          style={{ maxHeight: composerMaxHeight }}
+          className="relative flex flex-col"
         >
           {/* FloatingActions —
               展开态：absolute 定位在内容区上方，不占文档流，避免显隐变化影响高度导致滚动抖动
@@ -1348,24 +1268,9 @@ function InputBoxComponent({
 
             {/* Grid 自身 overflow-hidden，收起时 0fr 能完全坍缩 */}
             <div
-              ref={inputContainerRef}
-              data-input-box
-              data-pane-id={paneId}
-              onPointerDown={handleContainerPointerDown}
-              onDragEnter={handleDragEnter}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              className={`grid glass rounded-2xl relative overflow-hidden transition-[grid-template-rows,opacity] duration-300 ease-out focus-within:outline-none shadow-lg ${
+              className={`grid overflow-hidden transition-[grid-template-rows,opacity] duration-300 ease-out ${
                 !isCollapsed ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'
-              } ${
-                isDragging || isInternalFileDragging
-                  ? 'border border-accent-main-100 ring-2 ring-accent-main-100/30'
-                  : isStreaming
-                    ? 'border border-accent-main-100/50 animate-border-pulse'
-                    : 'border border-border-200/60'
               }`}
-              style={{ maxHeight: inputContainerMaxHeight }}
             >
               <div className="overflow-hidden">
                 {/* Input Container */}
@@ -1393,7 +1298,7 @@ function InputBoxComponent({
                     </div>
                   )}
 
-                  <div ref={attachmentSectionRef} className="relative">
+                  <div className="relative">
                     <div className="overflow-hidden">
                       {/* Attachments Preview - 显示在输入框上方 */}
                       <div
@@ -1450,15 +1355,14 @@ function InputBoxComponent({
                           style={{
                             ...TEXT_STYLE,
                             minHeight: '24px',
-                            maxHeight: textareaMaxHeight,
+                            maxHeight: isCompact ? 'calc(var(--app-height, 100vh) - 220px)' : '35vh',
                           }}
                           rows={1}
                         />
                       </div>
 
                       {/* Bottom Bar -> InputToolbar */}
-                      <div ref={toolbarRef}>
-                        <InputToolbar
+                      <InputToolbar
                         agents={agents}
                         selectedAgent={selectedAgent}
                         onAgentChange={onAgentChange}
@@ -1481,7 +1385,6 @@ function InputBoxComponent({
                         isCollapsed={isCollapsed}
                         onToggleCollapse={toggleCollapse}
                       />
-                      </div>
                     </div>
                   </div>
                 </div>
