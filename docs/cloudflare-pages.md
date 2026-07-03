@@ -147,7 +147,7 @@ npm run dev
 
 ```bash
 cd workers/api-proxy
-pnpm install
+pnpm install --ignore-workspace
 pnpm dev
 # 启动本地 worker，可直接 curl http://localhost:8787/api/health
 ```
