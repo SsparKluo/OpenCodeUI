@@ -250,9 +250,9 @@ export const ChatArea = memo(
         },
         getItemKey: (index) => activePages[index]?.key ?? index,
         anchorTo: 'end',
-        followOnAppend: true,
+        followOnAppend: !autoScroll.userScrolled,
         overscan: 20,
-        scrollEndThreshold: atBottomThreshold,
+        scrollEndThreshold: autoScroll.userScrolled ? 0 : atBottomThreshold,
       })
 
       // When an item above the viewport changes size, adjust scrollTop to keep

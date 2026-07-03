@@ -55,6 +55,9 @@ interface AutoMarker {
 
 const AUTO_MARK_TIMEOUT_MS = 1500
 const SETTLE_TIMEOUT_MS = 300
+/** Pause auto-follow while wheel / touch inertia is active (see 860683e). */
+const USER_WHEEL_INTERACTION_MS = 150
+const USER_TOUCH_INTERACTION_MS = 300
 
 export interface UseAutoScrollReturn {
   scrollRef: (el: HTMLElement | null) => void
@@ -88,6 +91,9 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
   const settlingRef = useRef(false)
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const userInteractingRef = useRef(false)
+  const userInteractTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const touchYRef = useRef<number | undefined>(undefined)
 
   // Mirror `userScrolled` to React state so consumers can re-render on change.
   const [userScrolled, setUserScrolledState] = useState(false)
@@ -103,6 +109,22 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
     if (userScrolledRef.current === next) return
     userScrolledRef.current = next
     setUserScrolledState(next)
+  }, [])
+
+  const clearUserInteractTimer = () => {
+    if (userInteractTimerRef.current !== null) {
+      clearTimeout(userInteractTimerRef.current)
+      userInteractTimerRef.current = null
+    }
+  }
+
+  const markUserInteracting = useCallback((holdMs: number) => {
+    userInteractingRef.current = true
+    clearUserInteractTimer()
+    userInteractTimerRef.current = setTimeout(() => {
+      userInteractingRef.current = false
+      userInteractTimerRef.current = null
+    }, holdMs)
   }, [])
 
   // Mirror state into refs so event listeners can read the latest values
@@ -251,23 +273,53 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
     onUserInteracted?.()
   }, [onUserInteracted, setUserScrolled])
 
+  const isNestedScrollTarget = useCallback((target: EventTarget | null | undefined) => {
+    const el = scrollElRef.current
+    const node = target instanceof Element ? target : undefined
+    const nested = node?.closest('[data-scrollable]')
+    return Boolean(el && nested && nested !== el)
+  }, [])
+
   const handleWheel = useCallback(
     (e: WheelEvent) => {
+      if (isNestedScrollTarget(e.target)) return
+      markUserInteracting(USER_WHEEL_INTERACTION_MS)
       // Only "up" gestures (toward earlier content) can leave follow mode;
       // downward gestures are part of normal following and may be produced by
       // overscroll, momentum, etc.
       if (e.deltaY >= 0) return
-      const el = scrollElRef.current
-      const target = e.target instanceof Element ? e.target : undefined
-      // Nested scrollable regions (tool output, code block) opt out via
-      // `data-scrollable`. If the wheel started inside one of them, don't
-      // treat it as leaving the main scroll's follow mode.
-      const nested = target?.closest('[data-scrollable]')
-      if (el && nested && nested !== el) return
       stop()
     },
-    [stop],
+    [isNestedScrollTarget, markUserInteracting, stop],
   )
+
+  const handleTouchStart = useCallback(
+    (e: TouchEvent) => {
+      touchYRef.current = e.touches[0]?.clientY
+      markUserInteracting(USER_TOUCH_INTERACTION_MS)
+    },
+    [markUserInteracting],
+  )
+
+  const handleTouchMove = useCallback(
+    (e: TouchEvent) => {
+      if (isNestedScrollTarget(e.target)) return
+      const next = e.touches[0]?.clientY
+      const prev = touchYRef.current
+      touchYRef.current = next
+      if (next === undefined || prev === undefined) return
+      markUserInteracting(USER_TOUCH_INTERACTION_MS)
+      // Finger moves down → content scrolls up (view earlier messages).
+      const delta = prev - next
+      if (delta < 0) stop()
+    },
+    [isNestedScrollTarget, markUserInteracting, stop],
+  )
+
+  const handleTouchEnd = useCallback(() => {
+    touchYRef.current = undefined
+    markUserInteracting(USER_TOUCH_INTERACTION_MS)
+  }, [markUserInteracting])
 
   // ============================================================
   // handleScroll — update userScrolled from current scroll position
@@ -281,7 +333,10 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
       return
     }
 
-    if (distanceFromBottom(el) < bottomThresholdRef.current) {
+    // Re-enable follow only when the user is essentially at the bottom — not
+    // merely within the UI "near bottom" band (60px), which caused snap-back
+    // jitter while slowly scrolling up during streaming.
+    if (distanceFromBottom(el) < BOTTOM_NUDGE_TOLERANCE_PX) {
       if (userScrolledRef.current) setUserScrolled(false)
       return
     }
@@ -363,7 +418,7 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
         if (userScrolledRef.current) setUserScrolled(false)
         return
       }
-      if (userScrolledRef.current) return
+      if (userScrolledRef.current || userInteractingRef.current) return
       scrollToBottom(false)
     } catch (err) {
       if (import.meta.env.DEV) {
@@ -436,8 +491,18 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
   useEffect(() => {
     if (!scrollEl) return
     scrollEl.addEventListener('wheel', handleWheel, { passive: true })
-    return () => scrollEl.removeEventListener('wheel', handleWheel)
-  }, [scrollEl, handleWheel])
+    scrollEl.addEventListener('touchstart', handleTouchStart, { passive: true })
+    scrollEl.addEventListener('touchmove', handleTouchMove, { passive: true })
+    scrollEl.addEventListener('touchend', handleTouchEnd, { passive: true })
+    scrollEl.addEventListener('touchcancel', handleTouchEnd, { passive: true })
+    return () => {
+      scrollEl.removeEventListener('wheel', handleWheel)
+      scrollEl.removeEventListener('touchstart', handleTouchStart)
+      scrollEl.removeEventListener('touchmove', handleTouchMove)
+      scrollEl.removeEventListener('touchend', handleTouchEnd)
+      scrollEl.removeEventListener('touchcancel', handleTouchEnd)
+    }
+  }, [scrollEl, handleWheel, handleTouchStart, handleTouchMove, handleTouchEnd])
 
   // ============================================================
   // Cleanup timers on unmount.
@@ -452,6 +517,7 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
         clearTimeout(autoTimerRef.current)
         autoTimerRef.current = null
       }
+      clearUserInteractTimer()
     }
   }, [])
 
