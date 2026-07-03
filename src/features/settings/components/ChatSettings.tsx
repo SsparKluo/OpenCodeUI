@@ -2,7 +2,12 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PathAutoIcon, PathUnixIcon, PathWindowsIcon } from '../../../components/Icons'
 import { usePathMode, useIsMobile, useTheme } from '../../../hooks'
-import { themeStore, type ReasoningDisplayMode, type CompletedAtFormat } from '../../../store/themeStore'
+import {
+  themeStore,
+  type ReasoningDisplayMode,
+  type CompletedAtFormat,
+  type BlockCollapseMode,
+} from '../../../store/themeStore'
 import { Toggle, SegmentedControl, SettingRow, SettingsSection } from './SettingsUI'
 import type { PathMode } from '../../../utils/directoryUtils'
 
@@ -21,6 +26,12 @@ export function ChatSettings() {
   const [stepFinishDisplay, setStepFinishDisplay] = useState(themeStore.stepFinishDisplay)
   const [completedAtFormat, setCompletedAtFormat] = useState(themeStore.completedAtFormat)
   const [reasoningDisplayMode, setReasoningDisplayMode] = useState(themeStore.reasoningDisplayMode)
+  const [thinkingBlockCollapse, setThinkingBlockCollapse] = useState(themeStore.thinkingBlockCollapse)
+  const [toolCallsBlockCollapse, setToolCallsBlockCollapse] = useState(themeStore.toolCallsBlockCollapse)
+  const [subtaskBlockCollapse, setSubtaskBlockCollapse] = useState(themeStore.subtaskBlockCollapse)
+  const [immersiveUnreadToolCollapse, setImmersiveUnreadToolCollapse] = useState(
+    themeStore.immersiveUnreadToolCollapse,
+  )
   const isMobile = useIsMobile()
   void isMobile
 
@@ -119,6 +130,75 @@ export function ChatSettings() {
               { value: 'markdown', label: t('chat.markdown') },
             ]}
             onChange={v => handleReasoningDisplayModeChange(v as ReasoningDisplayMode)}
+          />
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title={t('chat.blockCollapseBehavior')}>
+        <p className="text-[length:var(--fs-sm)] text-text-400">{t('chat.blockCollapseBehaviorDesc')}</p>
+
+        <div>
+          <p className="text-[length:var(--fs-md)] text-text-100 mb-1.5">{t('chat.thinkingBlock')}</p>
+          <SegmentedControl
+            value={thinkingBlockCollapse}
+            options={[
+              { value: 'auto_toggle', label: t('chat.blockCollapse_auto_toggle') },
+              { value: 'auto_expand', label: t('chat.blockCollapse_auto_expand') },
+              { value: 'always_collapsed', label: t('chat.blockCollapse_always_collapsed') },
+            ]}
+            onChange={v => {
+              setThinkingBlockCollapse(v as BlockCollapseMode)
+              themeStore.setThinkingBlockCollapse(v as BlockCollapseMode)
+            }}
+          />
+        </div>
+
+        <div>
+          <p className="text-[length:var(--fs-md)] text-text-100 mb-1.5">{t('chat.toolCallsBlock')}</p>
+          <SegmentedControl
+            value={toolCallsBlockCollapse}
+            options={[
+              { value: 'auto_toggle', label: t('chat.blockCollapse_auto_toggle') },
+              { value: 'auto_expand', label: t('chat.blockCollapse_auto_expand') },
+              { value: 'always_collapsed', label: t('chat.blockCollapse_always_collapsed') },
+            ]}
+            onChange={v => {
+              setToolCallsBlockCollapse(v as BlockCollapseMode)
+              themeStore.setToolCallsBlockCollapse(v as BlockCollapseMode)
+            }}
+          />
+        </div>
+
+        <div>
+          <p className="text-[length:var(--fs-md)] text-text-100 mb-1.5">{t('chat.immersiveUnreadToolBlock')}</p>
+          <p className="text-[length:var(--fs-sm)] text-text-400 mb-3">{t('chat.immersiveUnreadToolBlockDesc')}</p>
+          <SegmentedControl
+            value={immersiveUnreadToolCollapse}
+            options={[
+              { value: 'auto_toggle', label: t('chat.blockCollapse_auto_toggle') },
+              { value: 'auto_expand', label: t('chat.blockCollapse_auto_expand') },
+              { value: 'always_collapsed', label: t('chat.blockCollapse_always_collapsed') },
+            ]}
+            onChange={v => {
+              setImmersiveUnreadToolCollapse(v as BlockCollapseMode)
+              themeStore.setImmersiveUnreadToolCollapse(v as BlockCollapseMode)
+            }}
+          />
+        </div>
+
+        <div>
+          <p className="text-[length:var(--fs-md)] text-text-100 mb-1.5">{t('chat.subtaskBlock')}</p>
+          <SegmentedControl
+            value={subtaskBlockCollapse}
+            options={[
+              { value: 'auto_toggle', label: t('chat.blockCollapse_auto_toggle') },
+              { value: 'auto_expand', label: t('chat.blockCollapse_auto_expand') },
+              { value: 'always_collapsed', label: t('chat.blockCollapse_always_collapsed') },
+            ]}
+            onChange={v => {
+              setSubtaskBlockCollapse(v as BlockCollapseMode)
+              themeStore.setSubtaskBlockCollapse(v as BlockCollapseMode)
+            }}
           />
         </div>
       </SettingsSection>

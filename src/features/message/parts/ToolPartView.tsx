@@ -8,6 +8,7 @@ import { useNow } from '../../../hooks/useNow'
 import { serverStore } from '../../../store/serverStore'
 import { useTheme } from '../../../hooks/useTheme'
 import { formatToolName, formatDuration } from '../../../utils/formatUtils'
+import { resolveBlockCollapseExpanded, scheduleDisclosureSync } from '../../../utils/blockCollapseMode'
 import { useUiDisclosureState } from '../../../utils/uiDisclosureState'
 import {
   useInlineToolRequests,
@@ -63,7 +64,13 @@ export const ToolPartView = memo(function ToolPartView({
   const endTime = state.time?.end ?? (isActive ? (calibratedNow ?? now) : undefined)
   const rawDuration = startTime !== undefined && endTime !== undefined ? endTime - startTime : undefined
   const duration = rawDuration !== undefined && isActive ? Math.max(0, rawDuration) : rawDuration
-  const { inlineToolRequests, immersiveMode, compactInlinePermission } = useTheme()
+  const {
+    inlineToolRequests,
+    immersiveMode,
+    compactInlinePermission,
+    toolCallsBlockCollapse,
+    immersiveUnreadToolCollapse,
+  } = useTheme()
 
   const { pendingPermissions, pendingQuestions, onPermissionReply, onQuestionReply, onQuestionReject, isReplying } =
     useInlineToolRequests()
@@ -116,53 +123,59 @@ export const ToolPartView = memo(function ToolPartView({
   const permissionContentHidden =
     compactInlinePermission && !isEditWritePermission && !isTaskTool && !!permissionRequest
   const isReadable = isReadableTool(toolName)
+  const immersiveDescriptive = immersiveMode && descriptive
+  const modeExpanded = resolveBlockCollapseExpanded(toolCallsBlockCollapse, { isLive: isActive, hasContent: true })
   const shouldStartExpanded =
     isActive ||
     hasPendingInteraction ||
     permissionResolved ||
-    (immersiveMode && descriptive && isStreaming && isReadable)
+    modeExpanded ||
+    (immersiveDescriptive && isStreaming && isReadable)
 
   const [expanded, setExpanded] = useUiDisclosureState(
     `message:${part.messageID}:tool:${part.id}`,
     shouldStartExpanded,
   )
-  const hasAutoExpandedReadableRef = useRef(shouldStartExpanded && immersiveMode && descriptive && isReadable)
+  const hasAutoExpandedReadableRef = useRef(shouldStartExpanded && immersiveDescriptive && isReadable)
   const [isChildFullscreen, setIsChildFullscreen] = useState(false)
   const effectiveExpanded = expanded || hasPendingInteraction || permissionResolved || isChildFullscreen
   const shouldRenderBody = useDelayedRender(effectiveExpanded)
 
   useEffect(() => {
-    let frameId: number | null = null
-
-    if (isActive || hasPendingInteraction || permissionResolved) {
-      if (immersiveMode && descriptive && isReadable) {
+    if (hasPendingInteraction || permissionResolved || isActive) {
+      if (immersiveDescriptive && isReadable) {
         hasAutoExpandedReadableRef.current = true
       }
-      frameId = requestAnimationFrame(() => {
-        setExpanded(true, { touched: false, respectUser: true })
-      })
-    } else if (immersiveMode && descriptive && !isReadable) {
-      frameId = requestAnimationFrame(() => {
-        setExpanded(false, { touched: false, respectUser: true })
-      })
-    } else if (immersiveMode && descriptive && isStreaming && isReadable && !hasAutoExpandedReadableRef.current) {
-      hasAutoExpandedReadableRef.current = true
-      frameId = requestAnimationFrame(() => {
-        setExpanded(true, { touched: false, respectUser: true })
-      })
+      return scheduleDisclosureSync(setExpanded, true)
     }
 
-    return () => {
-      if (frameId !== null) cancelAnimationFrame(frameId)
+    if (immersiveDescriptive) {
+      if (!isReadable) {
+        return scheduleDisclosureSync(
+          setExpanded,
+          resolveBlockCollapseExpanded(immersiveUnreadToolCollapse, { isLive: isActive, hasContent: true }),
+        )
+      }
+      if (isStreaming && !hasAutoExpandedReadableRef.current) {
+        hasAutoExpandedReadableRef.current = true
+        return scheduleDisclosureSync(setExpanded, true)
+      }
+      return
     }
+
+    return scheduleDisclosureSync(
+      setExpanded,
+      resolveBlockCollapseExpanded(toolCallsBlockCollapse, { isLive: isActive, hasContent: true }),
+    )
   }, [
     isActive,
     hasPendingInteraction,
     permissionResolved,
-    immersiveMode,
-    descriptive,
+    immersiveDescriptive,
     isStreaming,
     isReadable,
+    toolCallsBlockCollapse,
+    immersiveUnreadToolCollapse,
     setExpanded,
   ])
 

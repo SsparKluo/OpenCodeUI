@@ -1,12 +1,12 @@
 import { memo } from 'react'
+import { useTheme } from '../../../hooks/useTheme'
+import { useBlockCollapseDisclosure } from '../../../utils/blockCollapseMode'
 import { useTranslation } from 'react-i18next'
 import type { SubtaskPart } from '../../../types/message'
 import { useChildSessions, type ChildSessionInfo } from '../../../store'
 import { useSessionNavigation } from '../../../contexts/SessionNavigationContext'
 import { useDelayedRender } from '../../../hooks'
 import { UsersIcon, ChevronDownIcon, LayersIcon, TerminalIcon, ReturnIcon } from '../../../components/Icons'
-import { useUiDisclosureState } from '../../../utils/uiDisclosureState'
-
 interface SubtaskPartViewProps {
   part: SubtaskPart
 }
@@ -20,8 +20,7 @@ interface SubtaskPartViewProps {
  */
 export const SubtaskPartView = memo(function SubtaskPartView({ part }: SubtaskPartViewProps) {
   const { t } = useTranslation('message')
-  const [expanded, setExpanded] = useUiDisclosureState(`message:${part.messageID}:subtask:${part.id}`, false)
-  const shouldRenderBody = useDelayedRender(expanded)
+  const { subtaskBlockCollapse } = useTheme()
   const { navigateToSession } = useSessionNavigation()
 
   // 获取子 session 信息（如果已创建）
@@ -35,6 +34,11 @@ export const SubtaskPartView = memo(function SubtaskPartView({ part }: SubtaskPa
 
   const status = childSession?.status ?? 'running'
   const isRunning = status === 'running'
+  const [expanded, setExpanded] = useBlockCollapseDisclosure(`message:${part.messageID}:subtask:${part.id}`, subtaskBlockCollapse, {
+    isLive: isRunning,
+    hasContent: true,
+  })
+  const shouldRenderBody = useDelayedRender(expanded)
 
   // 进入子 session
   const handleEnter = () => {

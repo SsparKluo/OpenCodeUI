@@ -10,7 +10,10 @@ vi.mock('../../../hooks', () => ({
 }))
 
 vi.mock('../../../hooks/useTheme', () => ({
-  useTheme: () => ({ reasoningDisplayMode: mockReasoningDisplayMode }),
+  useTheme: () => ({
+    reasoningDisplayMode: mockReasoningDisplayMode,
+    thinkingBlockCollapse: 'auto_toggle' as const,
+  }),
 }))
 
 vi.mock('../../../components/MarkdownRenderer', () => ({

@@ -3,7 +3,14 @@ import { flushSync } from 'react-dom'
 import { THEME_SWITCH_DISABLE_MS } from '../constants'
 import { themeStore, type ColorMode } from '../store/themeStore'
 import type { StepFinishDisplay, CustomCSSSnippet } from '../store/themeStore'
-import type { ReasoningDisplayMode, DiffStyle, ToolCardStyle, CompletedAtFormat, ExternalFileDropMode } from '../store/themeStore'
+import type {
+  ReasoningDisplayMode,
+  DiffStyle,
+  ToolCardStyle,
+  CompletedAtFormat,
+  ExternalFileDropMode,
+  BlockCollapseMode,
+} from '../store/themeStore'
 
 // 保持向后兼容的类型别名
 export type ThemeMode = ColorMode
@@ -226,6 +233,22 @@ export function useTheme() {
     themeStore.setOutlineCurrentHighlight(enabled)
   }, [])
 
+  const setThinkingBlockCollapse = useCallback((mode: BlockCollapseMode) => {
+    themeStore.setThinkingBlockCollapse(mode)
+  }, [])
+
+  const setToolCallsBlockCollapse = useCallback((mode: BlockCollapseMode) => {
+    themeStore.setToolCallsBlockCollapse(mode)
+  }, [])
+
+  const setSubtaskBlockCollapse = useCallback((mode: BlockCollapseMode) => {
+    themeStore.setSubtaskBlockCollapse(mode)
+  }, [])
+
+  const setImmersiveUnreadToolCollapse = useCallback((mode: BlockCollapseMode) => {
+    themeStore.setImmersiveUnreadToolCollapse(mode)
+  }, [])
+
   return {
     // 日夜模式（向后兼容）
     mode: state.colorMode,
@@ -328,5 +351,14 @@ export function useTheme() {
     // 对话历史导航当前位置高亮
     outlineCurrentHighlight: state.outlineCurrentHighlight,
     setOutlineCurrentHighlight,
+
+    thinkingBlockCollapse: state.thinkingBlockCollapse,
+    setThinkingBlockCollapse,
+    toolCallsBlockCollapse: state.toolCallsBlockCollapse,
+    setToolCallsBlockCollapse,
+    subtaskBlockCollapse: state.subtaskBlockCollapse,
+    setSubtaskBlockCollapse,
+    immersiveUnreadToolCollapse: state.immersiveUnreadToolCollapse,
+    setImmersiveUnreadToolCollapse,
   }
 }
