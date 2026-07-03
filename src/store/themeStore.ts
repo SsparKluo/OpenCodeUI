@@ -82,6 +82,9 @@ export type ReasoningDisplayMode = 'capsule' | 'italic' | 'markdown'
 
 export type ExternalFileDropMode = 'upload-first' | 'mention'
 
+/** Per-block auto expand/collapse while streaming or when content appears */
+export type BlockCollapseMode = 'auto_toggle' | 'auto_expand' | 'always_collapsed'
+
 /**
  * 字号偏移范围：-2 ~ +4（相对于基准值的 px 偏移）
  * 0 = 基准值（index.css 中定义的默认值）
@@ -130,6 +133,17 @@ const DEFAULT_QUEUE_FOLLOWUP_MESSAGES = false
 const DEFAULT_MANUAL_TERMINAL_TITLES = false
 const DEFAULT_EXTERNAL_FILE_DROP_MODE: ExternalFileDropMode = 'upload-first'
 const DEFAULT_OUTLINE_CURRENT_HIGHLIGHT = true
+const DEFAULT_THINKING_BLOCK_COLLAPSE: BlockCollapseMode = 'auto_toggle'
+const DEFAULT_TOOL_CALLS_BLOCK_COLLAPSE: BlockCollapseMode = 'auto_toggle'
+const DEFAULT_SUBTASK_BLOCK_COLLAPSE: BlockCollapseMode = 'always_collapsed'
+const DEFAULT_IMMERSIVE_UNREAD_TOOL_COLLAPSE: BlockCollapseMode = 'auto_toggle'
+
+function parseBlockCollapseMode(
+  raw: string | null,
+  fallback: BlockCollapseMode,
+): BlockCollapseMode {
+  return raw === 'auto_toggle' || raw === 'auto_expand' || raw === 'always_collapsed' ? raw : fallback
+}
 
 export interface ThemeState {
   /** 当前选中的主题风格 ID */
@@ -182,6 +196,14 @@ export interface ThemeState {
   externalFileDropMode: ExternalFileDropMode
   /** 是否在对话历史导航中高亮当前对话位置 */
   outlineCurrentHighlight: boolean
+  /** 思考块展开策略 */
+  thinkingBlockCollapse: BlockCollapseMode
+  /** 工具调用展开策略 */
+  toolCallsBlockCollapse: BlockCollapseMode
+  /** 子任务块展开策略 */
+  subtaskBlockCollapse: BlockCollapseMode
+  /** 沉浸模式 + 描述型步骤下，不可读工具的展开策略 */
+  immersiveUnreadToolCollapse: BlockCollapseMode
 }
 
 export type ThemeBackup = ThemeState
@@ -215,6 +237,10 @@ const STORAGE_KEY_QUEUE_FOLLOWUP_MESSAGES = 'queue-followup-messages'
 const STORAGE_KEY_MANUAL_TERMINAL_TITLES = 'manual-terminal-titles'
 const STORAGE_KEY_EXTERNAL_FILE_DROP_MODE = 'external-file-drop-mode'
 const STORAGE_KEY_OUTLINE_CURRENT_HIGHLIGHT = 'outline-current-highlight'
+const STORAGE_KEY_THINKING_BLOCK_COLLAPSE = 'block-collapse-thinking'
+const STORAGE_KEY_TOOL_CALLS_BLOCK_COLLAPSE = 'block-collapse-tool-calls'
+const STORAGE_KEY_SUBTASK_BLOCK_COLLAPSE = 'block-collapse-subtask'
+const STORAGE_KEY_IMMERSIVE_UNREAD_TOOL_COLLAPSE = 'block-collapse-immersive-unread-tool'
 
 // ============================================
 // DOM Style Element IDs
@@ -344,6 +370,23 @@ class ThemeStore {
         ? DEFAULT_OUTLINE_CURRENT_HIGHLIGHT
         : savedOutlineCurrentHighlight === 'true'
 
+    const thinkingBlockCollapse = parseBlockCollapseMode(
+      localStorage.getItem(STORAGE_KEY_THINKING_BLOCK_COLLAPSE),
+      DEFAULT_THINKING_BLOCK_COLLAPSE,
+    )
+    const toolCallsBlockCollapse = parseBlockCollapseMode(
+      localStorage.getItem(STORAGE_KEY_TOOL_CALLS_BLOCK_COLLAPSE),
+      DEFAULT_TOOL_CALLS_BLOCK_COLLAPSE,
+    )
+    const subtaskBlockCollapse = parseBlockCollapseMode(
+      localStorage.getItem(STORAGE_KEY_SUBTASK_BLOCK_COLLAPSE),
+      DEFAULT_SUBTASK_BLOCK_COLLAPSE,
+    )
+    const immersiveUnreadToolCollapse = parseBlockCollapseMode(
+      localStorage.getItem(STORAGE_KEY_IMMERSIVE_UNREAD_TOOL_COLLAPSE),
+      DEFAULT_IMMERSIVE_UNREAD_TOOL_COLLAPSE,
+    )
+
     this.state = {
       presetId: normalizedPreset,
       colorMode: savedMode,
@@ -370,6 +413,10 @@ class ThemeStore {
       manualTerminalTitles,
       externalFileDropMode,
       outlineCurrentHighlight,
+      thinkingBlockCollapse,
+      toolCallsBlockCollapse,
+      subtaskBlockCollapse,
+      immersiveUnreadToolCollapse,
     }
   }
 
@@ -453,6 +500,18 @@ class ThemeStore {
   }
   get outlineCurrentHighlight() {
     return this.state.outlineCurrentHighlight
+  }
+  get thinkingBlockCollapse() {
+    return this.state.thinkingBlockCollapse
+  }
+  get toolCallsBlockCollapse() {
+    return this.state.toolCallsBlockCollapse
+  }
+  get subtaskBlockCollapse() {
+    return this.state.subtaskBlockCollapse
+  }
+  get immersiveUnreadToolCollapse() {
+    return this.state.immersiveUnreadToolCollapse
   }
 
   /** 获取当前主题预设（内置主题返回对象，自定义返回 undefined） */
@@ -735,6 +794,34 @@ class ThemeStore {
     this.emit()
   }
 
+  setThinkingBlockCollapse(mode: BlockCollapseMode) {
+    if (this.state.thinkingBlockCollapse === mode) return
+    this.state = { ...this.state, thinkingBlockCollapse: mode }
+    localStorage.setItem(STORAGE_KEY_THINKING_BLOCK_COLLAPSE, mode)
+    this.emit()
+  }
+
+  setToolCallsBlockCollapse(mode: BlockCollapseMode) {
+    if (this.state.toolCallsBlockCollapse === mode) return
+    this.state = { ...this.state, toolCallsBlockCollapse: mode }
+    localStorage.setItem(STORAGE_KEY_TOOL_CALLS_BLOCK_COLLAPSE, mode)
+    this.emit()
+  }
+
+  setSubtaskBlockCollapse(mode: BlockCollapseMode) {
+    if (this.state.subtaskBlockCollapse === mode) return
+    this.state = { ...this.state, subtaskBlockCollapse: mode }
+    localStorage.setItem(STORAGE_KEY_SUBTASK_BLOCK_COLLAPSE, mode)
+    this.emit()
+  }
+
+  setImmersiveUnreadToolCollapse(mode: BlockCollapseMode) {
+    if (this.state.immersiveUnreadToolCollapse === mode) return
+    this.state = { ...this.state, immersiveUnreadToolCollapse: mode }
+    localStorage.setItem(STORAGE_KEY_IMMERSIVE_UNREAD_TOOL_COLLAPSE, mode)
+    this.emit()
+  }
+
   // ---- Theme Application ----
 
   /** 初始化：应用当前主题到 DOM */
@@ -982,6 +1069,22 @@ function normalizeThemeBackup(raw: unknown): ThemeBackup {
       typeof parsed?.outlineCurrentHighlight === 'boolean'
         ? parsed.outlineCurrentHighlight
         : DEFAULT_OUTLINE_CURRENT_HIGHLIGHT,
+    thinkingBlockCollapse: parseBlockCollapseMode(
+      typeof parsed?.thinkingBlockCollapse === 'string' ? parsed.thinkingBlockCollapse : null,
+      DEFAULT_THINKING_BLOCK_COLLAPSE,
+    ),
+    toolCallsBlockCollapse: parseBlockCollapseMode(
+      typeof parsed?.toolCallsBlockCollapse === 'string' ? parsed.toolCallsBlockCollapse : null,
+      DEFAULT_TOOL_CALLS_BLOCK_COLLAPSE,
+    ),
+    subtaskBlockCollapse: parseBlockCollapseMode(
+      typeof parsed?.subtaskBlockCollapse === 'string' ? parsed.subtaskBlockCollapse : null,
+      DEFAULT_SUBTASK_BLOCK_COLLAPSE,
+    ),
+    immersiveUnreadToolCollapse: parseBlockCollapseMode(
+      typeof parsed?.immersiveUnreadToolCollapse === 'string' ? parsed.immersiveUnreadToolCollapse : null,
+      DEFAULT_IMMERSIVE_UNREAD_TOOL_COLLAPSE,
+    ),
   }
 }
 
@@ -1025,4 +1128,8 @@ export function importThemeBackup(raw: unknown): void {
   localStorage.setItem(STORAGE_KEY_MANUAL_TERMINAL_TITLES, String(backup.manualTerminalTitles))
   localStorage.setItem(STORAGE_KEY_EXTERNAL_FILE_DROP_MODE, backup.externalFileDropMode)
   localStorage.setItem(STORAGE_KEY_OUTLINE_CURRENT_HIGHLIGHT, String(backup.outlineCurrentHighlight))
+  localStorage.setItem(STORAGE_KEY_THINKING_BLOCK_COLLAPSE, backup.thinkingBlockCollapse)
+  localStorage.setItem(STORAGE_KEY_TOOL_CALLS_BLOCK_COLLAPSE, backup.toolCallsBlockCollapse)
+  localStorage.setItem(STORAGE_KEY_SUBTASK_BLOCK_COLLAPSE, backup.subtaskBlockCollapse)
+  localStorage.setItem(STORAGE_KEY_IMMERSIVE_UNREAD_TOOL_COLLAPSE, backup.immersiveUnreadToolCollapse)
 }

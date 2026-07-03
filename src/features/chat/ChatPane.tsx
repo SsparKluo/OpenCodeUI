@@ -39,10 +39,10 @@ interface ChatPaneProps {
   paneCount: number
   displayMode: 'single' | 'split'
   isPaneFullscreen?: boolean
-  onOpenSidebar?: () => void
+  onToggleSidebar?: () => void
+  sidebarExpanded?: boolean
   onToggleRightPanel?: () => void
   onOpenSettings?: () => void
-  showSidebarButton?: boolean
   onSplitPane?: () => void
   onTogglePaneFullscreen?: () => void
   navigatePaneToSession: (paneId: string, sessionId: string, directory?: string) => void
@@ -125,10 +125,10 @@ export const ChatPane = memo(function ChatPane({
   paneCount,
   displayMode,
   isPaneFullscreen = false,
-  onOpenSidebar,
+  onToggleSidebar,
+  sidebarExpanded = false,
   onToggleRightPanel,
   onOpenSettings,
-  showSidebarButton = false,
   onSplitPane,
   onTogglePaneFullscreen,
   navigatePaneToSession,
@@ -758,12 +758,13 @@ export const ChatPane = memo(function ChatPane({
               modelsLoading={modelsLoading}
               selectedModelKey={selectedModelKey}
               onModelChange={handleModelChange}
-              onOpenSidebar={onOpenSidebar}
+              onToggleSidebar={onToggleSidebar}
+              sidebarExpanded={sidebarExpanded}
+              onNewSession={handleNewSession}
               onToggleRightPanel={onToggleRightPanel}
               onSplitPane={onSplitPane}
               isPaneFullscreen={isPaneFullscreen}
               onTogglePaneFullscreen={onTogglePaneFullscreen}
-              modelSelectorRef={modelSelectorRef}
             />
           </div>
         </div>
@@ -870,6 +871,7 @@ export const ChatPane = memo(function ChatPane({
           onDockResize={() => chatAreaRef.current?.scrollToBottomIfAtBottom()}
           showScrollToBottom={!isAtBottom}
           onScrollToBottom={() => chatAreaRef.current?.scrollToBottom()}
+          contextLimit={contextLimit}
           collapsedPermission={
             !inlineToolRequests && pendingPermissionRequests.length > 0 && permissionCollapsed
               ? {
@@ -951,8 +953,9 @@ export const ChatPane = memo(function ChatPane({
             sessionId={routeSessionId}
             isFocused={isFocused}
             paneCount={paneCount}
-            showSidebarButton={showSidebarButton}
-            onOpenSidebar={onOpenSidebar}
+            onToggleSidebar={onToggleSidebar}
+            sidebarExpanded={sidebarExpanded}
+            onNewSession={handleNewSession}
             onToggleRightPanel={onToggleRightPanel}
             canSplitPane={splitPaneEnabled}
             isPaneFullscreen={isPaneFullscreen}

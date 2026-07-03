@@ -325,6 +325,8 @@ export interface SessionListItemProps {
   isEditMode?: boolean
   isChecked?: boolean
   onToggleCheck?: (options?: { shiftKey?: boolean }) => void
+  /** 未落库的占位会话（如新对话草稿），不展示时间、操作按钮，不可拖拽 */
+  isEphemeral?: boolean
 }
 
 export function SessionListItem({
@@ -340,6 +342,7 @@ export function SessionListItem({
   isEditMode = false,
   isChecked = false,
   onToggleCheck,
+  isEphemeral = false,
 }: SessionListItemProps) {
   const { t } = useTranslation(['commands', 'common', 'chat'])
   const [isEditing, setIsEditing] = useState(false)
@@ -521,7 +524,7 @@ export function SessionListItem({
     )
   }
 
-  const isDraggable = !isEditMode && !isEditing
+  const isDraggable = !isEphemeral && !isEditMode && !isEditing
 
   if (isEditing) {
     return (
@@ -684,7 +687,7 @@ export function SessionListItem({
         )}
 
         {/* 操作按钮 — 编辑模式下隐藏 */}
-        {!isEditMode && (
+        {!isEphemeral && !isEditMode && (
           <div
             className={`absolute right-2 z-10 shrink-0 flex items-center gap-0.5 transition-opacity duration-150 ${
               actionsVisible
@@ -894,7 +897,7 @@ export function SessionListItem({
       )}
 
       {/* Actions: hover on desktop, long-press on mobile — 编辑模式下隐藏 */}
-      {!isEditMode && (
+      {!isEphemeral && !isEditMode && (
         <div
           className={`absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 transition-all duration-200 z-10 ${
             actionsVisible

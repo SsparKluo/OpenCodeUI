@@ -10,6 +10,8 @@ import {
   SpinnerIcon,
   CheckIcon,
   ChevronDownIcon,
+  ChevronUpIcon,
+  PlusIcon,
 } from '../../../components/Icons'
 import { ExpandableSection } from '../../../components/ui'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
@@ -22,6 +24,7 @@ import { useBusySessions } from '../../../store/activeSessionStore'
 import { useNotifications } from '../../../store/notificationStore'
 import { pinnedSessionsStore, type PinnedSessionEntry } from '../../../store/pinnedSessionsStore'
 import { SessionListItem } from '../../sessions'
+import { createDraftNewChatSession, isDraftNewChatSession } from './draftNewChatSession'
 import { SessionChildrenSlot } from './SessionChildrenSlot'
 
 const DIRECTORY_PAGE_SIZE = 5
@@ -58,6 +61,7 @@ interface FolderRecentListProps {
   selectedProjectIds?: Set<string>
   onToggleSessionSelection?: (sessionId: string, options?: { shiftKey?: boolean }) => void
   onToggleProjectSelection?: (projectId: string, options?: { shiftKey?: boolean }) => void
+  onOpenWorkspace?: (directory: string) => void
 }
 
 interface PendingDeleteSession {
@@ -430,6 +434,7 @@ export function FolderRecentList({
   selectedProjectIds,
   onToggleSessionSelection,
   onToggleProjectSelection,
+  onOpenWorkspace,
 }: FolderRecentListProps) {
   const { t } = useTranslation(['chat', 'common'])
   const { preferTouchUi } = useInputCapabilities()
@@ -585,6 +590,7 @@ export function FolderRecentList({
                   }
                   selectedSessionIds={selectedSessionIds}
                   onToggleSessionSelection={onToggleSessionSelection}
+                  onOpenWorkspace={onOpenWorkspace}
                 />
               )
             })}
@@ -717,6 +723,18 @@ function PinnedFolderSection({
   )
 }
 
+function shouldShowDraftNewChatInFolder(options: {
+  isEditMode?: boolean
+  selectedSessionId: string | null
+  currentDirectory?: string
+  folderDirectory: string
+}) {
+  if (options.isEditMode) return false
+  if (options.selectedSessionId) return false
+  if (!options.currentDirectory) return false
+  return isSameDirectory(options.currentDirectory, options.folderDirectory)
+}
+
 function UnavailablePinnedSessionItem({ entry }: { entry: PinnedSessionEntry }) {
   const { t } = useTranslation(['commands'])
   return (
@@ -777,6 +795,7 @@ interface FolderRecentSectionProps {
   onToggleProjectCheck?: (options?: { shiftKey?: boolean }) => void
   selectedSessionIds?: Set<string>
   onToggleSessionSelection?: (sessionId: string, options?: { shiftKey?: boolean }) => void
+  onOpenWorkspace?: (directory: string) => void
 }
 
 function FolderRecentSection({
@@ -812,6 +831,7 @@ function FolderRecentSection({
   onToggleProjectCheck,
   selectedSessionIds,
   onToggleSessionSelection,
+  onOpenWorkspace,
 }: FolderRecentSectionProps) {
   const { t } = useTranslation(['chat', 'common'])
   const { ref: inViewRef, inView } = useInView({ rootMargin: '200px 0px', triggerOnce: true })
@@ -828,7 +848,17 @@ function FolderRecentSection({
     }
   }, [isExpanded, inView])
 
-  const { sessions, isLoading, isLoadingMore, hasMore, loadMore, patchLocalSession, removeLocalSession } = useSessions({
+  const {
+    sessions,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    loadMore,
+    showLess,
+    canShowLess,
+    patchLocalSession,
+    removeLocalSession,
+  } = useSessions({
     directory: project.worktree,
     pageSize: DIRECTORY_PAGE_SIZE,
     enabled: hasActivated && !hasWorkspaceTree,
@@ -838,10 +868,21 @@ function FolderRecentSection({
     pinnedSessionsStore.getSnapshot,
     pinnedSessionsStore.getSnapshot,
   )
+  const showDraftNewChat = shouldShowDraftNewChatInFolder({
+    isEditMode,
+    selectedSessionId,
+    currentDirectory,
+    folderDirectory: project.worktree,
+  })
+  const draftNewChatTitle = t('header.newChat')
   const visibleSessions = useMemo(() => {
     const pinnedSet = new Set(pinnedEntries.map(entry => entry.sessionId))
     return sessions.filter(session => !pinnedSet.has(session.id))
   }, [pinnedEntries, sessions])
+  const sessionsForFolderList = useMemo(() => {
+    if (!showDraftNewChat) return visibleSessions
+    return [createDraftNewChatSession(project.worktree, draftNewChatTitle), ...visibleSessions]
+  }, [showDraftNewChat, visibleSessions, project.worktree, draftNewChatTitle])
 
   const handleRename = useCallback(
     async (sessionId: string, newTitle: string) => {
@@ -939,6 +980,20 @@ function FolderRecentSection({
               </span>
             )}
           </button>
+          {!isEditMode && onOpenWorkspace && (
+            <button
+              type="button"
+              onClick={event => {
+                event.stopPropagation()
+                onOpenWorkspace(project.worktree)
+              }}
+              className="shrink-0 flex items-center justify-center size-5 rounded-md text-text-500 hover:text-text-200 hover:bg-bg-200/50 transition-colors"
+              title={t('sidebar.createNewChat')}
+              aria-label={t('sidebar.createNewChat')}
+            >
+              <PlusIcon size={12} />
+            </button>
+          )}
           {/* 拖拽把手 — 默认 w-0 隐藏，hover 时 w-5 展开挤压圆点 */}
           {canDrag && (
             <span
@@ -979,75 +1034,93 @@ function FolderRecentSection({
                   folderStatusByWorkspaceDirectory={workspaceFolderStatusByDirectory}
                   draggableWorkspaceDirectories={draggableWorkspaceDirectories}
                   onReorderWorkspace={onReorderWorkspace}
+                  onOpenWorkspace={onOpenWorkspace}
                 />
-              ) : visibleSessions.length === 0 ? (
+              ) : sessionsForFolderList.length === 0 ? (
                 <div className="px-2 py-1 text-[length:var(--fs-xs)] text-text-400/50">
                   {t('sidebar.noChatsInFolder')}
                 </div>
               ) : (
                 <>
-                  {visibleSessions.map(session => (
-                    <div key={session.id}>
-                      <SessionListItem
-                        session={session}
-                        isSelected={session.id === selectedSessionId}
-                        onSelect={() => onSelectSession(session)}
-                        onRename={newTitle => handleRename(session.id, newTitle)}
-                        onDelete={() => handleDelete(session.id)}
-                        preferTouchUi={preferTouchUi}
-                        density="minimal"
-                        showStats={showSessionDiffStats}
-                        showDirectory={false}
-                        isEditMode={isEditMode}
-                        isChecked={selectedSessionIds?.has(session.id)}
-                        onToggleCheck={
-                          onToggleSessionSelection
-                            ? options => onToggleSessionSelection(session.id, options)
-                            : undefined
-                        }
-                      />
-                      {onSelectChildSession &&
-                        (expandedChildSessionIds?.has(session.id) || inlineChildSessions?.has(session.id)) && (
-                          <SessionChildrenSlot
-                            parentSession={session}
-                            selectedSessionId={selectedSessionId}
-                            fetchAll={expandedChildSessionIds?.has(session.id)}
-                            children={inlineChildSessions?.get(session.id)}
-                            onSelect={onSelectChildSession}
-                            isEditMode={isEditMode}
-                            selectedSessionIds={selectedSessionIds}
-                            onToggleSessionSelection={onToggleSessionSelection}
-                          />
-                        )}
-                    </div>
-                  ))}
+                  {sessionsForFolderList.map(session => {
+                    const isDraft = isDraftNewChatSession(session)
+                    return (
+                      <div key={session.id}>
+                        <SessionListItem
+                          session={session}
+                          isSelected={isDraft ? !selectedSessionId : session.id === selectedSessionId}
+                          onSelect={() => {
+                            if (!isDraft) onSelectSession(session)
+                          }}
+                          onRename={newTitle => {
+                            if (!isDraft) void handleRename(session.id, newTitle)
+                          }}
+                          onDelete={() => {
+                            if (!isDraft) handleDelete(session.id)
+                          }}
+                          preferTouchUi={preferTouchUi}
+                          density="minimal"
+                          showStats={showSessionDiffStats}
+                          showDirectory={false}
+                          isEditMode={isEditMode}
+                          isChecked={isDraft ? false : selectedSessionIds?.has(session.id)}
+                          onToggleCheck={
+                            isDraft || !onToggleSessionSelection
+                              ? undefined
+                              : options => onToggleSessionSelection(session.id, options)
+                          }
+                          isEphemeral={isDraft}
+                        />
+                        {!isDraft &&
+                          onSelectChildSession &&
+                          (expandedChildSessionIds?.has(session.id) || inlineChildSessions?.has(session.id)) && (
+                            <SessionChildrenSlot
+                              parentSession={session}
+                              selectedSessionId={selectedSessionId}
+                              fetchAll={expandedChildSessionIds?.has(session.id)}
+                              children={inlineChildSessions?.get(session.id)}
+                              onSelect={onSelectChildSession}
+                              isEditMode={isEditMode}
+                              selectedSessionIds={selectedSessionIds}
+                              onToggleSessionSelection={onToggleSessionSelection}
+                            />
+                          )}
+                      </div>
+                    )
+                  })}
 
-                  {hasMore && (
-                    <button
-                      onClick={() => void loadMore()}
-                      disabled={isLoadingMore}
-                      aria-busy={isLoadingMore}
-                      aria-label={isLoadingMore ? t('common:loadingMore') : t('sidebar.showMoreChats')}
-                      className="group w-full rounded-md px-2 py-1.5 text-[length:var(--fs-xs)] text-text-400/85 transition-colors hover:text-text-200 disabled:cursor-default disabled:opacity-70"
-                    >
-                      <span className="flex items-center justify-center">
-                        <span className="relative inline-flex shrink-0 items-center gap-1.5 font-medium">
-                          <span
-                            aria-hidden="true"
-                            className="pointer-events-none absolute right-full top-1/2 mr-2 h-px w-6 -translate-y-1/2 bg-text-600/35 transition-colors group-hover:bg-text-500/55"
-                          />
+                  {(hasMore || canShowLess) && (
+                    <div className="flex items-center justify-center gap-4 px-2 py-1.5 text-[length:var(--fs-xs)]">
+                      {canShowLess && (
+                        <button
+                          type="button"
+                          onClick={() => void showLess()}
+                          disabled={isLoadingMore}
+                          aria-label={t('sidebar.showLessChats')}
+                          className="inline-flex items-center gap-1 font-medium text-text-400/85 transition-colors hover:text-text-200 disabled:cursor-default disabled:opacity-70"
+                        >
+                          <span>{t('sidebar.showLessChats')}</span>
+                          <ChevronUpIcon size={12} />
+                        </button>
+                      )}
+                      {hasMore && (
+                        <button
+                          type="button"
+                          onClick={() => void loadMore()}
+                          disabled={isLoadingMore}
+                          aria-busy={isLoadingMore}
+                          aria-label={isLoadingMore ? t('common:loadingMore') : t('sidebar.showMoreChats')}
+                          className="inline-flex items-center gap-1 font-medium text-text-400/85 transition-colors hover:text-text-200 disabled:cursor-default disabled:opacity-70"
+                        >
                           <span>{t('sidebar.showMoreChats')}</span>
                           {isLoadingMore ? (
                             <SpinnerIcon size={12} className="animate-spin text-text-400" />
                           ) : (
-                            <ChevronDownIcon
-                              size={12}
-                              className="text-text-400/90 transition-colors group-hover:text-text-200"
-                            />
+                            <ChevronDownIcon size={12} />
                           )}
-                        </span>
-                      </span>
-                    </button>
+                        </button>
+                      )}
+                    </div>
                   )}
                 </>
               )}
@@ -1078,6 +1151,7 @@ interface WorkspaceFolderListProps {
   folderStatusByWorkspaceDirectory?: Map<string, FolderStatus>
   draggableWorkspaceDirectories?: string[]
   onReorderWorkspace?: (draggedPath: string, targetPath: string) => void
+  onOpenWorkspace?: (directory: string) => void
 }
 
 function WorkspaceFolderList({
@@ -1099,6 +1173,7 @@ function WorkspaceFolderList({
   folderStatusByWorkspaceDirectory,
   draggableWorkspaceDirectories,
   onReorderWorkspace,
+  onOpenWorkspace,
 }: WorkspaceFolderListProps) {
   const workspaceProjects = useMemo<FolderRecentProject[]>(() => {
     const draggableSet = new Set(
@@ -1196,6 +1271,7 @@ function WorkspaceFolderList({
             showProjectCheckbox={false}
             selectedSessionIds={selectedSessionIds}
             onToggleSessionSelection={onToggleSessionSelection}
+            onOpenWorkspace={onOpenWorkspace}
           />
         )
       })}

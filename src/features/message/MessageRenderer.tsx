@@ -39,6 +39,7 @@ import type {
 } from '../../types/message'
 import { isToolPart, isVisibleReasoningPart, isVisibleTextPart } from '../../types/message'
 import { formatDuration, formatCompletedAt, formatDetailedDateTime } from '../../utils/formatUtils'
+import { resolveBlockCollapseExpanded, scheduleDisclosureSync } from '../../utils/blockCollapseMode'
 import { useUiDisclosureState } from '../../utils/uiDisclosureState'
 
 interface MessageRendererProps {
@@ -633,7 +634,13 @@ const ToolGroup = memo(function ToolGroup({
   completedAt,
 }: ToolGroupProps) {
   const { t } = useTranslation('message')
-  const { descriptiveToolSteps, inlineToolRequests, immersiveMode } = useTheme()
+  const {
+    descriptiveToolSteps,
+    inlineToolRequests,
+    immersiveMode,
+    toolCallsBlockCollapse,
+    immersiveUnreadToolCollapse,
+  } = useTheme()
   const { pendingPermissions, pendingQuestions } = useInlineToolRequests()
   const hasPendingInteraction =
     inlineToolRequests &&
@@ -670,10 +677,15 @@ const ToolGroup = memo(function ToolGroup({
 
   // 沉浸模式下：判断工具组是否包含需要用户阅读的工具
   const hasReadableTools = immersiveMode && parts.some(p => isReadableTool(p.tool))
+  const isGroupLive = hasActiveTools || !!isStreaming
+  const immersiveUnreadGroup = descriptiveToolSteps && immersiveMode && !hasReadableTools
   const shouldStartExpanded =
     !descriptiveToolSteps ||
-    hasActiveTools ||
     hasPendingInteraction ||
+    (immersiveUnreadGroup
+      ? resolveBlockCollapseExpanded(immersiveUnreadToolCollapse, { isLive: isGroupLive, hasContent: true })
+      : hasActiveTools ||
+        resolveBlockCollapseExpanded(toolCallsBlockCollapse, { isLive: isGroupLive, hasContent: true })) ||
     (immersiveMode && !!isStreaming && hasReadableTools)
 
   // descriptive 模式默认收起，运行时展开，完成后保持展开
@@ -684,30 +696,44 @@ const ToolGroup = memo(function ToolGroup({
 
   useEffect(() => {
     if (!descriptiveToolSteps) return
-    // 沉浸模式下没有可读工具：始终收起，不展开
-    if (immersiveMode && !hasReadableTools) {
-      setExpanded(false, { touched: false, respectUser: true })
-      return
+
+    if (immersiveUnreadGroup) {
+      return scheduleDisclosureSync(
+        setExpanded,
+        resolveBlockCollapseExpanded(immersiveUnreadToolCollapse, { isLive: isGroupLive, hasContent: true }),
+      )
     }
+
     if (hasActiveTools || hasPendingInteraction) {
       if (immersiveMode && hasReadableTools) {
         hasAutoExpandedReadableRef.current = true
       }
-      setExpanded(true, { touched: false, respectUser: true })
+      return scheduleDisclosureSync(setExpanded, true)
+    }
+
+    if (immersiveMode) {
+      if (isStreaming && hasReadableTools && !hasAutoExpandedReadableRef.current) {
+        hasAutoExpandedReadableRef.current = true
+        return scheduleDisclosureSync(setExpanded, true)
+      }
       return
     }
-    // 某些可读工具（如 todo）可能首帧已完成，错过 running 态；流仍在继续时也自动展开一次
-    if (immersiveMode && isStreaming && hasReadableTools && !hasAutoExpandedReadableRef.current) {
-      hasAutoExpandedReadableRef.current = true
-      setExpanded(true, { touched: false, respectUser: true })
-    }
+
+    return scheduleDisclosureSync(
+      setExpanded,
+      resolveBlockCollapseExpanded(toolCallsBlockCollapse, { isLive: isGroupLive, hasContent: true }),
+    )
   }, [
     descriptiveToolSteps,
+    immersiveUnreadGroup,
     hasActiveTools,
     hasPendingInteraction,
     immersiveMode,
     hasReadableTools,
     isStreaming,
+    isGroupLive,
+    toolCallsBlockCollapse,
+    immersiveUnreadToolCollapse,
     setExpanded,
   ])
 

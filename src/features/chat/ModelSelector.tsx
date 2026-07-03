@@ -695,11 +695,11 @@ export const ModelSelector = memo(
         switch (e.key) {
           case 'ArrowDown':
             e.preventDefault()
-            focusItemAtInteractiveIndex(Math.min(interactiveIndex + 1, itemIndices.length - 1))
+            focusItemAtInteractiveIndex(interactiveIndex >= itemIndices.length - 1 ? 0 : interactiveIndex + 1)
             break
           case 'ArrowUp':
             e.preventDefault()
-            focusItemAtInteractiveIndex(Math.max(interactiveIndex - 1, 0))
+            focusItemAtInteractiveIndex(interactiveIndex <= 0 ? itemIndices.length - 1 : interactiveIndex - 1)
             break
           case 'Home':
             e.preventDefault()
@@ -747,11 +747,11 @@ export const ModelSelector = memo(
         switch (e.key) {
           case 'ArrowDown':
             e.preventDefault()
-            focusItemAtInteractiveIndex(Math.min(interactiveIndex + 1, itemIndices.length - 1))
+            focusItemAtInteractiveIndex(interactiveIndex >= itemIndices.length - 1 ? 0 : interactiveIndex + 1)
             break
           case 'ArrowUp':
             e.preventDefault()
-            focusItemAtInteractiveIndex(Math.max(interactiveIndex - 1, 0))
+            focusItemAtInteractiveIndex(interactiveIndex <= 0 ? itemIndices.length - 1 : interactiveIndex - 1)
             break
           case 'Home':
             e.preventDefault()
@@ -822,10 +822,13 @@ export const ModelSelector = memo(
           }}
           disabled={disabled || isLoading}
           aria-expanded={isOpen}
-          className="flex items-center px-2 py-1.5 text-[length:var(--fs-base)] rounded-lg transition-all duration-150 hover:bg-bg-200 active:scale-95 cursor-pointer min-w-0 overflow-hidden w-full"
+          className="group flex items-center gap-2 px-2 py-1.5 text-[length:var(--fs-base)] rounded-lg transition-all duration-150 hover:bg-bg-200 active:scale-95 cursor-pointer min-w-0 overflow-hidden w-full"
           title={selectedModel?.name || t('modelSelector.selectModel')}
         >
           <span className="text-[length:var(--fs-sm)] text-text-300 truncate">{displayName}</span>
+          <div className={`shrink-0 opacity-40 transition-transform duration-200 ${isOpen ? '' : 'rotate-180'}`}>
+            <ChevronDownIcon size={10} />
+          </div>
         </button>
       )
 

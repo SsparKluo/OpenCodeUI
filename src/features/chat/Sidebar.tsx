@@ -9,7 +9,6 @@ function clampSidebarWidth(width: number, minWidth: number, maxWidth: number) {
   return Math.min(Math.max(width, minWidth), maxWidth)
 }
 
-const SIDEBAR_TRANSITION_MS = 300
 const SIDEBAR_SWIPE_LOCK_PX = 10
 const SIDEBAR_SWIPE_HORIZONTAL_BIAS = 1.25
 const SIDEBAR_SWIPE_CLOSE_PX = 80
@@ -23,7 +22,6 @@ interface SidebarProps {
   onNewSession: () => void
   onOpen: () => void
   onClose: () => void
-  contextLimit?: number
   onOpenSettings?: () => void
   projectDialogOpen?: boolean
   onProjectDialogClose?: () => void
@@ -37,7 +35,6 @@ export const Sidebar = memo(function Sidebar({
   onNewSession,
   onOpen,
   onClose,
-  contextLimit,
   onOpenSettings,
   projectDialogOpen,
   onProjectDialogClose,
@@ -179,23 +176,6 @@ export const Sidebar = memo(function Sidebar({
     }
   }, [isOverlay, isOpen, onClose])
 
-  const handleToggle = useCallback(() => {
-    if (!isOverlay) {
-      if (transitionResizeTimerRef.current !== null) window.clearTimeout(transitionResizeTimerRef.current)
-      window.dispatchEvent(new CustomEvent('panel-resize-start'))
-      transitionResizeTimerRef.current = window.setTimeout(() => {
-        transitionResizeTimerRef.current = null
-        window.dispatchEvent(new CustomEvent('panel-resize-end'))
-      }, SIDEBAR_TRANSITION_MS + 50)
-    }
-
-    if (isOpen) {
-      onClose()
-    } else {
-      onOpen()
-    }
-  }, [isOverlay, isOpen, onClose, onOpen])
-
   useEffect(() => {
     return () => {
       if (transitionResizeTimerRef.current !== null) {
@@ -288,8 +268,6 @@ export const Sidebar = memo(function Sidebar({
               onAddProject={openProjectDialog}
               isMobile={true}
               isExpanded={true}
-              onToggleSidebar={onClose}
-              contextLimit={contextLimit}
               onOpenSettings={onOpenSettings}
             />
           </div>
@@ -343,8 +321,6 @@ export const Sidebar = memo(function Sidebar({
             onAddProject={openProjectDialog}
             isMobile={true}
             isExpanded={true}
-            onToggleSidebar={onClose}
-            contextLimit={contextLimit}
             onOpenSettings={onOpenSettings}
           />
         </div>
@@ -364,25 +340,24 @@ export const Sidebar = memo(function Sidebar({
     <>
       <div
         ref={sidebarRef}
+        aria-hidden={!isOpen}
         style={{ width: `${layout.sidebar.dockedWidth}px` }}
         className={`
           relative flex flex-col h-full bg-bg-100 overflow-hidden shrink-0 min-w-0
-          border-r border-border-200/50
+          ${isOpen ? 'border-r border-border-200/50' : 'border-r-0 pointer-events-none'}
           ${isResizing ? 'transition-none' : 'transition-[width] duration-300 ease-out'}
         `}
       >
-        <SidePanel
-          onNewSession={onNewSession}
-          onSelectSession={onSelectSession}
-          onCloseMobile={onClose}
-          selectedSessionId={selectedSessionId}
-          onAddProject={openProjectDialog}
-          isMobile={false}
-          isExpanded={isOpen}
-          onToggleSidebar={handleToggle}
-          contextLimit={contextLimit}
-          onOpenSettings={onOpenSettings}
-        />
+          <SidePanel
+            onNewSession={onNewSession}
+            onSelectSession={onSelectSession}
+            onCloseMobile={onClose}
+            selectedSessionId={selectedSessionId}
+            onAddProject={openProjectDialog}
+            isMobile={false}
+            isExpanded={isOpen}
+            onOpenSettings={onOpenSettings}
+          />
 
         {isOpen && (
           <div

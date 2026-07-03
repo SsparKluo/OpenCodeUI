@@ -478,9 +478,9 @@ function App() {
         paneCount={paneLayout.paneCount}
         displayMode={paneLayout.isSplit && paneLayout.fullscreenPaneId !== paneId ? 'split' : 'single'}
         isPaneFullscreen={paneLayout.fullscreenPaneId === paneId}
-        onOpenSidebar={handleOpenSidebar}
+        onToggleSidebar={handleToggleSidebar}
+        sidebarExpanded={sidebarExpanded}
         onToggleRightPanel={handleToggleRightPanel}
-        showSidebarButton={chatViewport.interaction.sidebarBehavior === 'overlay'}
         onSplitPane={splitPaneEnabled && !paneLayout.fullscreenPaneId ? handleEnterSplitMode : undefined}
         onTogglePaneFullscreen={paneLayout.isSplit ? handleToggleFocusedPaneFullscreen : undefined}
         onOpenSettings={openSettings}
@@ -493,9 +493,9 @@ function App() {
       paneLayout.paneCount,
       paneLayout.isSplit,
       paneLayout.fullscreenPaneId,
-      chatViewport.interaction.sidebarBehavior,
       splitPaneEnabled,
-      handleOpenSidebar,
+      handleToggleSidebar,
+      sidebarExpanded,
       handleToggleRightPanel,
       handleEnterSplitMode,
       handleToggleFocusedPaneFullscreen,
@@ -872,7 +872,6 @@ function App() {
                     onNewSession={handleNewSession}
                     onOpen={handleOpenSidebar}
                     onClose={handleCloseSidebar}
-                    contextLimit={focusedController?.contextLimit}
                     onOpenSettings={openSettings}
                     projectDialogOpen={projectDialogOpen}
                     onProjectDialogClose={closeProjectDialog}
@@ -957,7 +956,6 @@ function App() {
                 onNewSession={handleNewSession}
                 onOpen={handleOpenSidebar}
                 onClose={handleCloseSidebar}
-                contextLimit={focusedController?.contextLimit}
                 onOpenSettings={openSettings}
                 projectDialogOpen={projectDialogOpen}
                 onProjectDialogClose={closeProjectDialog}

@@ -174,7 +174,7 @@ describe('useAutoScroll (flex-col-reverse mode)', () => {
     expect(scrollEl.scrollTop).toBe(-250)
   })
 
-  it('handleScroll clears userScrolled when content shrinks below threshold', () => {
+  it('handleScroll keeps userScrolled inside the near-bottom band until truly at bottom', () => {
     const { scrollEl, result } = mountAutoScroll({ scrollHeight: 1000, clientHeight: 300, scrollTop: 0 })
     scrollEl.scrollTop = -200
     act(() => {
@@ -182,9 +182,13 @@ describe('useAutoScroll (flex-col-reverse mode)', () => {
     })
     expect(result.current.userScrolled).toBe(true)
 
-    // Content shrinks so we're within the threshold again.
-    Object.defineProperty(scrollEl, 'scrollHeight', { configurable: true, value: 300 })
-    scrollEl.scrollTop = -5
+    scrollEl.scrollTop = -40
+    act(() => {
+      result.current.handleScroll()
+    })
+    expect(result.current.userScrolled).toBe(true)
+
+    scrollEl.scrollTop = 0
     act(() => {
       result.current.handleScroll()
     })

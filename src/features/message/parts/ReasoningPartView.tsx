@@ -6,7 +6,7 @@ import { useDelayedRender } from '../../../hooks'
 import { useTheme } from '../../../hooks/useTheme'
 import { MarkdownRenderer } from '../../../components/MarkdownRenderer'
 import type { ReasoningPart } from '../../../types/message'
-import { useUiDisclosureState } from '../../../utils/uiDisclosureState'
+import { useBlockCollapseDisclosure } from '../../../utils/blockCollapseMode'
 
 // italic 默认不显示前导图标；如果后续要恢复，只改这里。
 const ITALIC_SHOW_LEADING_GLYPH = false
@@ -18,14 +18,17 @@ interface ReasoningPartViewProps {
 
 export const ReasoningPartView = memo(function ReasoningPartView({ part, isStreaming }: ReasoningPartViewProps) {
   const { t } = useTranslation('message')
-  const { reasoningDisplayMode } = useTheme()
+  const { reasoningDisplayMode, thinkingBlockCollapse } = useTheme()
   const rawText = part.text || ''
 
-  const isPartStreaming = isStreaming && !part.time?.end
+  const isPartStreaming = !!isStreaming && !part.time?.end
   const hasContent = !!rawText.trim()
 
   const displayText = rawText
-  const [expanded, setExpanded] = useUiDisclosureState(`message:${part.messageID}:reasoning:${part.id}`, false)
+  const [expanded, setExpanded] = useBlockCollapseDisclosure(`message:${part.messageID}:reasoning:${part.id}`, thinkingBlockCollapse, {
+    isLive: isPartStreaming,
+    hasContent,
+  })
   const shouldRenderBody = useDelayedRender(expanded)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const summaryContainerRef = useRef<HTMLDivElement>(null)
@@ -54,24 +57,6 @@ export const ReasoningPartView = memo(function ReasoningPartView({ part, isStrea
     const overflow = measureEl.scrollWidth - containerEl.clientWidth > 1
     setSummaryOverflow(prev => (prev === overflow ? prev : overflow))
   }, [reasoningDisplayMode])
-
-  useEffect(() => {
-    let frameId: number | null = null
-
-    if (isPartStreaming && hasContent) {
-      frameId = requestAnimationFrame(() => {
-        setExpanded(true, { touched: false, respectUser: true })
-      })
-    } else if (!isPartStreaming) {
-      frameId = requestAnimationFrame(() => {
-        setExpanded(false, { touched: false, respectUser: true })
-      })
-    }
-
-    return () => {
-      if (frameId !== null) cancelAnimationFrame(frameId)
-    }
-  }, [isPartStreaming, hasContent, setExpanded])
 
   const handleCapsuleScroll = useCallback(() => {
     const el = scrollAreaRef.current

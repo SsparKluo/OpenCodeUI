@@ -189,6 +189,7 @@ export interface InputBoxProps {
   // Collapsed dialog capsules
   collapsedPermission?: CollapsedDialogInfo
   collapsedQuestion?: CollapsedDialogInfo
+  contextLimit?: number
 }
 
 // ============================================
@@ -232,6 +233,7 @@ function InputBoxComponent({
   onScrollToBottom,
   collapsedPermission,
   collapsedQuestion,
+  contextLimit,
 }: InputBoxProps) {
   const { t } = useTranslation('chat')
   // 合并文件能力：优先用 fileCapabilities，回退到 supportsImages
@@ -1274,7 +1276,7 @@ function InputBoxComponent({
         <div
           ref={contentWrapRef}
           onPointerDown={handleContainerPointerDown}
-          className={`relative flex flex-col gap-2 ${isCollapsed ? 'justify-end' : ''}`}
+          className={`relative flex flex-col ${isCollapsed ? 'gap-2 justify-end' : 'gap-0'}`}
           style={{ maxHeight: composerMaxHeight }}
         >
           {/* FloatingActions —
@@ -1306,11 +1308,14 @@ function InputBoxComponent({
 
           {/* 收起态紧凑栏 track：收起时撑开，展开时坍缩为 0（grid-rows + opacity 过渡，同附件展开所用的 CSS 模式） */}
           <div
-            className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
-              isCollapsed ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+            className={`grid min-h-0 transition-[grid-template-rows,opacity] duration-300 ease-out ${
+              isCollapsed
+                ? 'grid-rows-[1fr] opacity-100'
+                : 'grid-rows-[0fr] h-0 min-h-0 max-h-0 overflow-hidden opacity-0 pointer-events-none'
             }`}
+            aria-hidden={!isCollapsed}
           >
-            <div className="overflow-hidden">
+            <div className="min-h-0 overflow-hidden">
               <CollapsedBar
                 onExpand={handleExpandInput}
                 placeholder={isCompact ? t('inputBox.replyToAgentMobile') : t('inputBox.replyToAgent')}
@@ -1480,6 +1485,7 @@ function InputBoxComponent({
                         modelSelectorRef={modelSelectorRef}
                         isCollapsed={isCollapsed}
                         onToggleCollapse={toggleCollapse}
+                        contextLimit={contextLimit}
                       />
                       </div>
                     </div>
