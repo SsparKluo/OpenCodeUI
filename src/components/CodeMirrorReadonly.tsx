@@ -29,7 +29,6 @@ interface CodeMirrorReadonlyProps {
   targetRanges?: readonly TargetLineRange[]
 }
 
-const EMPTY_EXTENSIONS: Extension[] = []
 const EMPTY_TARGET_RANGES: readonly TargetLineRange[] = []
 
 export function CodeMirrorReadonly({
@@ -43,7 +42,7 @@ export function CodeMirrorReadonly({
   isVisible = true,
   showLineNumbers = true,
   className = '',
-  extraExtensions = EMPTY_EXTENSIONS,
+  extraExtensions = [],
   targetLine,
   targetKey,
   targetRanges = EMPTY_TARGET_RANGES,
