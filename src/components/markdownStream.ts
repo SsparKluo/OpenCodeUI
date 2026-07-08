@@ -1,4 +1,4 @@
-import { parseMarkdownIntoBlocks } from 'streamdown'
+import { marked } from 'marked'
 
 export type MarkdownStreamBlock = {
   key: string
@@ -45,7 +45,8 @@ function splitMarkdownBlocks(markdown: string) {
   const blocks: Array<{ start: number; src: string }> = []
   let offset = 0
 
-  for (const src of parseMarkdownIntoBlocks(markdown)) {
+  for (const token of marked.lexer(markdown)) {
+    const src = typeof token.raw === 'string' ? token.raw : ''
     const start = offset
     offset += src.length
     if (!src) continue
@@ -56,6 +57,12 @@ function splitMarkdownBlocks(markdown: string) {
     }
 
     blocks.push({ start, src })
+  }
+
+  if (offset < markdown.length) {
+    const rest = markdown.slice(offset)
+    if (blocks.length > 0) blocks[blocks.length - 1].src += rest
+    else blocks.push({ start: offset, src: rest })
   }
 
   return blocks.length > 0 ? blocks : [{ start: 0, src: markdown }]

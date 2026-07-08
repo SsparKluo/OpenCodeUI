@@ -28,7 +28,10 @@ vi.mock('../hooks/useInputCapabilities', () => ({
 
 vi.mock('../hooks/useSyntaxHighlight', () => ({
   useSyntaxHighlight: (code: string, options: unknown) => useSyntaxHighlightMock(code, options),
-  useStreamingSyntaxHighlight: (code: string, options: unknown) => useStreamingSyntaxHighlightMock(code, options),
+}))
+
+vi.mock('../hooks/useWorkerSyntaxHighlight', () => ({
+  useWorkerSyntaxHighlight: (code: string, options: unknown) => useStreamingSyntaxHighlightMock(code, options),
 }))
 
 vi.mock('../hooks/useInView', () => ({

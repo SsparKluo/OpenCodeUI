@@ -170,6 +170,71 @@ describe('MarkdownRenderer', () => {
     expect(container.querySelector('.katex')).toBeInTheDocument()
   })
 
+  it('renders multiline display math blocks', () => {
+    const content = String.raw`$$
+\begin{aligned}
+\nabla \cdot \vec{E} &= \frac{\rho}{\varepsilon_0} \\
+\nabla \cdot \vec{B} &= 0 \\
+\nabla \times \vec{E} &= -\frac{\partial\vec{B}}{\partial t}
+\end{aligned}
+$$`
+    const { container } = render(<MarkdownRenderer content={content} />)
+
+    expect(container.querySelector('.katex-display')).toBeInTheDocument()
+    expect(container.querySelector('p')).not.toBeInTheDocument()
+  })
+
+  it('renders sanitized raw HTML with inline styles', () => {
+    const { container } = render(
+      <MarkdownRenderer
+        content={
+          '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 16px 0;"><div style="border: 1px solid #e0e0e0; border-radius: 10px; padding: 16px; text-align: center; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.06);"><div style="font-size: 32px;">Py</div><div style="font-weight: bold; margin-top: 8px;">Python</div><div style="font-size: 0.75em; color: #666;">Concise</div></div></div>'
+        }
+      />,
+    )
+
+    const grid = container.querySelector('div[style*="display: grid"]')
+    expect(grid).toBeInTheDocument()
+    expect(grid).toHaveStyle({ display: 'grid', gap: '12px' })
+    expect(screen.getByText('Python')).toBeInTheDocument()
+  })
+
+  it('sanitizes unsafe raw HTML attributes and URLs', () => {
+    const { container } = render(
+      <MarkdownRenderer content={'<a href="javascript:alert(1)" onclick="alert(1)">bad</a>'} />,
+    )
+
+    const link = container.querySelector('a')
+    expect(link).toBeInTheDocument()
+    expect(link).not.toHaveAttribute('href')
+    expect(link).not.toHaveAttribute('onclick')
+  })
+
+  it('rewrites raw HTML Windows path links to local file links', () => {
+    const filePath = 'C:/Users/test/project/file.ts'
+    render(<MarkdownRenderer content={`<a href="${filePath}">file.ts</a>`} />)
+
+    const link = screen.getByRole('link', { name: 'file.ts' })
+    expect(link).toHaveAttribute('href', `#opencode-local-file:${encodeURIComponent(filePath)}`)
+    expect(link).toHaveAttribute('title', filePath)
+  })
+
+  it('keeps inline HTML structure inside markdown paragraphs', () => {
+    const { container } = render(<MarkdownRenderer content={'Press <kbd>Ctrl</kbd> and **enter**'} />)
+
+    const kbd = container.querySelector('kbd')
+    expect(kbd).toHaveTextContent('Ctrl')
+    expect(screen.getByText('enter').tagName).toBe('STRONG')
+  })
+
+  it('removes unsafe CSS URLs from raw HTML styles', () => {
+    const { container } = render(<MarkdownRenderer content={'<div style="background: url(javascript:alert(1)); color: red">bad</div>'} />)
+
+    const element = container.querySelector('div div')
+    expect(element).toBeInTheDocument()
+    expect(element).not.toHaveAttribute('style')
+  })
+
   it('renders mermaid code fences as diagrams', async () => {
     render(<MarkdownRenderer content={'```mermaid\ngraph TD\n  A-->B\n```'} />)
 
@@ -291,13 +356,25 @@ describe('MarkdownRenderer', () => {
     expect(screen.queryByTestId('copy-button')).not.toBeInTheDocument()
   })
 
-  it('renders markdown images as plain img links without streamdown image wrapper controls', () => {
+  it('renders markdown images as plain img links without wrapper controls', () => {
     render(<MarkdownRenderer content={'![avatar](https://example.com/avatar.png)'} />)
 
     const img = screen.getByRole('img', { name: 'avatar' })
     expect(img).toBeInTheDocument()
     expect(img.tagName).toBe('IMG')
     expect(screen.queryByTitle('Download image')).not.toBeInTheDocument()
+  })
+
+  it('allows safe data image markdown sources', () => {
+    render(<MarkdownRenderer content={'![dot](data:image/png;base64,iVBORw0KGgo=)'} />)
+
+    expect(screen.getByRole('img', { name: 'dot' })).toHaveAttribute('src', 'data:image/png;base64,iVBORw0KGgo=')
+  })
+
+  it('blocks unsafe markdown image sources', () => {
+    render(<MarkdownRenderer content={'![bad](javascript:alert(1))'} />)
+
+    expect(screen.queryByRole('img', { name: 'bad' })).not.toBeInTheDocument()
   })
 
   it('renders Windows absolute path links without blocked indicator', () => {

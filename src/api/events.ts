@@ -91,6 +91,78 @@ let pendingDisconnect: Promise<void> = Promise.resolve()
 let lastReconnectedBroadcast = 0
 const RECONNECTED_COOLDOWN = 2000
 
+// ============================================
+// Delta coalescing — 参照官方 coalesceServerEvents
+// 同一批次内相同 (messageID, partID, field) 的 delta 合并为一个事件；
+// message.part.updated 到达后丢弃该 part 的在途 delta。
+// ============================================
+
+function coalesceEvents(events: GlobalEvent[]): GlobalEvent[] {
+  if (events.length <= 1) return events
+
+  const result: GlobalEvent[] = []
+  const deltaIndexByKey = new Map<string, number>()
+  const staleIndices = new Set<number>()
+
+  for (const event of events) {
+    const payload = event.payload
+
+    if (payload.type === EventTypes.MESSAGE_PART_DELTA) {
+      const p = payload.properties as {
+        sessionID: string
+        messageID: string
+        partID: string
+        field: string
+        delta: string
+      }
+      const key = `${p.sessionID}\0${p.messageID}\0${p.partID}\0${p.field}`
+      const idx = deltaIndexByKey.get(key)
+      if (idx !== undefined && !staleIndices.has(idx)) {
+        ;((result[idx].payload as { properties: { delta: string } }).properties).delta += p.delta
+        continue
+      }
+      result.push(event)
+      deltaIndexByKey.set(key, result.length - 1)
+      continue
+    }
+
+    if (payload.type === EventTypes.MESSAGE_PART_UPDATED) {
+      const props = payload.properties as {
+        sessionID?: string
+        part?: { id?: string; sessionID?: string; messageID?: string }
+      }
+      const sid = props.sessionID ?? props.part?.sessionID
+      const mid = props.part?.messageID
+      const pid = props.part?.id
+      if (sid && mid && pid) {
+        const prefix = `${sid}\0${mid}\0${pid}\0`
+        for (const [key, idx] of deltaIndexByKey) {
+          if (key.startsWith(prefix)) {
+            staleIndices.add(idx)
+            deltaIndexByKey.delete(key)
+          }
+        }
+      }
+    }
+
+    result.push(event)
+  }
+
+  if (staleIndices.size > 0) {
+    return result.filter((_, idx) => !staleIndices.has(idx))
+  }
+  return result
+}
+
+function parseAndCoalesce(rawEvents: string[]): GlobalEvent[] {
+  const parsed: GlobalEvent[] = []
+  for (const raw of rawEvents) {
+    const event = parseGlobalEvent(raw)
+    if (event) parsed.push(event)
+  }
+  return coalesceEvents(parsed)
+}
+
 function finalizeConnectionAttempt(generation: number): boolean {
   if (generation !== connectionGeneration) {
     return false
@@ -271,11 +343,8 @@ async function connectViaTauri() {
           resetHeartbeat()
           if (!msg.data?.data) break
 
-          for (const eventData of sseParser.push(msg.data.data)) {
-            const globalEvent = parseGlobalEvent(eventData)
-            if (globalEvent) {
-              broadcastEvent(globalEvent)
-            }
+          for (const globalEvent of parseAndCoalesce(sseParser.push(msg.data.data))) {
+            broadcastEvent(globalEvent)
           }
           break
         }
@@ -412,11 +481,9 @@ function connectViaBrowser() {
 
         resetHeartbeat()
 
-        for (const eventData of sseParser.push(decoder.decode(value, { stream: true }))) {
-          const globalEvent = parseGlobalEvent(eventData)
-          if (globalEvent) {
-            broadcastEvent(globalEvent)
-          }
+        const coalesced = parseAndCoalesce(sseParser.push(decoder.decode(value, { stream: true })))
+        for (const globalEvent of coalesced) {
+          broadcastEvent(globalEvent)
         }
       }
     })

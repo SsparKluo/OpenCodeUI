@@ -467,8 +467,8 @@ body {
 /* ============================================
  * Markdown Math Theme Integration
  * ============================================
- * @streamdown/math 生成 KaTeX DOM，但插件声明的样式不会自动被本项目打包。
- * 在显式引入 katex.css 后，这里再把公式根节点绑定到当前文本色，
+ * MarkdownRenderer 生成 KaTeX DOM，并显式引入 katex.css。
+ * 这里再把公式根节点绑定到当前文本色，
  * 让默认消息 / reasoning / 主题切换都能稳定继承 color。
  */
 .markdown-content .katex,
@@ -1066,4 +1066,13 @@ body {
   .todo-swap-panel {
     transition: none;
   }
+}
+
+/* ============================================
+ * content-visibility — 屏幕外消息跳过 layout/paint
+ * 参照官方 opencode message-part.css
+ * ============================================ */
+[data-message-role='assistant'] {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
 }

@@ -10,14 +10,11 @@ import {
   useRef,
   useState,
 } from 'react'
-import {
-  Streamdown,
-  defaultRehypePlugins,
-  type Components,
-  type CustomRendererProps,
-  type PluginConfig,
-} from 'streamdown'
-import { createMathPlugin } from '@streamdown/math'
+import { marked } from 'marked'
+import type { Tokens as MarkedTokens } from 'marked'
+import katex from 'katex'
+import 'katex/dist/katex.min.css'
+import DOMPurify from 'dompurify'
 import { CodeBlock } from './CodeBlock'
 import { HandIcon, RetryIcon, ZoomInIcon, ZoomOutIcon } from './Icons'
 import { CopyButton } from './ui'
@@ -36,7 +33,6 @@ interface MarkdownRendererProps {
   variant?: 'default' | 'reasoning'
 }
 
-const markdownMath = createMathPlugin({ singleDollarTextMath: true })
 const MERMAID_MIN_SCALE = 0.5
 const MERMAID_MAX_SCALE = 3
 const MERMAID_SCALE_STEP = 0.15
@@ -52,6 +48,18 @@ type PinchGesture = {
   startScale: number
   startOffset: { x: number; y: number }
   startCenter: { x: number; y: number }
+}
+
+type MarkdownRenderContext = {
+  isReasoning: boolean
+  isStreaming: boolean
+  streamingCodeHighlight: boolean
+}
+
+type MermaidRendererProps = {
+  code: string
+  language?: string
+  isIncomplete?: boolean
 }
 
 let mermaidRenderCounter = 0
@@ -110,7 +118,7 @@ const InlineCode = memo(function InlineCode({
 })
 
 const MarkdownImage = memo(function MarkdownImage({ src, alt, title }: { src?: string; alt?: string; title?: string }) {
-  if (!src) return null
+  if (!src || isUnsafeImageSrc(src)) return null
 
   return (
     <a
@@ -136,28 +144,6 @@ function extractText(node: React.ReactNode): string {
     return extractText(props.children)
   }
   return ''
-}
-
-/** Extract code and language from a <pre> element's children */
-function extractBlockCode(children: React.ReactNode): { code: string; language?: string } | null {
-  const codeNode = Array.isArray(children) ? children[0] : children
-  if (!isValidElement(codeNode)) return null
-
-  const props = codeNode.props as { className?: string; children?: React.ReactNode }
-  const match = /language-([\w-]+)/.exec(props.className || '')
-  const contentStr = extractText(props.children).replace(/\n$/, '')
-
-  return {
-    code: contentStr,
-    language: match?.[1],
-  }
-}
-
-type HastNode = {
-  type?: string
-  tagName?: string
-  properties?: Record<string, unknown>
-  children?: HastNode[]
 }
 
 function decodeHref(value: string): string {
@@ -187,22 +173,180 @@ function decodeLocalFileHref(href?: string): string | null {
   }
 }
 
-function rewriteWindowsPathLinkHrefs() {
-  return (tree: HastNode) => {
-    const visit = (node: HastNode) => {
-      if (node.type === 'element' && node.tagName === 'a') {
-        const href = node.properties?.href
-        const filePath = typeof href === 'string' ? getWindowsAbsolutePath(href) : null
-        if (filePath) {
-          node.properties = { ...node.properties, href: encodeLocalFileHref(filePath) }
-        }
-      }
+function getLanguage(value: string | undefined): string | undefined {
+  return value?.trim().split(/\s+/, 1)[0] || undefined
+}
 
-      node.children?.forEach(visit)
+function isUnsafeHref(href?: string): boolean {
+  if (!href) return false
+  const normalized = Array.from(href.trim())
+    .filter(char => {
+      const code = char.charCodeAt(0)
+      return code > 0x1f && code !== 0x7f && !/\s/.test(char)
+    })
+    .join('')
+    .toLowerCase()
+  return normalized.startsWith('javascript:') || normalized.startsWith('vbscript:') || normalized.startsWith('data:')
+}
+
+function isUnsafeImageSrc(src?: string): boolean {
+  if (!src) return false
+  const trimmed = src.trim()
+  if (/^data:/i.test(trimmed)) return !/^data:image\/(?:png|jpe?g|gif|webp);base64,/i.test(trimmed)
+  return isUnsafeHref(src)
+}
+
+function rewriteRawHtmlLocalLinks(html: string): string {
+  if (typeof document === 'undefined') return html
+  const template = document.createElement('template')
+  template.innerHTML = html
+  template.content.querySelectorAll<HTMLAnchorElement>('a[href]').forEach(anchor => {
+    const href = anchor.getAttribute('href') ?? ''
+    const localPath = decodeLocalFileHref(href) ?? getWindowsAbsolutePath(href)
+    if (!localPath) return
+    anchor.setAttribute('href', encodeLocalFileHref(localPath))
+    anchor.setAttribute('title', localPath)
+  })
+  return template.innerHTML
+}
+
+function sanitizeHtml(html: string): string {
+  if (!DOMPurify.isSupported) return ''
+  const clean = DOMPurify.sanitize(rewriteRawHtmlLocalLinks(html), {
+    USE_PROFILES: { html: true, mathMl: true, svg: true },
+    FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
+  }) as unknown as string
+
+  if (typeof document === 'undefined') return clean
+
+  const template = document.createElement('template')
+  template.innerHTML = clean
+  template.content.querySelectorAll<HTMLElement>('[style]').forEach(element => {
+    const style = element.getAttribute('style') ?? ''
+    if (/url\s*\(|expression\s*\(|behavior\s*:|-moz-binding\s*:/i.test(style)) {
+      element.removeAttribute('style')
+    }
+  })
+  return template.innerHTML
+}
+
+function openLocalFilePath(filePath: string) {
+  if (!isTauri()) return
+  import('@tauri-apps/plugin-opener').then(mod => mod.openPath(filePath)).catch(() => {})
+}
+
+function textFromInlineTokens(tokens: unknown[] | undefined): string {
+  if (!tokens) return ''
+  return tokens
+    .map(token => {
+      const item = token as Record<string, unknown>
+      if (typeof item.text === 'string') return item.text
+      if (typeof item.raw === 'string') return item.raw
+      return textFromInlineTokens(item.tokens as unknown[] | undefined)
+    })
+    .join('')
+}
+
+function renderKatex(source: string, displayMode: boolean, key: string) {
+  try {
+    return (
+      <span
+        key={key}
+        dangerouslySetInnerHTML={{
+          __html: katex.renderToString(source, {
+            displayMode,
+            throwOnError: false,
+            strict: false,
+            trust: false,
+          }),
+        }}
+      />
+    )
+  } catch {
+    return <span key={key}>{displayMode ? `$$${source}$$` : `$${source}$`}</span>
+  }
+}
+
+function getDisplayMathSource(text: string): string | null {
+  const trimmed = text.trim()
+  if (!trimmed.startsWith('$$') || !trimmed.endsWith('$$') || trimmed.length < 4) return null
+  return trimmed.slice(2, -2).trim()
+}
+
+function isEscapedAt(text: string, index: number): boolean {
+  let slashCount = 0
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === '\\'; cursor -= 1) slashCount += 1
+  return slashCount % 2 === 1
+}
+
+function isHtmlOnlyParagraph(item: Record<string, unknown>): boolean {
+  const raw = String(item.raw ?? '').trim()
+  if (!raw.startsWith('<') || !raw.endsWith('>')) return false
+  return (item.tokens as Array<Record<string, unknown>> | undefined)?.some(token => token.type === 'html' || token.type === 'tag') ?? false
+}
+
+function hasInlineHtml(item: Record<string, unknown>): boolean {
+  return (item.tokens as Array<Record<string, unknown>> | undefined)?.some(token => token.type === 'html' || token.type === 'tag') ?? false
+}
+
+function parseInlineMarkdownHtml(source: string): string {
+  try {
+    return marked.parseInline(source) as string
+  } catch {
+    return source
+  }
+}
+
+function renderTextWithMath(text: string, keyPrefix: string): React.ReactNode {
+  if (!text.includes('$')) return text
+
+  const nodes: React.ReactNode[] = []
+  let cursor = 0
+  let lastIndex = 0
+  let mathIndex = 0
+
+  while (cursor < text.length) {
+    if (text[cursor] !== '$' || isEscapedAt(text, cursor)) {
+      cursor += 1
+      continue
     }
 
-    visit(tree)
+    const display = text[cursor + 1] === '$'
+    const marker = display ? '$$' : '$'
+    const start = cursor + marker.length
+    let end = start
+    let close = -1
+
+    while (end < text.length) {
+      const next = text.indexOf(marker, end)
+      if (next === -1) break
+      if (!isEscapedAt(text, next)) {
+        close = next
+        break
+      }
+      end = next + marker.length
+    }
+
+    if (close === -1) {
+      cursor += marker.length
+      continue
+    }
+
+    const source = text.slice(start, close)
+    if (!display && (!source || source.includes('\n'))) {
+      cursor += marker.length
+      continue
+    }
+
+    if (cursor > lastIndex) nodes.push(text.slice(lastIndex, cursor))
+    nodes.push(renderKatex(source, display, `${keyPrefix}:math:${mathIndex++}`))
+    cursor = close + marker.length
+    lastIndex = cursor
   }
+
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex))
+  return nodes.length > 0 ? nodes : text
 }
 
 // ─── Markdown Table ────────────────────────────────────────────
@@ -360,7 +504,7 @@ const MarkdownTable = memo(function MarkdownTable({
   )
 })
 
-const MarkdownMermaid = memo(function MarkdownMermaid({ code, isIncomplete }: CustomRendererProps) {
+const MarkdownMermaid = memo(function MarkdownMermaid({ code, isIncomplete }: MermaidRendererProps) {
   const { resolvedTheme } = useTheme()
   const { hasCoarsePointer, hasTouch, preferTouchUi } = useInputCapabilities()
   const supportsTouchGestures = hasCoarsePointer || hasTouch
@@ -646,17 +790,6 @@ const MarkdownMermaid = memo(function MarkdownMermaid({ code, isIncomplete }: Cu
   )
 })
 
-const markdownPlugins: PluginConfig = {
-  math: markdownMath,
-  renderers: [{ language: 'mermaid', component: MarkdownMermaid }],
-}
-const markdownRehypePlugins = [
-  defaultRehypePlugins.raw,
-  rewriteWindowsPathLinkHrefs,
-  defaultRehypePlugins.sanitize,
-  defaultRehypePlugins.harden,
-]
-
 const STREAM_MIN_COMMIT_INTERVAL_MS = 32
 const STREAM_MAX_COMMIT_INTERVAL_MS = 96
 const STREAM_TAIL_SCALE_CHARS = 256
@@ -732,34 +865,377 @@ function useSmoothMarkdownStream(content: string, enabled: boolean) {
   return displayedContent
 }
 
+function renderInlineTokens(tokens: unknown[] | undefined, ctx: MarkdownRenderContext, keyPrefix: string): React.ReactNode {
+  if (!tokens || tokens.length === 0) return null
+
+  return tokens.map((token, index) => {
+    const item = token as Record<string, unknown>
+    const key = `${keyPrefix}:${index}`
+    const type = item.type
+
+    switch (type) {
+      case 'escape':
+      case 'text': {
+        const nested = item.tokens as unknown[] | undefined
+        if (nested?.length) return <span key={key}>{renderInlineTokens(nested, ctx, key)}</span>
+        return <span key={key}>{renderTextWithMath(String(item.text ?? item.raw ?? ''), key)}</span>
+      }
+      case 'codespan':
+        return (
+          <InlineCode key={key} variant={ctx.isReasoning ? 'reasoning' : 'default'}>
+            {String(item.text ?? '')}
+          </InlineCode>
+        )
+      case 'strong':
+        return (
+          <strong key={key} className={ctx.isReasoning ? 'font-semibold text-text-300' : 'font-semibold text-text-100'}>
+            {renderInlineTokens(item.tokens as unknown[] | undefined, ctx, key)}
+          </strong>
+        )
+      case 'em':
+        return (
+          <em key={key} className={ctx.isReasoning ? 'italic text-text-300' : 'italic text-text-200'}>
+            {renderInlineTokens(item.tokens as unknown[] | undefined, ctx, key)}
+          </em>
+        )
+      case 'del':
+        return (
+          <del
+            key={key}
+            className={
+              ctx.isReasoning
+                ? 'text-[length:var(--fs-sm)] text-text-500 line-through decoration-text-500/50'
+                : 'text-text-400 line-through decoration-text-400/50'
+            }
+          >
+            {renderInlineTokens(item.tokens as unknown[] | undefined, ctx, key)}
+          </del>
+        )
+      case 'link': {
+        const href = typeof item.href === 'string' ? item.href : undefined
+        if (isUnsafeHref(href)) {
+          return <span key={key}>{textFromInlineTokens(item.tokens as unknown[] | undefined)} [blocked]</span>
+        }
+        const localPath = decodeLocalFileHref(href) ?? (href ? getWindowsAbsolutePath(href) : null)
+        const normalizedHref = localPath ? encodeLocalFileHref(localPath) : href
+        const className = ctx.isReasoning
+          ? 'text-[length:var(--fs-sm)] font-medium text-accent-main-200/80 hover:text-accent-main-200 underline underline-offset-2 transition-colors'
+          : 'font-medium text-accent-main-100 hover:text-accent-main-200 underline underline-offset-2 transition-colors'
+
+        if (localPath) {
+          return (
+            <a
+              key={key}
+              href={normalizedHref}
+              title={localPath}
+              className={className}
+              onClick={event => {
+                event.preventDefault()
+                openLocalFilePath(localPath)
+              }}
+            >
+              {renderInlineTokens(item.tokens as unknown[] | undefined, ctx, key)}
+            </a>
+          )
+        }
+
+        return (
+          <a key={key} href={normalizedHref} target="_blank" rel="noopener noreferrer" className={className}>
+            {renderInlineTokens(item.tokens as unknown[] | undefined, ctx, key)}
+          </a>
+        )
+      }
+      case 'image':
+        return (
+          <MarkdownImage
+            key={key}
+            src={typeof item.href === 'string' ? item.href : undefined}
+            alt={typeof item.text === 'string' ? item.text : undefined}
+            title={typeof item.title === 'string' ? item.title : undefined}
+          />
+        )
+      case 'br':
+        return <br key={key} />
+      case 'html':
+      case 'tag':
+        return <span key={key} dangerouslySetInnerHTML={{ __html: sanitizeHtml(String(item.raw ?? '')) }} />
+      default:
+        return <span key={key}>{String(item.text ?? item.raw ?? '')}</span>
+    }
+  })
+}
+
+function renderBlockTokens(tokens: unknown[] | undefined, ctx: MarkdownRenderContext, keyPrefix: string): React.ReactNode {
+  if (!tokens || tokens.length === 0) return null
+
+  return tokens.map((token, index) => renderBlockToken(token as MarkedTokens.Generic, ctx, `${keyPrefix}:${index}`))
+}
+
+function renderListItem(item: Record<string, unknown>, ctx: MarkdownRenderContext, key: string) {
+  const children = renderBlockTokens(item.tokens as unknown[] | undefined, ctx, key)
+  const task = item.task === true
+  const checked = item.checked === true
+  return (
+    <li
+      key={key}
+      className={ctx.isReasoning ? 'text-[length:var(--fs-sm)] text-text-400 pl-1 leading-5' : 'text-text-200 pl-1 leading-7'}
+    >
+      {task && <input type="checkbox" checked={checked} readOnly className="mr-2 align-middle" />}
+      {children}
+    </li>
+  )
+}
+
+function renderTableCell(
+  cell: Record<string, unknown>,
+  ctx: MarkdownRenderContext,
+  key: string,
+  type: 'th' | 'td',
+) {
+  const children = renderInlineTokens(cell.tokens as unknown[] | undefined, ctx, key)
+  const align = typeof cell.align === 'string' ? cell.align : undefined
+  const style = align ? { textAlign: align as React.CSSProperties['textAlign'] } : undefined
+
+  if (type === 'th') {
+    return (
+      <th
+        key={key}
+        style={style}
+        className={
+          ctx.isReasoning
+            ? 'px-3 py-1.5 text-left text-[length:var(--fs-sm)] font-medium whitespace-nowrap border-b border-border-200/32'
+            : 'relative px-3 py-2.5 text-left text-[length:var(--fs-md)] font-semibold whitespace-nowrap border-b border-border-200/38'
+        }
+      >
+        {children}
+      </th>
+    )
+  }
+
+  return (
+    <td
+      key={key}
+      style={style}
+      className={
+        ctx.isReasoning
+          ? 'px-3 py-1.5 text-[length:var(--fs-sm)] text-text-300 w-max border-b border-border-200/18'
+          : 'px-3 py-2 text-[length:var(--fs-md)] text-text-300 leading-[1.55] w-max border-b border-border-200/14'
+      }
+    >
+      {children}
+    </td>
+  )
+}
+
+function renderBlockToken(token: MarkedTokens.Generic, ctx: MarkdownRenderContext, key: string): React.ReactNode {
+  const item = token as unknown as Record<string, unknown>
+
+  switch (item.type) {
+    case 'space':
+    case 'def':
+      return null
+    case 'heading': {
+      const depth = Number(item.depth) || 1
+      const children = renderInlineTokens(item.tokens as unknown[] | undefined, ctx, key)
+      const className = ctx.isReasoning
+        ? 'text-[length:var(--fs-sm)] font-semibold text-text-300 mt-2 mb-1 first:mt-0 last:mb-0'
+        : depth === 1
+          ? 'text-[length:var(--fs-heading-1)] font-bold text-text-100 mt-8 mb-4 first:mt-0 last:mb-0 tracking-tight'
+          : depth === 2
+            ? 'text-[length:var(--fs-heading-2)] font-bold text-text-100 mt-6 mb-3 first:mt-0 last:mb-0 tracking-tight pb-1.5 border-b border-border-100/40'
+            : depth === 3
+              ? 'text-[length:var(--fs-heading-3)] font-semibold text-text-100 mt-5 mb-2 first:mt-0 last:mb-0 tracking-tight'
+              : 'text-[length:var(--fs-base)] font-semibold text-text-100 mt-4 mb-2 first:mt-0 last:mb-0 tracking-tight'
+
+      if (depth === 1) return <h1 key={key} className={className}>{children}</h1>
+      if (depth === 2) return <h2 key={key} className={className}>{children}</h2>
+      if (depth === 3) return <h3 key={key} className={className}>{children}</h3>
+      return <h4 key={key} className={className}>{children}</h4>
+    }
+    case 'paragraph':
+      {
+        const displayMath = getDisplayMathSource(String(item.raw ?? item.text ?? ''))
+        if (displayMath != null) {
+          return (
+            <div key={key} className={ctx.isReasoning ? 'my-2 overflow-x-auto text-text-400' : 'my-4 overflow-x-auto text-text-200'}>
+              {renderKatex(displayMath, true, `${key}:math`)}
+            </div>
+          )
+        }
+        if (hasInlineHtml(item)) {
+          const raw = String(item.raw ?? '')
+          const html = sanitizeHtml(parseInlineMarkdownHtml(raw))
+          const className = ctx.isReasoning
+            ? 'text-[length:var(--fs-sm)] mb-2 last:mb-0 leading-5 text-text-400'
+            : 'mb-4 last:mb-0 leading-7 text-text-200'
+          if (isHtmlOnlyParagraph(item)) {
+            return <div key={key} className={className} dangerouslySetInnerHTML={{ __html: html }} />
+          }
+          return (
+            <p
+              key={key}
+              className={className}
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          )
+        }
+      }
+      return (
+        <p
+          key={key}
+          className={
+            ctx.isReasoning
+              ? 'text-[length:var(--fs-sm)] mb-2 last:mb-0 leading-5 text-text-400'
+              : 'mb-4 last:mb-0 leading-7 text-text-200'
+          }
+        >
+          {renderInlineTokens(item.tokens as unknown[] | undefined, ctx, key)}
+        </p>
+      )
+    case 'text': {
+      const nested = item.tokens as unknown[] | undefined
+      return nested?.length ? (
+        <p key={key} className={ctx.isReasoning ? 'text-[length:var(--fs-sm)] mb-2 last:mb-0 leading-5 text-text-400' : 'mb-4 last:mb-0 leading-7 text-text-200'}>
+          {renderInlineTokens(nested, ctx, key)}
+        </p>
+      ) : (
+        <p key={key} className={ctx.isReasoning ? 'text-[length:var(--fs-sm)] mb-2 last:mb-0 leading-5 text-text-400' : 'mb-4 last:mb-0 leading-7 text-text-200'}>
+          {renderTextWithMath(String(item.text ?? item.raw ?? ''), key)}
+        </p>
+      )
+    }
+    case 'blockquote':
+      return (
+        <blockquote
+          key={key}
+          className={
+            ctx.isReasoning
+              ? 'border-l-2 border-text-500/30 pl-3 py-0.5 my-2 first:mt-0 last:mb-0 text-text-400'
+              : 'border-l-2 border-accent-main-100/60 pl-4 py-1 my-4 first:mt-0 last:mb-0 text-text-300 italic'
+          }
+        >
+          {renderBlockTokens(item.tokens as unknown[] | undefined, ctx, key)}
+        </blockquote>
+      )
+    case 'list': {
+      const ordered = item.ordered === true
+      const children = (item.items as unknown[] | undefined)?.map((listItem, index) =>
+        renderListItem(listItem as Record<string, unknown>, ctx, `${key}:li:${index}`),
+      )
+      if (ordered) {
+        return (
+          <ol
+            key={key}
+            start={typeof item.start === 'number' ? item.start : undefined}
+            style={getOrderedListStyle(item.start, children)}
+            className={
+              ctx.isReasoning
+                ? 'text-[length:var(--fs-sm)] list-decimal list-outside mb-2 last:mb-0 space-y-0.5 marker:text-text-500/60'
+                : 'list-decimal list-outside mb-4 last:mb-0 space-y-1 marker:text-text-400/80'
+            }
+          >
+            {children}
+          </ol>
+        )
+      }
+      return (
+        <ul
+          key={key}
+          className={
+            ctx.isReasoning
+              ? 'text-[length:var(--fs-sm)] list-disc list-outside ml-4 mb-2 last:mb-0 space-y-0.5 marker:text-text-500/60'
+              : 'list-disc list-outside ml-5 mb-4 last:mb-0 space-y-1 marker:text-text-400/80'
+          }
+        >
+          {children}
+        </ul>
+      )
+    }
+    case 'code': {
+      const code = String(item.text ?? '')
+      const language = getLanguage(typeof item.lang === 'string' ? item.lang : undefined)
+      if (language?.toLowerCase() === 'mermaid') {
+        return <MarkdownMermaid key={key} code={code} language="mermaid" isIncomplete={ctx.isStreaming} />
+      }
+      return (
+        <div key={key} className={ctx.isReasoning ? 'my-2 first:mt-0 last:mb-0 w-full' : 'my-4 first:mt-0 last:mb-0 w-full'}>
+          <CodeBlock
+            code={code}
+            language={language}
+            variant={ctx.isReasoning ? 'reasoning' : 'default'}
+            wordwrap={ctx.isReasoning}
+            forceHighlight={ctx.streamingCodeHighlight}
+            streamingHighlight={ctx.streamingCodeHighlight}
+          />
+        </div>
+      )
+    }
+    case 'table': {
+      const header = (item.header as unknown[] | undefined) ?? []
+      const rows = (item.rows as unknown[] | undefined) ?? []
+      return (
+        <MarkdownTable key={key} isReasoning={ctx.isReasoning}>
+          <thead className={ctx.isReasoning ? 'text-text-400' : 'text-text-200'}>
+            <tr className={ctx.isReasoning ? 'hover:bg-bg-200/10 transition-colors' : 'hover:bg-bg-200/12 transition-colors'}>
+              {header.map((cell, index) => renderTableCell(cell as Record<string, unknown>, ctx, `${key}:h:${index}`, 'th'))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, rowIndex) => (
+              <tr key={`${key}:r:${rowIndex}`} className={ctx.isReasoning ? 'hover:bg-bg-200/10 transition-colors' : 'hover:bg-bg-200/12 transition-colors'}>
+                {((row as unknown[]) ?? []).map((cell, cellIndex) =>
+                  renderTableCell(cell as Record<string, unknown>, ctx, `${key}:r:${rowIndex}:c:${cellIndex}`, 'td'),
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </MarkdownTable>
+      )
+    }
+    case 'hr':
+      return (
+        <hr
+          key={key}
+          className={ctx.isReasoning ? 'border-border-200/40 my-4 first:mt-0 last:mb-0' : 'border-border-200/60 my-8 first:mt-0 last:mb-0'}
+        />
+      )
+    case 'html':
+      return <div key={key} dangerouslySetInnerHTML={{ __html: sanitizeHtml(String(item.raw ?? '')) }} />
+    default:
+      return null
+  }
+}
+
 const MarkdownStreamBlock = memo(function MarkdownStreamBlock({
   src,
-  components,
-  isAnimating,
+  isReasoning,
+  isStreaming,
+  streamingCodeHighlight,
   isFirst,
   isLast,
 }: {
   src: string
-  components: Components
-  isAnimating: boolean
+  isReasoning: boolean
+  isStreaming: boolean
+  streamingCodeHighlight: boolean
   isFirst: boolean
   isLast: boolean
 }) {
+  const content = useMemo(() => {
+    try {
+      return renderBlockTokens(marked.lexer(src), { isReasoning, isStreaming, streamingCodeHighlight }, 'md')
+    } catch {
+      return <p className={isReasoning ? 'text-[length:var(--fs-sm)] mb-2 last:mb-0 leading-5 text-text-400' : 'mb-4 last:mb-0 leading-7 text-text-200'}>{src}</p>
+    }
+  }, [isReasoning, isStreaming, src, streamingCodeHighlight])
+
   return (
     <div
       className={`markdown-stream-block ${isFirst ? 'markdown-stream-block-first' : 'markdown-stream-block-not-first'} ${
         isLast ? 'markdown-stream-block-last' : 'markdown-stream-block-not-last'
       }`}
     >
-      <Streamdown
-        components={components}
-        isAnimating={isAnimating}
-        controls={false}
-        plugins={markdownPlugins}
-        rehypePlugins={markdownRehypePlugins}
-      >
-        {src}
-      </Streamdown>
+      {content}
     </div>
   )
 })
@@ -776,261 +1252,28 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const smoothedContent = useSmoothMarkdownStream(content, isStreaming)
   const renderedContent = isStreaming ? smoothedContent : content
   const streamBlocks = useMemo(() => splitMarkdownStream(renderedContent, isStreaming), [renderedContent, isStreaming])
-
-  const componentsByMode = useMemo(() => {
-    const makeComponents = (streamingCodeHighlight: boolean): Components => ({
-      // --- Inline code ---
-      inlineCode({ children }) {
-        return <InlineCode variant={isReasoning ? 'reasoning' : 'default'}>{children}</InlineCode>
-      },
-
-      // --- Block code ---
-      pre({ children }) {
-        const blockCode = extractBlockCode(children)
-        if (!blockCode) return <pre>{children}</pre>
-
-        if (blockCode.language?.toLowerCase() === 'mermaid') {
-          return <MarkdownMermaid code={blockCode.code} language="mermaid" isIncomplete={isStreaming} />
-        }
-
-        return (
-          <div className={isReasoning ? 'my-2 first:mt-0 last:mb-0 w-full' : 'my-4 first:mt-0 last:mb-0 w-full'}>
-            <CodeBlock
-              code={blockCode.code}
-              language={blockCode.language}
-              variant={isReasoning ? 'reasoning' : 'default'}
-              wordwrap={isReasoning}
-              forceHighlight={streamingCodeHighlight}
-              streamingHighlight={streamingCodeHighlight}
-            />
-          </div>
-        )
-      },
-
-      // --- Headings ---
-      h1: ({ children }) => (
-        <h1
-          className={
-            isReasoning
-              ? 'text-[length:var(--fs-sm)] font-semibold text-text-300 mt-2 mb-1 first:mt-0 last:mb-0'
-              : 'text-[length:var(--fs-heading-1)] font-bold text-text-100 mt-8 mb-4 first:mt-0 last:mb-0 tracking-tight'
-          }
-        >
-          {children}
-        </h1>
-      ),
-      h2: ({ children }) => (
-        <h2
-          className={
-            isReasoning
-              ? 'text-[length:var(--fs-sm)] font-semibold text-text-300 mt-2 mb-1 first:mt-0 last:mb-0'
-              : 'text-[length:var(--fs-heading-2)] font-bold text-text-100 mt-6 mb-3 first:mt-0 last:mb-0 tracking-tight pb-1.5 border-b border-border-100/40'
-          }
-        >
-          {children}
-        </h2>
-      ),
-      h3: ({ children }) => (
-        <h3
-          className={
-            isReasoning
-              ? 'text-[length:var(--fs-sm)] font-semibold text-text-300 mt-2 mb-1 first:mt-0 last:mb-0'
-              : 'text-[length:var(--fs-heading-3)] font-semibold text-text-100 mt-5 mb-2 first:mt-0 last:mb-0 tracking-tight'
-          }
-        >
-          {children}
-        </h3>
-      ),
-      h4: ({ children }) => (
-        <h4
-          className={
-            isReasoning
-              ? 'text-[length:var(--fs-sm)] font-semibold text-text-300 mt-2 mb-1 first:mt-0 last:mb-0'
-              : 'text-[length:var(--fs-base)] font-semibold text-text-100 mt-4 mb-2 first:mt-0 last:mb-0 tracking-tight'
-          }
-        >
-          {children}
-        </h4>
-      ),
-
-      // --- Paragraphs ---
-      p: ({ children }) => (
-        <p
-          className={
-            isReasoning
-              ? 'text-[length:var(--fs-sm)] mb-2 last:mb-0 leading-5 text-text-400'
-              : 'mb-4 last:mb-0 leading-7 text-text-200'
-          }
-        >
-          {children}
-        </p>
-      ),
-
-      // --- Lists ---
-      ul: ({ children }) => (
-        <ul
-          className={
-            isReasoning
-              ? 'text-[length:var(--fs-sm)] list-disc list-outside ml-4 mb-2 last:mb-0 space-y-0.5 marker:text-text-500/60'
-              : 'list-disc list-outside ml-5 mb-4 last:mb-0 space-y-1 marker:text-text-400/80'
-          }
-        >
-          {children}
-        </ul>
-      ),
-      ol: ({ children, start }) => (
-        <ol
-          style={getOrderedListStyle(start, children)}
-          className={
-            isReasoning
-              ? 'text-[length:var(--fs-sm)] list-decimal list-outside mb-2 last:mb-0 space-y-0.5 marker:text-text-500/60'
-              : 'list-decimal list-outside mb-4 last:mb-0 space-y-1 marker:text-text-400/80'
-          }
-        >
-          {children}
-        </ol>
-      ),
-      li: ({ children }) => (
-        <li
-          className={
-            isReasoning ? 'text-[length:var(--fs-sm)] text-text-400 pl-1 leading-5' : 'text-text-200 pl-1 leading-7'
-          }
-        >
-          {children}
-        </li>
-      ),
-
-      // --- Links ---
-      a: ({ href, children }) => {
-        const localFilePath = decodeLocalFileHref(href)
-        const className = isReasoning
-          ? 'text-[length:var(--fs-sm)] font-medium text-accent-main-200/80 hover:text-accent-main-200 underline underline-offset-2 transition-colors'
-          : 'font-medium text-accent-main-100 hover:text-accent-main-200 underline underline-offset-2 transition-colors'
-
-        if (localFilePath) {
-          return (
-            <a
-              href={href}
-              title={localFilePath}
-              className={className}
-              onClick={event => {
-                event.preventDefault()
-                if (!isTauri()) return
-                import('@tauri-apps/plugin-opener').then(mod => mod.openPath(localFilePath)).catch(() => {})
-              }}
-            >
-              {children}
-            </a>
-          )
-        }
-
-        return (
-          <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
-            {children}
-          </a>
-        )
-      },
-
-      // --- Images ---
-      img: ({ src, alt, title }) => <MarkdownImage src={src} alt={alt} title={title} />,
-
-      // --- Blockquotes ---
-      blockquote: ({ children }) => (
-        <blockquote
-          className={
-            isReasoning
-              ? 'border-l-2 border-text-500/30 pl-3 py-0.5 my-2 first:mt-0 last:mb-0 text-text-400'
-              : 'border-l-2 border-accent-main-100/60 pl-4 py-1 my-4 first:mt-0 last:mb-0 text-text-300 italic'
-          }
-        >
-          {children}
-        </blockquote>
-      ),
-
-      // --- Tables ---
-      table: ({ children }) => <MarkdownTable isReasoning={isReasoning}>{children}</MarkdownTable>,
-
-      thead: ({ children }) => <thead className={isReasoning ? 'text-text-400' : 'text-text-200'}>{children}</thead>,
-      th: ({ children }) => (
-        <th
-          className={
-            isReasoning
-              ? 'px-3 py-1.5 text-left text-[length:var(--fs-sm)] font-medium whitespace-nowrap border-b border-border-200/32'
-              : 'relative px-3 py-2.5 text-left text-[length:var(--fs-md)] font-semibold whitespace-nowrap border-b border-border-200/38'
-          }
-        >
-          {children}
-        </th>
-      ),
-      tbody: ({ children }) => <tbody>{children}</tbody>,
-      tr: ({ children }) => (
-        <tr className={isReasoning ? 'hover:bg-bg-200/10 transition-colors' : 'hover:bg-bg-200/12 transition-colors'}>
-          {children}
-        </tr>
-      ),
-      td: ({ children }) => (
-        <td
-          className={
-            isReasoning
-              ? 'px-3 py-1.5 text-[length:var(--fs-sm)] text-text-300 w-max border-b border-border-200/18'
-              : 'px-3 py-2 text-[length:var(--fs-md)] text-text-300 leading-[1.55] w-max border-b border-border-200/14'
-          }
-        >
-          {children}
-        </td>
-      ),
-
-      // --- Horizontal rule ---
-      hr: () => (
-        <hr
-          className={
-            isReasoning
-              ? 'border-border-200/40 my-4 first:mt-0 last:mb-0'
-              : 'border-border-200/60 my-8 first:mt-0 last:mb-0'
-          }
-        />
-      ),
-
-      // --- Strong & emphasis ---
-      strong: ({ children }) => (
-        <strong className={isReasoning ? 'font-semibold text-text-300' : 'font-semibold text-text-100'}>
-          {children}
-        </strong>
-      ),
-      em: ({ children }) => (
-        <em className={isReasoning ? 'italic text-text-300' : 'italic text-text-200'}>{children}</em>
-      ),
-
-      // --- Strikethrough (GFM) ---
-      del: ({ children }) => (
-        <del
-          className={
-            isReasoning
-              ? 'text-[length:var(--fs-sm)] text-text-500 line-through decoration-text-500/50'
-              : 'text-text-400 line-through decoration-text-400/50'
-          }
-        >
-          {children}
-        </del>
-      ),
-    })
-
-    return {
-      full: makeComponents(false),
-      live: makeComponents(isStreaming),
-    }
-  }, [isReasoning, isStreaming])
+  const handleClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.defaultPrevented) return
+    const target = event.target instanceof Element ? event.target : null
+    const anchor = target?.closest<HTMLAnchorElement>(`a[href^="${LOCAL_FILE_LINK_PREFIX}"]`)
+    const localPath = decodeLocalFileHref(anchor?.getAttribute('href') ?? undefined)
+    if (!anchor || !localPath) return
+    event.preventDefault()
+    openLocalFilePath(localPath)
+  }, [])
 
   return (
     <div
       className={`markdown-content ${isReasoning ? 'text-[length:var(--fs-sm)] leading-5 text-text-400' : 'text-[length:var(--fs-base)] leading-relaxed text-text-100'} break-words min-w-0 overflow-hidden ${className}`}
+      onClick={handleClick}
     >
       {streamBlocks.map((block, index) => (
         <MarkdownStreamBlock
           key={block.key}
           src={block.src}
-          components={block.mode === 'live' ? componentsByMode.live : componentsByMode.full}
-          isAnimating={isStreaming && block.mode === 'live'}
+          isReasoning={isReasoning}
+          isStreaming={isStreaming}
+          streamingCodeHighlight={isStreaming && block.mode === 'live'}
           isFirst={index === 0}
           isLast={index === streamBlocks.length - 1}
         />

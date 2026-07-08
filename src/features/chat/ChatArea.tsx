@@ -1279,6 +1279,7 @@ const PageBlock = memo(function PageBlock({
                   <RenderedMessageItem
                     key={message.info.id}
                     messageId={message.info.id}
+                    messageRole={message.info.role}
                     registerMessage={registerMessage}
                   >
                     <MessageRenderer
@@ -1359,12 +1360,14 @@ const CollapsedPagesBlock = memo(function CollapsedPagesBlock({ height }: { heig
 
 interface RenderedMessageItemProps {
   messageId: string
+  messageRole: 'user' | 'assistant'
   registerMessage?: (id: string, element: HTMLElement | null) => void
   children: ReactNode
 }
 
 const RenderedMessageItem = memo(function RenderedMessageItem({
   messageId,
+  messageRole,
   registerMessage,
   children,
 }: RenderedMessageItemProps) {
@@ -1376,7 +1379,7 @@ const RenderedMessageItem = memo(function RenderedMessageItem({
   )
 
   return (
-    <div ref={setElement} data-message-id={messageId}>
+    <div ref={setElement} data-message-id={messageId} data-message-role={messageRole}>
       {children}
     </div>
   )
