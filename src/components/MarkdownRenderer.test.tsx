@@ -96,6 +96,24 @@ describe('MarkdownRenderer', () => {
     expect(codeEl.className).toMatch(/text-accent-main-100/)
   })
 
+  it('keeps inline emphasis styles on the DOM markdown path', () => {
+    render(<MarkdownRenderer content={'**bold** *em* ~~gone~~'} />)
+
+    expect(screen.getByText('bold').className).toMatch(/text-text-100/)
+    expect(screen.getByText('em').className).toMatch(/text-text-200/)
+    expect(screen.getByText('gone').className).toMatch(/text-text-400/)
+  })
+
+  it('keeps task checkbox spacing on the DOM markdown path', () => {
+    const { container } = render(<MarkdownRenderer content={'- [x] done'} />)
+
+    const checkbox = container.querySelector('input[type="checkbox"]')
+    expect(checkbox).toBeInTheDocument()
+    expect(checkbox).toHaveClass('mr-2')
+    expect(checkbox).toHaveClass('align-middle')
+    expect(checkbox).not.toBeDisabled()
+  })
+
   it('renders fenced code blocks via CodeBlock', () => {
     render(<MarkdownRenderer content={'```ts\nconst x = 1\n```'} />)
 
@@ -362,12 +380,29 @@ $$`
 
   it('renders markdown table with copy button in default mode', () => {
     const md = '| A | B |\n|---|---|\n| 1 | 2 |'
-    render(<MarkdownRenderer content={md} />)
+    const { container } = render(<MarkdownRenderer content={md} />)
 
     // Table should be rendered
     expect(screen.getByRole('table')).toBeInTheDocument()
     // Copy button should exist
-    expect(screen.getByTestId('copy-button')).toBeInTheDocument()
+    const copyButton = screen.getByTestId('copy-button')
+    expect(copyButton).toBeInTheDocument()
+    expect(copyButton).toHaveTextContent('')
+    expect(copyButton.closest('th')).toBeInTheDocument()
+    expect(container.querySelector('[data-markdown-table-wrapper]')).toBeInTheDocument()
+    expect(container.querySelector('thead')?.className).toMatch(/text-text-200/)
+    expect(container.querySelector('tbody tr')?.className).toMatch(/hover:bg-bg-300/)
+  })
+
+  it('preserves markdown table alignment on the DOM markdown path', () => {
+    const { container } = render(<MarkdownRenderer content={'| L | R | C |\n|:--|--:|:-:|\n| a | b | c |'} />)
+
+    const headerCells = container.querySelectorAll('th')
+    const dataCells = container.querySelectorAll('td')
+    expect(headerCells[0]).toHaveStyle({ textAlign: 'left' })
+    expect(headerCells[1]).toHaveStyle({ textAlign: 'right' })
+    expect(headerCells[2]).toHaveStyle({ textAlign: 'center' })
+    expect(dataCells[1]).toHaveStyle({ textAlign: 'right' })
   })
 
   it('renders streaming markdown table with copy button in default mode', () => {

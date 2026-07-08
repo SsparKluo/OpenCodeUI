@@ -23,7 +23,7 @@ import { CopyButton } from './ui'
 import { useTheme } from '../hooks/useTheme'
 import { useInputCapabilities } from '../hooks/useInputCapabilities'
 import { detectLanguage } from '../utils/languageUtils'
-import { copyTextToClipboard } from '../utils/clipboard'
+import { clipboardErrorHandler, copyTextToClipboard } from '../utils'
 import { isTauri } from '../utils/tauri'
 import { projectMarkdownStream, type MarkdownStreamProjection } from './markdownStream'
 
@@ -456,6 +456,20 @@ function createMarkdownHtmlRenderer(isReasoning: boolean) {
   }
 
   renderer.text = ({ text }) => renderTextWithMathHtml(text)
+  renderer.strong = function ({ tokens }) {
+    const className = isReasoning ? 'font-semibold text-text-300' : 'font-semibold text-text-100'
+    return `<strong class="${className}">${this.parser.parseInline(tokens)}</strong>`
+  }
+  renderer.em = function ({ tokens }) {
+    const className = isReasoning ? 'italic text-text-300' : 'italic text-text-200'
+    return `<em class="${className}">${this.parser.parseInline(tokens)}</em>`
+  }
+  renderer.del = function ({ tokens }) {
+    const className = isReasoning
+      ? 'text-[length:var(--fs-sm)] text-text-500 line-through decoration-text-500/50'
+      : 'text-text-400 line-through decoration-text-400/50'
+    return `<del class="${className}">${this.parser.parseInline(tokens)}</del>`
+  }
   renderer.codespan = ({ text }) => {
     const className = isReasoning
       ? 'font-mono text-accent-main-100 text-[0.9em] align-baseline break-words'
@@ -518,6 +532,17 @@ function getTableCopyMarkdown(table: HTMLTableElement): string {
   return [`| ${headers.join(' | ')} |`, `| ${headers.map(() => '---').join(' | ')} |`, ...rows.map(row => `| ${row.join(' | ')} |`)].join('\n')
 }
 
+function createTableCopyButton(copyText: string) {
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.setAttribute('data-testid', 'copy-button')
+  button.setAttribute('data-markdown-copy', copyText)
+  button.setAttribute('aria-label', 'Copy to clipboard')
+  button.className = '!p-1 opacity-0 group-hover/table:opacity-100 group-focus-within/table:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity inline-flex h-7 w-7 items-center justify-center rounded text-text-400 hover:text-text-200 hover:bg-bg-300/70'
+  button.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>'
+  return button
+}
+
 function decorateMarkdownHtml(root: HTMLElement, isReasoning: boolean) {
   root.querySelectorAll('ol').forEach(list => {
     const start = Number(list.getAttribute('start') ?? '1')
@@ -537,18 +562,35 @@ function decorateMarkdownHtml(root: HTMLElement, isReasoning: boolean) {
   root.querySelectorAll('li').forEach(item => {
     item.className = isReasoning ? 'text-[length:var(--fs-sm)] text-text-400 pl-1 leading-5' : 'text-text-200 pl-1 leading-7'
   })
+  root.querySelectorAll('input[type="checkbox"]').forEach(input => {
+    if (!(input instanceof HTMLInputElement)) return
+    input.readOnly = true
+    input.disabled = false
+    input.removeAttribute('disabled')
+    input.className = 'mr-2 align-middle'
+  })
   root.querySelectorAll('hr').forEach(rule => {
     rule.className = isReasoning ? 'border-border-200/40 my-4 first:mt-0 last:mb-0' : 'border-border-200/60 my-8 first:mt-0 last:mb-0'
   })
   root.querySelectorAll('table').forEach(table => {
     if (!(table instanceof HTMLTableElement) || table.closest('[data-markdown-table-wrapper]')) return
     table.className = isReasoning ? 'min-w-full border-collapse text-[length:var(--fs-sm)]' : 'w-full text-[length:var(--fs-md)] border-collapse'
+    table.querySelectorAll('thead').forEach(section => {
+      section.className = isReasoning ? 'text-text-400' : 'text-text-200'
+    })
+    table.querySelectorAll('tr').forEach(row => {
+      row.className = isReasoning ? 'border-b border-border-200/18 last:border-b-0' : 'border-b border-border-200/14 last:border-b-0 transition-colors hover:bg-bg-300/20'
+    })
     table.querySelectorAll('th').forEach(cell => {
+      const align = cell.getAttribute('align')
+      if (align === 'left' || align === 'right' || align === 'center') cell.style.textAlign = align
       cell.className = isReasoning
         ? 'px-3 py-1.5 text-left text-[length:var(--fs-sm)] font-medium whitespace-nowrap border-b border-border-200/32'
         : 'relative px-3 py-2.5 text-left text-[length:var(--fs-md)] font-semibold whitespace-nowrap border-b border-border-200/38'
     })
     table.querySelectorAll('td').forEach(cell => {
+      const align = cell.getAttribute('align')
+      if (align === 'left' || align === 'right' || align === 'center') cell.style.textAlign = align
       cell.className = isReasoning
         ? 'px-3 py-1.5 text-[length:var(--fs-sm)] text-text-300 w-max border-b border-border-200/18'
         : 'px-3 py-2 text-[length:var(--fs-md)] text-text-300 leading-[1.55] w-max border-b border-border-200/14'
@@ -566,14 +608,22 @@ function decorateMarkdownHtml(root: HTMLElement, isReasoning: boolean) {
     scroll.appendChild(table)
     const copyText = getTableCopyMarkdown(table)
     if (!isReasoning && copyText) {
-      const button = document.createElement('button')
-      button.type = 'button'
-      button.setAttribute('data-testid', 'copy-button')
-      button.setAttribute('data-markdown-copy', copyText)
-      button.setAttribute('aria-label', 'Copy to clipboard')
-      button.className = 'absolute top-1.5 right-2 z-20 rounded p-1 text-text-400 opacity-0 transition-opacity group-hover/table:opacity-100 [@media(hover:none)]:opacity-100'
-      button.textContent = copyText.slice(0, 20)
-      wrapper.appendChild(button)
+      const headerCells = Array.from(table.querySelectorAll('thead tr:last-child th'))
+      const lastHeaderCell = headerCells.at(-1)
+      if (lastHeaderCell instanceof HTMLElement) {
+        const content = document.createElement('span')
+        content.className = 'block pr-8'
+        while (lastHeaderCell.firstChild) content.appendChild(lastHeaderCell.firstChild)
+        const buttonWrap = document.createElement('span')
+        buttonWrap.className = 'absolute inset-y-0 right-0 flex items-center px-2'
+        buttonWrap.appendChild(createTableCopyButton(copyText))
+        lastHeaderCell.appendChild(content)
+        lastHeaderCell.appendChild(buttonWrap)
+      } else {
+        const button = createTableCopyButton(copyText)
+        button.className += ' absolute top-1.5 right-2 z-20'
+        wrapper.appendChild(button)
+      }
     }
   })
 }
@@ -1512,7 +1562,7 @@ const MarkdownDomBlock = memo(function MarkdownDomBlock({ src, isReasoning }: { 
     const copyText = copyButton?.getAttribute('data-markdown-copy')
     if (!copyButton || !copyText) return
     event.preventDefault()
-    void copyTextToClipboard(copyText).catch(() => {})
+    void copyTextToClipboard(copyText).catch(err => clipboardErrorHandler('copy table', err))
   }, [])
 
   return <div ref={rootRef} onClick={handleClick} />
