@@ -558,8 +558,6 @@ export function SidePanel({
     currentProjectWorkspaceDirectories.length <= 1 &&
     !!normalizedCurrentDirectory &&
     !gitWorkspaceCatalog.has(normalizedCurrentDirectory)
-  const hideSidebarNewChat = canShowFolderRecents || shouldRenderWorkspaceTreeOnly
-
   const currentProjectTreeProjects = useMemo<ProjectItem[]>(() => {
     if (!shouldRenderWorkspaceTreeOnly || currentProject.id === 'global') return []
 
@@ -837,36 +835,34 @@ export function SidePanel({
 
       {/* ===== Navigation - 图标位置固定 ===== */}
       <div className="flex flex-col gap-0.5 mx-2">
-        {!hideSidebarNewChat && (
-          <button
-            type="button"
-            onClick={onNewSession}
-            aria-label={t('sidebar.newChat')}
-            className="h-8 flex items-center rounded-lg text-text-300 hover:text-text-100 hover:bg-bg-200 active:scale-[0.98] transition-all duration-300 group overflow-hidden"
-            style={{
-              width: showLabels ? '100%' : 32,
-              paddingLeft: 6,
-              paddingRight: 6,
-            }}
-            title={t('sidebar.newChat')}
+        <button
+          type="button"
+          onClick={onNewSession}
+          aria-label={t('sidebar.newChat')}
+          className="h-8 flex items-center rounded-lg text-text-300 hover:text-text-100 hover:bg-bg-200 active:scale-[0.98] transition-all duration-300 group overflow-hidden"
+          style={{
+            width: showLabels ? '100%' : 32,
+            paddingLeft: 6,
+            paddingRight: 6,
+          }}
+          title={t('sidebar.newChat')}
+        >
+          <span className="size-5 flex items-center justify-center shrink-0">
+            <PlusIcon size={16} />
+          </span>
+          <span
+            className="ml-2 text-[length:var(--fs-base)] whitespace-nowrap transition-opacity duration-300"
+            style={{ opacity: showLabels ? 1 : 0 }}
           >
-            <span className="size-5 flex items-center justify-center shrink-0">
-              <PlusIcon size={16} />
-            </span>
-            <span
-              className="ml-2 text-[length:var(--fs-base)] whitespace-nowrap transition-opacity duration-300"
-              style={{ opacity: showLabels ? 1 : 0 }}
-            >
-              {t('sidebar.newChat')}
-            </span>
-            <span
-              className="ml-auto text-[length:var(--fs-xxs)] text-text-500 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap"
-              style={{ opacity: showLabels ? undefined : 0 }}
-            >
-              {newChatShortcut}
-            </span>
-          </button>
-        )}
+            {t('sidebar.newChat')}
+          </span>
+          <span
+            className="ml-auto text-[length:var(--fs-xxs)] text-text-500 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap"
+            style={{ opacity: showLabels ? undefined : 0 }}
+          >
+            {newChatShortcut}
+          </span>
+        </button>
 
         <button
           type="button"

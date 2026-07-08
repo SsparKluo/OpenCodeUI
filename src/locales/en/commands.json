@@ -72,7 +72,7 @@
     "switchProject": "Switch Project",
     "failedToLoadProjects": "Failed to load projects",
     "noOtherProjects": "No other projects",
-    "addProject": "Add Project...",
+    "addProject": "Open Project...",
     "noProject": "No project",
     "removeProjectTitle": "Remove Project",
     "removeProjectConfirm": "Remove this project folder from the list? Files won't be deleted.",
