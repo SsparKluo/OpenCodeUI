@@ -1,4 +1,4 @@
-import { memo, useCallback, useDeferredValue, useMemo, useState, useSyncExternalStore } from 'react'
+import { memo, useCallback, useDeferredValue, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useInputCapabilities } from '../hooks/useInputCapabilities'
 import { useSyntaxHighlight, type HighlightTokens } from '../hooks/useSyntaxHighlight'
 import { useWorkerSyntaxHighlight } from '../hooks/useWorkerSyntaxHighlight'
@@ -44,6 +44,50 @@ function renderIncrementalTokens(tokens: HighlightTokens, suffix: string) {
     </>
   )
 }
+
+type FlatHighlightToken = { content: string; color?: string }
+
+function flattenTokens(tokens: HighlightTokens, suffix: string): FlatHighlightToken[] {
+  const result: FlatHighlightToken[] = []
+  tokens.forEach((line, lineIndex) => {
+    line.forEach(token => result.push({ content: token.content, color: token.color }))
+    if (lineIndex < tokens.length - 1) result.push({ content: '\n' })
+  })
+  if (suffix) result.push({ content: suffix })
+  return result
+}
+
+function sameFlatToken(left: FlatHighlightToken, right: FlatHighlightToken | undefined) {
+  return !!right && left.content === right.content && left.color === right.color
+}
+
+const StreamingCodeTokens = memo(function StreamingCodeTokens({ tokens, suffix }: { tokens: HighlightTokens; suffix: string }) {
+  const codeRef = useRef<HTMLElement | null>(null)
+  const previousRef = useRef<FlatHighlightToken[]>([])
+  const flatTokens = useMemo(() => flattenTokens(tokens, suffix), [suffix, tokens])
+
+  useLayoutEffect(() => {
+    const code = codeRef.current
+    if (!code) return
+
+    const previous = previousRef.current
+    let keep = 0
+    while (keep < previous.length && keep < flatTokens.length && sameFlatToken(previous[keep], flatTokens[keep])) {
+      keep += 1
+    }
+
+    while (code.childNodes.length > keep) code.lastChild?.remove()
+    flatTokens.slice(keep).forEach(token => {
+      const node = document.createElement('span')
+      if (token.color) node.style.color = token.color
+      node.textContent = token.content
+      code.appendChild(node)
+    })
+    previousRef.current = flatTokens
+  }, [flatTokens])
+
+  return <code ref={codeRef} className="font-mono select-text" />
+})
 
 interface CodeBlockProps {
   code: string
@@ -168,9 +212,13 @@ export const CodeBlock = memo(function CodeBlock({
       }`}
       suppressHydrationWarning
     >
-      <code className="font-mono select-text">
-        {renderIncrementalTokens(displayedHighlight.tokens, displayedHighlight.suffix)}
-      </code>
+      {shouldStreamHighlight ? (
+        <StreamingCodeTokens tokens={displayedHighlight.tokens} suffix={displayedHighlight.suffix} />
+      ) : (
+        <code className="font-mono select-text">
+          {renderIncrementalTokens(displayedHighlight.tokens, displayedHighlight.suffix)}
+        </code>
+      )}
     </pre>
   ) : (
     <pre className={`${contentPad} m-0 font-mono select-text ${textColor} ${fontSize} ${lineHeight} ${wrapClasses}`}>

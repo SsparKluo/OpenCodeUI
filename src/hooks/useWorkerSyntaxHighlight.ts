@@ -29,6 +29,8 @@ function getWorker(): Worker {
         pendingRequests.delete(msg.id)
         if (msg.type === 'error') {
           pending.reject(new Error(msg.message))
+        } else if (msg.type === 'superseded') {
+          pending.reject(new Error('superseded'))
         } else {
           pending.resolve(msg)
         }
