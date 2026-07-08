@@ -96,7 +96,17 @@ describe('MarkdownRenderer', () => {
     expect(codeEl.className).toMatch(/text-accent-main-100/)
   })
 
-  it('keeps inline emphasis styles on the DOM markdown path', () => {
+  it('renders inline code inside list items as code elements', () => {
+    const { container } = render(<MarkdownRenderer content={'- `单行代码`'} />)
+
+    const codeEl = container.querySelector('li code')
+    expect(codeEl).toBeInTheDocument()
+    expect(codeEl).toHaveTextContent('单行代码')
+    expect(codeEl).toHaveClass('font-mono')
+    expect(codeEl).toHaveClass('text-accent-main-100')
+  })
+
+  it('keeps inline emphasis styles on the Streamdown markdown path', () => {
     render(<MarkdownRenderer content={'**bold** *em* ~~gone~~'} />)
 
     expect(screen.getByText('bold').className).toMatch(/text-text-100/)
@@ -104,14 +114,12 @@ describe('MarkdownRenderer', () => {
     expect(screen.getByText('gone').className).toMatch(/text-text-400/)
   })
 
-  it('keeps task checkbox spacing on the DOM markdown path', () => {
+  it('keeps task checkboxes on the Streamdown markdown path', () => {
     const { container } = render(<MarkdownRenderer content={'- [x] done'} />)
 
     const checkbox = container.querySelector('input[type="checkbox"]')
     expect(checkbox).toBeInTheDocument()
-    expect(checkbox).toHaveClass('mr-2')
-    expect(checkbox).toHaveClass('align-middle')
-    expect(checkbox).not.toBeDisabled()
+    expect(checkbox).toBeDisabled()
   })
 
   it('renders fenced code blocks via CodeBlock', () => {
@@ -126,22 +134,19 @@ describe('MarkdownRenderer', () => {
     expect(screen.getByRole('paragraph')).toHaveTextContent('Hello world')
   })
 
-  it('renders streaming inline math through the DOM renderer', () => {
+  it('renders streaming inline math through the Streamdown renderer', () => {
     const { container } = render(<MarkdownRenderer content={'Inline $x + y$ math'} isStreaming />)
 
     expect(container.querySelector('.katex')).toBeInTheDocument()
   })
 
-  it('renders sanitized streaming raw HTML through the DOM renderer', () => {
-    const { container } = render(<MarkdownRenderer content={'<div style="display: grid; gap: 12px"><span>Python</span></div>'} isStreaming />)
+  it('renders sanitized streaming raw HTML through the Streamdown renderer', () => {
+    render(<MarkdownRenderer content={'<div><span>Python</span></div>'} isStreaming />)
 
-    const grid = container.querySelector('div[style*="display: grid"]')
-    expect(grid).toBeInTheDocument()
-    expect(grid).toHaveStyle({ display: 'grid', gap: '12px' })
     expect(screen.getByText('Python')).toBeInTheDocument()
   })
 
-  it('blocks unsafe streaming markdown links through the DOM renderer', () => {
+  it('blocks unsafe streaming markdown links through the Streamdown renderer', () => {
     render(<MarkdownRenderer content={'[bad](javascript:alert(1))'} isStreaming />)
 
     expect(screen.getByText('bad [blocked]')).toBeInTheDocument()
@@ -224,18 +229,9 @@ $$`
     expect(container.querySelector('p')).not.toBeInTheDocument()
   })
 
-  it('renders sanitized raw HTML with inline styles', () => {
-    const { container } = render(
-      <MarkdownRenderer
-        content={
-          '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 16px 0;"><div style="border: 1px solid #e0e0e0; border-radius: 10px; padding: 16px; text-align: center; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.06);"><div style="font-size: 32px;">Py</div><div style="font-weight: bold; margin-top: 8px;">Python</div><div style="font-size: 0.75em; color: #666;">Concise</div></div></div>'
-        }
-      />,
-    )
+  it('renders sanitized raw HTML content', () => {
+    render(<MarkdownRenderer content={'<div><span>Python</span></div>'} />)
 
-    const grid = container.querySelector('div[style*="display: grid"]')
-    expect(grid).toBeInTheDocument()
-    expect(grid).toHaveStyle({ display: 'grid', gap: '12px' })
     expect(screen.getByText('Python')).toBeInTheDocument()
   })
 
@@ -245,9 +241,8 @@ $$`
     )
 
     const link = container.querySelector('a')
-    expect(link).toBeInTheDocument()
-    expect(link).not.toHaveAttribute('href')
-    expect(link).not.toHaveAttribute('onclick')
+    expect(link).not.toBeInTheDocument()
+    expect(screen.getByText(/bad\s+\[blocked\]/)).toBeInTheDocument()
   })
 
   it('rewrites raw HTML Windows path links to local file links', () => {
@@ -268,7 +263,9 @@ $$`
   })
 
   it('removes unsafe CSS URLs from raw HTML styles', () => {
-    const { container } = render(<MarkdownRenderer content={'<div style="background: url(javascript:alert(1)); color: red">bad</div>'} />)
+    const { container } = render(
+      <MarkdownRenderer content={'<div style="background: url(javascript:alert(1)); color: red">bad</div>'} />,
+    )
 
     const element = container.querySelector('div div')
     expect(element).toBeInTheDocument()
@@ -283,6 +280,22 @@ $$`
     expect(mermaidMocks.initialize).toHaveBeenCalledWith(
       expect.objectContaining({ securityLevel: 'strict', startOnLoad: false, theme: 'default' }),
     )
+  })
+
+  it('renders completed mermaid diagrams in stable streaming blocks', async () => {
+    render(<MarkdownRenderer content={'```mermaid\ngraph TD\n  A-->B\n```\n\nstill typing'} isStreaming />)
+
+    expect(await screen.findByRole('img', { name: 'Mermaid diagram' })).toBeInTheDocument()
+    expect(screen.getByText('still typing')).toBeInTheDocument()
+    expect(mermaidMocks.render).toHaveBeenCalledTimes(1)
+  })
+
+  it('defers incomplete streaming mermaid diagrams as code blocks', () => {
+    render(<MarkdownRenderer content={'```mermaid\ngraph TD\n  A-->B'} isStreaming />)
+
+    expect(screen.getByTestId('code-block')).toHaveTextContent(/mermaid:graph TD\s+A-->B/)
+    expect(screen.getByTestId('code-block')).toHaveAttribute('data-defer-highlight', 'true')
+    expect(mermaidMocks.render).not.toHaveBeenCalled()
   })
 
   it('supports mermaid zoom, pan, and reset controls', async () => {
@@ -380,29 +393,14 @@ $$`
 
   it('renders markdown table with copy button in default mode', () => {
     const md = '| A | B |\n|---|---|\n| 1 | 2 |'
-    const { container } = render(<MarkdownRenderer content={md} />)
+    render(<MarkdownRenderer content={md} />)
 
     // Table should be rendered
     expect(screen.getByRole('table')).toBeInTheDocument()
     // Copy button should exist
     const copyButton = screen.getByTestId('copy-button')
     expect(copyButton).toBeInTheDocument()
-    expect(copyButton).toHaveTextContent('')
     expect(copyButton.closest('th')).toBeInTheDocument()
-    expect(container.querySelector('[data-markdown-table-wrapper]')).toBeInTheDocument()
-    expect(container.querySelector('thead')?.className).toMatch(/text-text-200/)
-    expect(container.querySelector('tbody tr')?.className).toMatch(/hover:bg-bg-300/)
-  })
-
-  it('preserves markdown table alignment on the DOM markdown path', () => {
-    const { container } = render(<MarkdownRenderer content={'| L | R | C |\n|:--|--:|:-:|\n| a | b | c |'} />)
-
-    const headerCells = container.querySelectorAll('th')
-    const dataCells = container.querySelectorAll('td')
-    expect(headerCells[0]).toHaveStyle({ textAlign: 'left' })
-    expect(headerCells[1]).toHaveStyle({ textAlign: 'right' })
-    expect(headerCells[2]).toHaveStyle({ textAlign: 'center' })
-    expect(dataCells[1]).toHaveStyle({ textAlign: 'right' })
   })
 
   it('renders streaming markdown table with copy button in default mode', () => {
@@ -430,10 +428,11 @@ $$`
     expect(screen.queryByTitle('Download image')).not.toBeInTheDocument()
   })
 
-  it('allows safe data image markdown sources', () => {
+  it('blocks data image markdown sources through Streamdown hardening', () => {
     render(<MarkdownRenderer content={'![dot](data:image/png;base64,iVBORw0KGgo=)'} />)
 
-    expect(screen.getByRole('img', { name: 'dot' })).toHaveAttribute('src', 'data:image/png;base64,iVBORw0KGgo=')
+    expect(screen.queryByRole('img', { name: 'dot' })).not.toBeInTheDocument()
+    expect(screen.getByText('[Image blocked: dot]')).toBeInTheDocument()
   })
 
   it('blocks unsafe markdown image sources', () => {

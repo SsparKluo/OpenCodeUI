@@ -41,12 +41,16 @@ export default defineConfig({
           // 语言 grammar（@shikijs/langs/*）由 dynamic import 自动拆分
           if ((id.includes('shiki') || id.includes('@shikijs/')) && !id.includes('@shikijs/langs'))
             return 'vendor-shiki'
-          if (id.includes('marked') || id.includes('katex') || id.includes('dompurify')) return 'vendor-markdown'
+          if (id.includes('streamdown') || id.includes('remend') || id.includes('katex')) return 'vendor-markdown'
 
           if (id.includes('@tauri-apps/')) return 'vendor-tauri'
         },
       },
     },
+  },
+
+  worker: {
+    format: 'es',
   },
 
   // Tauri CLI 兼容：不清屏，让 Tauri 的日志能保留在终端

@@ -8,13 +8,23 @@ import {
 } from 'shiki/core'
 import { createOnigurumaEngine } from 'shiki/engine/oniguruma'
 import onigWasmUrl from 'shiki/onig.wasm?url'
+import { bundledLanguagesAlias, bundledLanguagesBase } from 'shiki/langs'
 import type { BundledTheme } from 'shiki/themes'
 
 export type WorkerToken = [content: string, color: string]
 
 export type WorkerRequest =
   | { type: 'init'; themes: BundledTheme[] }
-  | { type: 'highlight'; id: number; key: string; text: string; language: string; theme: BundledTheme; complete?: boolean }
+  | {
+      type: 'highlight'
+      id: number
+      key: string
+      text: string
+      language: string
+      theme: BundledTheme
+      mode: 'tokens' | 'html'
+      complete?: boolean
+    }
   | { type: 'dispose'; key: string }
 
 export type WorkerResponse =
@@ -22,9 +32,11 @@ export type WorkerResponse =
       type: 'highlight'
       id: number
       key: string
+      code: string
       reset: boolean
       stable: WorkerToken[]
       unstable: WorkerToken[]
+      html?: string
     }
   | { type: 'error'; id: number; key: string; message: string }
   | { type: 'superseded'; id: number; key: string }
@@ -42,77 +54,12 @@ const activeHighlights = new Set<string>()
 const queuedHighlights = new Map<string, Extract<WorkerRequest, { type: 'highlight' }>>()
 let highlighter: Promise<HighlighterCore> | undefined
 let onigWasmPromise: Promise<ArrayBuffer> | null = null
+const plainLanguages = new Set(['text', 'txt', 'plain', 'plaintext'])
 
-const langLoaders: Record<string, () => Promise<unknown>> = {
-  bash: () => import('@shikijs/langs/bash'),
-  c: () => import('@shikijs/langs/c'),
-  clojure: () => import('@shikijs/langs/clojure'),
-  cmake: () => import('@shikijs/langs/cmake'),
-  cpp: () => import('@shikijs/langs/cpp'),
-  csharp: () => import('@shikijs/langs/csharp'),
-  css: () => import('@shikijs/langs/css'),
-  diff: () => import('@shikijs/langs/diff'),
-  dockerfile: () => import('@shikijs/langs/dockerfile'),
-  dotenv: () => import('@shikijs/langs/dotenv'),
-  elixir: () => import('@shikijs/langs/elixir'),
-  erlang: () => import('@shikijs/langs/erlang'),
-  fish: () => import('@shikijs/langs/fish'),
-  go: () => import('@shikijs/langs/go'),
-  graphql: () => import('@shikijs/langs/graphql'),
-  groovy: () => import('@shikijs/langs/groovy'),
-  haskell: () => import('@shikijs/langs/haskell'),
-  html: () => import('@shikijs/langs/html'),
-  ini: () => import('@shikijs/langs/ini'),
-  java: () => import('@shikijs/langs/java'),
-  javascript: () => import('@shikijs/langs/javascript'),
-  json: () => import('@shikijs/langs/json'),
-  jsonc: () => import('@shikijs/langs/jsonc'),
-  jsx: () => import('@shikijs/langs/jsx'),
-  kotlin: () => import('@shikijs/langs/kotlin'),
-  less: () => import('@shikijs/langs/less'),
-  lua: () => import('@shikijs/langs/lua'),
-  make: () => import('@shikijs/langs/make'),
-  markdown: () => import('@shikijs/langs/markdown'),
-  'objective-c': () => import('@shikijs/langs/objective-c'),
-  'objective-cpp': () => import('@shikijs/langs/objective-cpp'),
-  perl: () => import('@shikijs/langs/perl'),
-  php: () => import('@shikijs/langs/php'),
-  powershell: () => import('@shikijs/langs/powershell'),
-  prisma: () => import('@shikijs/langs/prisma'),
-  protobuf: () => import('@shikijs/langs/proto'),
-  python: () => import('@shikijs/langs/python'),
-  r: () => import('@shikijs/langs/r'),
-  ruby: () => import('@shikijs/langs/ruby'),
-  rust: () => import('@shikijs/langs/rust'),
-  scala: () => import('@shikijs/langs/scala'),
-  scss: () => import('@shikijs/langs/scss'),
-  shellscript: () => import('@shikijs/langs/shellscript'),
-  sql: () => import('@shikijs/langs/sql'),
-  svelte: () => import('@shikijs/langs/svelte'),
-  swift: () => import('@shikijs/langs/swift'),
-  terraform: () => import('@shikijs/langs/terraform'),
-  toml: () => import('@shikijs/langs/toml'),
-  tsx: () => import('@shikijs/langs/tsx'),
-  typescript: () => import('@shikijs/langs/typescript'),
-  viml: () => import('@shikijs/langs/viml'),
-  vue: () => import('@shikijs/langs/vue'),
-  xml: () => import('@shikijs/langs/xml'),
-  yaml: () => import('@shikijs/langs/yaml'),
-}
-const languageAliases: Record<string, string> = {
-  'c++': 'cpp',
-  'c#': 'csharp',
-  cs: 'csharp',
-  golang: 'go',
-  javascriptreact: 'jsx',
-  js: 'javascript',
-  mjs: 'javascript',
-  py: 'python',
-  shell: 'bash',
-  ts: 'typescript',
-  typescriptreact: 'tsx',
-  yml: 'yaml',
-}
+const langLoaders = {
+  ...bundledLanguagesBase,
+  ...bundledLanguagesAlias,
+} as Record<string, (() => Promise<unknown>) | undefined>
 
 function loadOnigWasm(): Promise<ArrayBuffer> {
   onigWasmPromise ??= fetch(onigWasmUrl).then(response => {
@@ -123,8 +70,7 @@ function loadOnigWasm(): Promise<ArrayBuffer> {
 }
 
 function findLangLoader(lang: string): (() => Promise<unknown>) | undefined {
-  const key = languageAliases[lang] ?? lang
-  return langLoaders[key]
+  return langLoaders[lang.toLowerCase()]
 }
 
 async function ensureLang(instance: HighlighterCore, lang: string): Promise<boolean> {
@@ -139,13 +85,59 @@ function toWorkerToken(value: ThemedToken): WorkerToken {
   return [value.content, value.color ?? '']
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function plainTextHtml(value: string): string {
+  return `<pre class="shiki"><code>${escapeHtml(value)}</code></pre>`
+}
+
 async function highlight(request: Extract<WorkerRequest, { type: 'highlight' }>) {
   try {
     const instance = await highlighter
     if (!instance) throw new Error('Shiki worker not initialized')
 
-    const language = findLangLoader(request.language) ? request.language : 'text'
-    await ensureLang(instance, language)
+    const requestedLanguage = request.language.toLowerCase()
+    const language = plainLanguages.has(requestedLanguage) || findLangLoader(requestedLanguage) ? requestedLanguage : 'text'
+    const isPlainText = plainLanguages.has(language)
+    const loaded = isPlainText ? true : await ensureLang(instance, language)
+    if (!loaded) throw new Error(`Unsupported Shiki language: ${request.language}`)
+
+    if (isPlainText) {
+      post({
+        type: 'highlight',
+        id: request.id,
+        key: request.key,
+        code: request.text,
+        reset: true,
+        stable: request.mode === 'html' ? [] : [[request.text, '']],
+        unstable: [],
+        html: request.mode === 'html' ? plainTextHtml(request.text) : undefined,
+      })
+      return
+    }
+
+    if (request.mode === 'html') {
+      const html = instance.codeToHtml(request.text, { lang: language, theme: request.theme })
+      streams.delete(request.key)
+      post({
+        type: 'highlight',
+        id: request.id,
+        key: request.key,
+        code: request.text,
+        reset: true,
+        stable: [],
+        unstable: [],
+        html,
+      })
+      return
+    }
 
     if (request.complete) {
       const result = instance.codeToTokens(request.text, { lang: language, theme: request.theme })
@@ -154,6 +146,7 @@ async function highlight(request: Extract<WorkerRequest, { type: 'highlight' }>)
         type: 'highlight',
         id: request.id,
         key: request.key,
+        code: request.text,
         reset: true,
         stable: result.tokens
           .flatMap((line, index) =>
@@ -178,6 +171,7 @@ async function highlight(request: Extract<WorkerRequest, { type: 'highlight' }>)
       type: 'highlight',
       id: request.id,
       key: request.key,
+      code: request.text,
       reset,
       stable: stream.tokenizer.tokensStable.filter(t => t.content.length > 0).map(toWorkerToken),
       unstable: stream.tokenizer.tokensUnstable.filter(t => t.content.length > 0).map(toWorkerToken),

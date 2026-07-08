@@ -1,13 +1,9 @@
-import { marked } from 'marked'
-import type { Tokens } from 'marked'
+import { parseMarkdownIntoBlocks } from 'streamdown'
 
 export type MarkdownStreamBlock = {
   key: string
   src: string
-  raw?: string
-  mode: 'full' | 'live' | 'code'
-  language?: string
-  complete?: boolean
+  mode: 'full' | 'live'
 }
 
 export type MarkdownStreamProjection = {
@@ -56,10 +52,6 @@ function getOpeningFence(raw: string) {
   return { char: match[1][0], size: match[1].length }
 }
 
-function getLanguage(value: string | undefined) {
-  return value?.trim().split(/\s+/, 1)[0] || undefined
-}
-
 function hasOpenFence(raw: string) {
   return getTrailingOpenFenceStart(raw) === 0
 }
@@ -72,80 +64,36 @@ function suffixClosesOpenFence(raw: string, suffix: string) {
 }
 
 function splitMarkdownBlocks(markdown: string) {
-  const blocks: Array<{ start: number; raw: string; src: string; token?: Tokens.Generic }> = []
+  const blocks: Array<{ start: number; src: string }> = []
   let offset = 0
 
-  for (const token of marked.lexer(markdown)) {
-    const raw = typeof token.raw === 'string' ? token.raw : ''
+  for (const src of parseMarkdownIntoBlocks(markdown)) {
     const start = offset
-    offset += raw.length
-    if (!raw) continue
+    offset += src.length
+    if (!src) continue
 
-    if (raw.trim() === '' && blocks.length > 0) {
-      blocks[blocks.length - 1].raw += raw
-      if (blocks[blocks.length - 1].token?.type !== 'code') blocks[blocks.length - 1].src += raw
+    if (src.trim() === '' && blocks.length > 0) {
+      blocks[blocks.length - 1].src += src
       continue
     }
 
-    blocks.push({ start, raw, src: token.type === 'code' ? String((token as Tokens.Code).text ?? '') : raw, token })
+    blocks.push({ start, src })
   }
 
-  if (offset < markdown.length) {
-    const rest = markdown.slice(offset)
-    if (blocks.length > 0) {
-      blocks[blocks.length - 1].raw += rest
-      blocks[blocks.length - 1].src += rest
-    } else blocks.push({ start: offset, raw: rest, src: rest })
-  }
-
-  return blocks.length > 0 ? blocks : [{ start: 0, raw: markdown, src: markdown }]
+  return blocks.length > 0 ? blocks : [{ start: 0, src: markdown }]
 }
 
 export function splitMarkdownStream(markdown: string, isStreaming: boolean): MarkdownStreamBlock[] {
-  if (!isStreaming) {
-    if (!markdown) return [{ key: 'full:empty', src: '', mode: 'full' }]
-    if (hasReferenceDefinitions(markdown)) return [{ key: `full:${hashString(markdown)}`, src: markdown, mode: 'full' }]
-    return splitMarkdownBlocks(markdown).map(block => {
-      if (block.token?.type === 'code') {
-        const language = getLanguage((block.token as Tokens.Code).lang)
-        return {
-          key: `code:${block.start}:${hashString(block.raw)}`,
-          raw: block.raw,
-          src: block.src,
-          mode: 'code',
-          language,
-          complete: true,
-        }
-      }
-      return {
-        key: `full:${block.start}:${hashString(block.raw)}`,
-        raw: block.raw,
-        src: block.raw,
-        mode: 'full',
-      }
-    })
-  }
+  if (!isStreaming) return [{ key: `full:${hashString(markdown)}`, src: markdown, mode: 'full' }]
   if (!markdown) return [{ key: 'live:empty', src: '', mode: 'live' }]
   if (hasReferenceDefinitions(markdown)) return [{ key: 'live:0:references', src: markdown, mode: 'live' }]
 
   const fenceStart = getTrailingOpenFenceStart(markdown)
   const blocks = splitMarkdownBlocks(markdown)
-  if (blocks.length === 1 && blocks[0]?.token?.type !== 'code') return [{ key: 'live:0:', src: markdown, mode: 'live' }]
+  if (blocks.length === 1) return [{ key: 'live:0:', src: markdown, mode: 'live' }]
 
-  return blocks.map((block, index) => {
-    const isLiveTail = index === blocks.length - 1 || (fenceStart != null && block.start >= fenceStart)
-    if (block.token?.type === 'code') {
-      const complete = fenceStart == null || block.start < fenceStart
-      const language = getLanguage((block.token as Tokens.Code).lang)
-      return {
-        key: `code:${block.start}:${complete ? hashString(block.raw) : ''}`,
-        raw: block.raw,
-        src: block.src,
-        mode: 'code',
-        language,
-        complete,
-      }
-    }
+  return blocks.map(block => {
+    const isLiveTail = block === blocks[blocks.length - 1] || (fenceStart != null && block.start >= fenceStart)
     return {
       key: `${isLiveTail ? 'live' : 'stable'}:${block.start}:${isLiveTail ? '' : hashString(block.src)}`,
       src: block.src,
@@ -165,7 +113,7 @@ export function projectMarkdownStream(
 
   const suffix = markdown.slice(previous.text.length)
   const tail = previous.blocks.at(-1)
-  if (!suffix || tail?.mode !== 'code' || tail.complete || !tail.raw || !hasOpenFence(tail.raw) || suffixClosesOpenFence(tail.raw, suffix)) {
+  if (!suffix || tail?.mode !== 'live' || !hasOpenFence(tail.src) || suffixClosesOpenFence(tail.src, suffix)) {
     return { text: markdown, blocks: splitMarkdownStream(markdown, isStreaming) }
   }
 
@@ -175,7 +123,6 @@ export function projectMarkdownStream(
       ...previous.blocks.slice(0, -1),
       {
         ...tail,
-        raw: tail.raw + suffix,
         src: tail.src + suffix,
       },
     ],

@@ -1,109 +1,8 @@
 import { useState, useEffect, useRef, useMemo, useId } from 'react'
-import { normalizeLanguage } from '../utils/languageUtils'
 import type { BundledTheme } from 'shiki/themes'
-import type { WorkerRequest, WorkerResponse, WorkerToken } from '../workers/shikiWorker'
-import type { HighlightTokens } from './useSyntaxHighlight'
-
-type FlatToken = HighlightTokens[number][number]
-
-let worker: Worker | null = null
-let workerReady: Promise<void> | null = null
-let nextId = 1
-
-const pendingRequests = new Map<number, { resolve: (r: WorkerResponse) => void; reject: (err: unknown) => void }>()
-const latestRequestByKey = new Map<string, number>()
-
-function getWorker(): Worker {
-  if (worker) return worker
-  worker = new Worker(new URL('../workers/shikiWorker.ts', import.meta.url), { type: 'module' })
-
-  worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
-    const msg = event.data
-    if (msg.type === 'ready') {
-      workerReadyPromiseResolve?.()
-      return
-    }
-    if ('id' in msg) {
-      const pending = pendingRequests.get(msg.id)
-      if (pending) {
-        pendingRequests.delete(msg.id)
-        if (msg.type === 'error') {
-          pending.reject(new Error(msg.message))
-        } else if (msg.type === 'superseded') {
-          pending.reject(new Error('superseded'))
-        } else {
-          pending.resolve(msg)
-        }
-      }
-    }
-  }
-
-  return worker
-}
-
-let workerReadyPromiseResolve: (() => void) | null = null
-function ensureWorkerReady(): Promise<void> {
-  if (workerReady) return workerReady
-  workerReady = new Promise(resolve => {
-    workerReadyPromiseResolve = resolve
-  })
-  const w = getWorker()
-  w.postMessage({ type: 'init', themes: ['github-dark-default', 'github-light-default'] } satisfies WorkerRequest)
-  return workerReady
-}
-
-function workerHighlight(params: {
-  key: string
-  text: string
-  language: string
-  theme: BundledTheme
-  complete?: boolean
-}): Promise<Extract<WorkerResponse, { type: 'highlight' }>> {
-  const id = nextId++
-  const w = getWorker()
-
-  latestRequestByKey.set(params.key, id)
-
-  return new Promise<Extract<WorkerResponse, { type: 'highlight' }>>((resolve, reject) => {
-    pendingRequests.set(id, {
-      resolve: resolve as (r: WorkerResponse) => void,
-      reject: reject as (err: unknown) => void,
-    })
-    w.postMessage({ type: 'highlight', id, ...params } satisfies WorkerRequest)
-  })
-}
-
-function workerDispose(key: string) {
-  if (!worker) return
-  worker.postMessage({ type: 'dispose', key } satisfies WorkerRequest)
-  latestRequestByKey.delete(key)
-}
-
-function splitTokensIntoLines(tokens: WorkerToken[]): HighlightTokens {
-  if (tokens.length === 0) return [[]]
-  const lines: HighlightTokens = []
-  let currentLine: FlatToken[] = []
-
-  for (const [content, color] of tokens) {
-    const token: FlatToken = { content, color } as FlatToken
-    const newlineIndex = content.indexOf('\n')
-    if (newlineIndex === -1) {
-      currentLine.push(token)
-      continue
-    }
-    const segments = content.split('\n')
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i]
-      if (seg) currentLine.push(i === 0 && seg === content ? token : { ...token, content: seg })
-      if (i < segments.length - 1) {
-        lines.push(currentLine)
-        currentLine = []
-      }
-    }
-  }
-  if (currentLine.length > 0 || lines.length === 0) lines.push(currentLine)
-  return lines
-}
+import { highlightTokensInWorker, disposeShikiWorkerKey } from '../lib/shikiWorkerClient'
+import type { HighlightTokens } from '../lib/highlightTypes'
+import { normalizeLanguage } from '../utils/languageUtils'
 
 function getShikiTheme(isDark: boolean): { theme: BundledTheme; key: string } {
   const theme = isDark ? 'github-dark-default' : 'github-light-default'
@@ -200,37 +99,25 @@ export function useWorkerSyntaxHighlight(
   const key = `${instanceId}:${normalizedLang}:${resolvedTheme.key}`
 
   useEffect(() => {
-    if (!enabled) {
-      return
-    }
+    if (!enabled) return
 
     let cancelled = false
     const previousKey = workerKeyRef.current
-    if (previousKey && previousKey !== key) workerDispose(previousKey)
+    if (previousKey && previousKey !== key) disposeShikiWorkerKey(previousKey)
     workerKeyRef.current = key
 
-    void (async () => {
-      try {
-        await ensureWorkerReady()
-        if (cancelled || workerKeyRef.current !== key) return
-
-        const result = await workerHighlight({
-          key,
-          text: code,
-          language: normalizedLang,
-          theme: resolvedTheme.theme,
-        })
-        if (cancelled) return
-
-        const latest = latestRequestByKey.get(key)
-        if (result.id !== latest) return
-
-        const tokens = splitTokensIntoLines([...result.stable, ...result.unstable])
-        setOutputState({ code, tokens })
-      } catch {
+    void highlightTokensInWorker({
+      key,
+      text: code,
+      language: normalizedLang,
+      theme: resolvedTheme.theme,
+    })
+      .then(result => {
+        if (!cancelled) setOutputState({ code: result.code, tokens: result.tokens })
+      })
+      .catch(() => {
         // Worker failures fall back to plain code rendering in CodeBlock.
-      }
-    })()
+      })
 
     return () => {
       cancelled = true
@@ -239,7 +126,7 @@ export function useWorkerSyntaxHighlight(
 
   useEffect(() => {
     return () => {
-      if (workerKeyRef.current) workerDispose(workerKeyRef.current)
+      if (workerKeyRef.current) disposeShikiWorkerKey(workerKeyRef.current)
     }
   }, [])
 
