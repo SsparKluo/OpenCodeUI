@@ -6,10 +6,12 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from 'react'
+import morphdom from 'morphdom'
 import { marked } from 'marked'
 import type { Tokens as MarkedTokens } from 'marked'
 import katex from 'katex'
@@ -21,8 +23,9 @@ import { CopyButton } from './ui'
 import { useTheme } from '../hooks/useTheme'
 import { useInputCapabilities } from '../hooks/useInputCapabilities'
 import { detectLanguage } from '../utils/languageUtils'
+import { copyTextToClipboard } from '../utils/clipboard'
 import { isTauri } from '../utils/tauri'
-import { splitMarkdownStream } from './markdownStream'
+import { projectMarkdownStream, type MarkdownStreamProjection } from './markdownStream'
 
 interface MarkdownRendererProps {
   content: string
@@ -63,6 +66,7 @@ type MermaidRendererProps = {
 }
 
 let mermaidRenderCounter = 0
+const markdownProjectionCache = new Map<string, MarkdownStreamProjection>()
 
 function createMermaidRenderId(prefix: string) {
   mermaidRenderCounter += 1
@@ -248,6 +252,19 @@ function textFromInlineTokens(tokens: unknown[] | undefined): string {
     .join('')
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function escapeAttribute(value: string): string {
+  return escapeHtml(value).replace(/`/g, '&#96;')
+}
+
 function renderKatex(source: string, displayMode: boolean, key: string) {
   try {
     return (
@@ -265,6 +282,19 @@ function renderKatex(source: string, displayMode: boolean, key: string) {
     )
   } catch {
     return <span key={key}>{displayMode ? `$$${source}$$` : `$${source}$`}</span>
+  }
+}
+
+function renderKatexHtml(source: string, displayMode: boolean): string {
+  try {
+    return katex.renderToString(source, {
+      displayMode,
+      throwOnError: false,
+      strict: false,
+      trust: false,
+    })
+  } catch {
+    return escapeHtml(displayMode ? `$$${source}$$` : `$${source}$`)
   }
 }
 
@@ -347,6 +377,205 @@ function renderTextWithMath(text: string, keyPrefix: string): React.ReactNode {
 
   if (lastIndex < text.length) nodes.push(text.slice(lastIndex))
   return nodes.length > 0 ? nodes : text
+}
+
+function renderTextWithMathHtml(text: string): string {
+  if (!text.includes('$')) return escapeHtml(text)
+
+  const chunks: string[] = []
+  let cursor = 0
+  let lastIndex = 0
+
+  while (cursor < text.length) {
+    if (text[cursor] !== '$' || isEscapedAt(text, cursor)) {
+      cursor += 1
+      continue
+    }
+
+    const display = text[cursor + 1] === '$'
+    const marker = display ? '$$' : '$'
+    const start = cursor + marker.length
+    let end = start
+    let close = -1
+
+    while (end < text.length) {
+      const next = text.indexOf(marker, end)
+      if (next === -1) break
+      if (!isEscapedAt(text, next)) {
+        close = next
+        break
+      }
+      end = next + marker.length
+    }
+
+    if (close === -1) {
+      cursor += marker.length
+      continue
+    }
+
+    const source = text.slice(start, close)
+    if (!display && (!source || source.includes('\n'))) {
+      cursor += marker.length
+      continue
+    }
+
+    if (cursor > lastIndex) chunks.push(escapeHtml(text.slice(lastIndex, cursor)))
+    chunks.push(renderKatexHtml(source, display))
+    cursor = close + marker.length
+    lastIndex = cursor
+  }
+
+  if (lastIndex < text.length) chunks.push(escapeHtml(text.slice(lastIndex)))
+  return chunks.length > 0 ? chunks.join('') : escapeHtml(text)
+}
+
+function createMarkdownHtmlRenderer(isReasoning: boolean) {
+  const renderer = new marked.Renderer()
+
+  renderer.heading = function ({ tokens, depth }) {
+    const text = this.parser.parseInline(tokens)
+    const className = isReasoning
+      ? 'text-[length:var(--fs-sm)] font-semibold text-text-300 mt-2 mb-1 first:mt-0 last:mb-0'
+      : depth === 1
+        ? 'text-[length:var(--fs-heading-1)] font-bold text-text-100 mt-8 mb-4 first:mt-0 last:mb-0 tracking-tight'
+        : depth === 2
+          ? 'text-[length:var(--fs-heading-2)] font-bold text-text-100 mt-6 mb-3 first:mt-0 last:mb-0 tracking-tight pb-1.5 border-b border-border-100/40'
+          : depth === 3
+            ? 'text-[length:var(--fs-heading-3)] font-semibold text-text-100 mt-5 mb-2 first:mt-0 last:mb-0 tracking-tight'
+            : 'text-[length:var(--fs-base)] font-semibold text-text-100 mt-4 mb-2 first:mt-0 last:mb-0 tracking-tight'
+    const tag = Math.min(Math.max(depth, 1), 4)
+    return `<h${tag} class="${className}">${text}</h${tag}>`
+  }
+
+  renderer.paragraph = function ({ tokens }) {
+    const text = this.parser.parseInline(tokens)
+    const className = isReasoning
+      ? 'text-[length:var(--fs-sm)] mb-2 last:mb-0 leading-5 text-text-400'
+      : 'mb-4 last:mb-0 leading-7 text-text-200'
+    return `<p class="${className}">${text}</p>`
+  }
+
+  renderer.text = ({ text }) => renderTextWithMathHtml(text)
+  renderer.codespan = ({ text }) => {
+    const className = isReasoning
+      ? 'font-mono text-accent-main-100 text-[0.9em] align-baseline break-words'
+      : 'text-accent-main-100 text-[0.9em] font-mono align-baseline break-words'
+    return `<code class="${className}">${escapeHtml(text)}</code>`
+  }
+  renderer.link = function ({ href, title, tokens }) {
+    const content = this.parser.parseInline(tokens)
+    if (isUnsafeHref(href)) return `${content} [blocked]`
+    const localPath = decodeLocalFileHref(href) ?? getWindowsAbsolutePath(href)
+    const normalizedHref = localPath ? encodeLocalFileHref(localPath) : href
+    const className = isReasoning
+      ? 'text-[length:var(--fs-sm)] font-medium text-accent-main-200/80 hover:text-accent-main-200 underline underline-offset-2 transition-colors'
+      : 'font-medium text-accent-main-100 hover:text-accent-main-200 underline underline-offset-2 transition-colors'
+    const attrs = [
+      `href="${escapeAttribute(normalizedHref)}"`,
+      `class="${className}"`,
+      localPath ? `title="${escapeAttribute(localPath)}"` : 'target="_blank" rel="noopener noreferrer"',
+      title && !localPath ? `title="${escapeAttribute(title)}"` : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+    return `<a ${attrs}>${content}</a>`
+  }
+  renderer.image = ({ href, title, text }) => {
+    if (!href || isUnsafeImageSrc(href)) return ''
+    const safeTitle = title || text || undefined
+    const titleAttr = safeTitle ? ` title="${escapeAttribute(safeTitle)}"` : ''
+    const imgTitleAttr = title ? ` title="${escapeAttribute(title)}"` : ''
+    return `<a href="${escapeAttribute(href)}" target="_blank" rel="noopener noreferrer" class="inline-block max-w-full align-top"${titleAttr}><img src="${escapeAttribute(href)}" alt="${escapeAttribute(text || '')}"${imgTitleAttr} loading="lazy" class="block max-w-full rounded-md"></a>`
+  }
+  renderer.blockquote = function ({ tokens }) {
+    const className = isReasoning
+      ? 'border-l-2 border-text-500/30 pl-3 py-0.5 my-2 first:mt-0 last:mb-0 text-text-400'
+      : 'border-l-2 border-accent-main-100/60 pl-4 py-1 my-4 first:mt-0 last:mb-0 text-text-300 italic'
+    return `<blockquote class="${className}">${this.parser.parse(tokens)}</blockquote>`
+  }
+
+  return renderer
+}
+
+function renderMarkdownHtmlBlock(src: string, isReasoning: boolean): string {
+  const displayMath = getDisplayMathSource(src)
+  if (displayMath != null) {
+    const className = isReasoning ? 'my-2 overflow-x-auto text-text-400' : 'my-4 overflow-x-auto text-text-200'
+    return `<div class="${className}">${renderKatexHtml(displayMath, true)}</div>`
+  }
+
+  const renderer = createMarkdownHtmlRenderer(isReasoning)
+  const html = marked.parse(src, { renderer }) as string
+  return sanitizeHtml(html)
+}
+
+function getTableCopyMarkdown(table: HTMLTableElement): string {
+  const headers = Array.from(table.querySelectorAll('thead th')).map(cell => cell.textContent?.trim() ?? '')
+  if (headers.length === 0) return ''
+  const rows = Array.from(table.querySelectorAll('tbody tr')).map(row =>
+    Array.from(row.querySelectorAll('td')).map(cell => cell.textContent?.trim() ?? ''),
+  )
+  return [`| ${headers.join(' | ')} |`, `| ${headers.map(() => '---').join(' | ')} |`, ...rows.map(row => `| ${row.join(' | ')} |`)].join('\n')
+}
+
+function decorateMarkdownHtml(root: HTMLElement, isReasoning: boolean) {
+  root.querySelectorAll('ol').forEach(list => {
+    const start = Number(list.getAttribute('start') ?? '1')
+    const itemCount = Math.max(list.children.length, 1)
+    const endNumber = Math.max(start + itemCount - 1, start)
+    const markerChars = String(Math.abs(endNumber)).length + (endNumber < 0 ? 1 : 0)
+    list.style.paddingInlineStart = `${Math.max(3, markerChars + 2)}ch`
+    list.className = isReasoning
+      ? 'text-[length:var(--fs-sm)] list-decimal list-outside mb-2 last:mb-0 space-y-0.5 marker:text-text-500/60'
+      : 'list-decimal list-outside mb-4 last:mb-0 space-y-1 marker:text-text-400/80'
+  })
+  root.querySelectorAll('ul').forEach(list => {
+    list.className = isReasoning
+      ? 'text-[length:var(--fs-sm)] list-disc list-outside ml-4 mb-2 last:mb-0 space-y-0.5 marker:text-text-500/60'
+      : 'list-disc list-outside ml-5 mb-4 last:mb-0 space-y-1 marker:text-text-400/80'
+  })
+  root.querySelectorAll('li').forEach(item => {
+    item.className = isReasoning ? 'text-[length:var(--fs-sm)] text-text-400 pl-1 leading-5' : 'text-text-200 pl-1 leading-7'
+  })
+  root.querySelectorAll('hr').forEach(rule => {
+    rule.className = isReasoning ? 'border-border-200/40 my-4 first:mt-0 last:mb-0' : 'border-border-200/60 my-8 first:mt-0 last:mb-0'
+  })
+  root.querySelectorAll('table').forEach(table => {
+    if (!(table instanceof HTMLTableElement) || table.closest('[data-markdown-table-wrapper]')) return
+    table.className = isReasoning ? 'min-w-full border-collapse text-[length:var(--fs-sm)]' : 'w-full text-[length:var(--fs-md)] border-collapse'
+    table.querySelectorAll('th').forEach(cell => {
+      cell.className = isReasoning
+        ? 'px-3 py-1.5 text-left text-[length:var(--fs-sm)] font-medium whitespace-nowrap border-b border-border-200/32'
+        : 'relative px-3 py-2.5 text-left text-[length:var(--fs-md)] font-semibold whitespace-nowrap border-b border-border-200/38'
+    })
+    table.querySelectorAll('td').forEach(cell => {
+      cell.className = isReasoning
+        ? 'px-3 py-1.5 text-[length:var(--fs-sm)] text-text-300 w-max border-b border-border-200/18'
+        : 'px-3 py-2 text-[length:var(--fs-md)] text-text-300 leading-[1.55] w-max border-b border-border-200/14'
+    })
+
+    const wrapper = document.createElement('div')
+    wrapper.setAttribute('data-markdown-table-wrapper', '')
+    wrapper.className = isReasoning
+      ? 'overflow-x-auto my-2 first:mt-0 last:mb-0 w-full'
+      : 'group/table relative my-5 first:mt-0 last:mb-0 rounded-md border border-border-200/35 w-full'
+    const scroll = document.createElement('div')
+    scroll.className = isReasoning ? '' : 'overflow-x-auto'
+    table.replaceWith(wrapper)
+    wrapper.appendChild(scroll)
+    scroll.appendChild(table)
+    const copyText = getTableCopyMarkdown(table)
+    if (!isReasoning && copyText) {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.setAttribute('data-testid', 'copy-button')
+      button.setAttribute('data-markdown-copy', copyText)
+      button.setAttribute('aria-label', 'Copy to clipboard')
+      button.className = 'absolute top-1.5 right-2 z-20 rounded p-1 text-text-400 opacity-0 transition-opacity group-hover/table:opacity-100 [@media(hover:none)]:opacity-100'
+      button.textContent = copyText.slice(0, 20)
+      wrapper.appendChild(button)
+    }
+  })
 }
 
 // ─── Markdown Table ────────────────────────────────────────────
@@ -790,22 +1019,11 @@ const MarkdownMermaid = memo(function MarkdownMermaid({ code, isIncomplete }: Me
   )
 })
 
-const STREAM_MIN_COMMIT_INTERVAL_MS = 32
-const STREAM_MAX_COMMIT_INTERVAL_MS = 96
-const STREAM_TAIL_SCALE_CHARS = 256
-const STREAM_FLUSH_CHARS_PER_SECOND = 260
-
-function findMarkdownTailLength(content: string) {
-  const boundary = content.lastIndexOf('\n\n')
-  return boundary === -1 ? content.length : content.length - boundary - 2
-}
-
 function useSmoothMarkdownStream(content: string, enabled: boolean) {
   const [displayedContent, setDisplayedContent] = useState(content)
   const displayedRef = useRef(content)
   const targetRef = useRef(content)
   const rafRef = useRef<number | null>(null)
-  const lastCommitRef = useRef(0)
 
   const stop = useCallback(() => {
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
@@ -822,43 +1040,17 @@ function useSmoothMarkdownStream(content: string, enabled: boolean) {
     }
 
     targetRef.current = content
-    if (!content.startsWith(displayedRef.current)) {
-      displayedRef.current = content
-      setDisplayedContent(content)
-      return
-    }
+    if (content === displayedRef.current) return
 
     if (rafRef.current !== null) return
 
-    const tick = (timestamp: number) => {
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null
       const target = targetRef.current
-      const current = displayedRef.current
-      const backlog = target.length - current.length
-      if (backlog <= 0) {
-        rafRef.current = null
-        return
-      }
-
-      const tailLength = findMarkdownTailLength(current)
-      const minInterval = Math.min(
-        STREAM_MAX_COMMIT_INTERVAL_MS,
-        STREAM_MIN_COMMIT_INTERVAL_MS * (1 + tailLength / STREAM_TAIL_SCALE_CHARS),
-      )
-      if (timestamp - lastCommitRef.current < minInterval) {
-        rafRef.current = requestAnimationFrame(tick)
-        return
-      }
-
-      const elapsedSeconds = Math.max(0.016, Math.min((timestamp - lastCommitRef.current) / 1000, 0.12))
-      const nextChars = Math.max(1, Math.ceil(STREAM_FLUSH_CHARS_PER_SECOND * elapsedSeconds))
-      const nextContent = target.slice(0, current.length + Math.min(backlog, nextChars))
-      lastCommitRef.current = timestamp
-      displayedRef.current = nextContent
-      setDisplayedContent(nextContent)
-      rafRef.current = requestAnimationFrame(tick)
-    }
-
-    rafRef.current = requestAnimationFrame(tick)
+      if (target === displayedRef.current) return
+      displayedRef.current = target
+      setDisplayedContent(target)
+    })
     return stop
   }, [content, enabled, stop])
 
@@ -1208,6 +1400,9 @@ function renderBlockToken(token: MarkedTokens.Generic, ctx: MarkdownRenderContex
 
 const MarkdownStreamBlock = memo(function MarkdownStreamBlock({
   src,
+  mode,
+  language,
+  complete,
   isReasoning,
   isStreaming,
   streamingCodeHighlight,
@@ -1215,29 +1410,112 @@ const MarkdownStreamBlock = memo(function MarkdownStreamBlock({
   isLast,
 }: {
   src: string
+  mode: 'full' | 'live' | 'code'
+  language?: string
+  complete?: boolean
   isReasoning: boolean
   isStreaming: boolean
   streamingCodeHighlight: boolean
   isFirst: boolean
   isLast: boolean
 }) {
-  const content = useMemo(() => {
-    try {
-      return renderBlockTokens(marked.lexer(src), { isReasoning, isStreaming, streamingCodeHighlight }, 'md')
-    } catch {
-      return <p className={isReasoning ? 'text-[length:var(--fs-sm)] mb-2 last:mb-0 leading-5 text-text-400' : 'mb-4 last:mb-0 leading-7 text-text-200'}>{src}</p>
-    }
-  }, [isReasoning, isStreaming, src, streamingCodeHighlight])
-
   return (
     <div
       className={`markdown-stream-block ${isFirst ? 'markdown-stream-block-first' : 'markdown-stream-block-not-first'} ${
         isLast ? 'markdown-stream-block-last' : 'markdown-stream-block-not-last'
       }`}
     >
-      {content}
+      {mode !== 'code' && typeof document !== 'undefined' ? (
+        <MarkdownDomBlock src={src} isReasoning={isReasoning} />
+      ) : (
+        <MarkdownReactBlock
+          src={src}
+          mode={mode}
+          language={language}
+          complete={complete}
+          isReasoning={isReasoning}
+          isStreaming={isStreaming}
+          streamingCodeHighlight={streamingCodeHighlight}
+        />
+      )}
     </div>
   )
+})
+
+const MarkdownReactBlock = memo(function MarkdownReactBlock({
+  src,
+  mode,
+  language,
+  complete,
+  isReasoning,
+  isStreaming,
+  streamingCodeHighlight,
+}: {
+  src: string
+  mode: 'full' | 'live' | 'code'
+  language?: string
+  complete?: boolean
+  isReasoning: boolean
+  isStreaming: boolean
+  streamingCodeHighlight: boolean
+}) {
+  const content = useMemo(() => {
+    if (mode === 'code') {
+      if (language?.toLowerCase() === 'mermaid') {
+        return <MarkdownMermaid code={src} language="mermaid" isIncomplete={isStreaming && !complete} />
+      }
+      return (
+        <div className={isReasoning ? 'my-2 first:mt-0 last:mb-0 w-full' : 'my-4 first:mt-0 last:mb-0 w-full'}>
+          <CodeBlock
+            code={src}
+            language={language}
+            variant={isReasoning ? 'reasoning' : 'default'}
+            wordwrap={isReasoning}
+            forceHighlight={streamingCodeHighlight}
+            streamingHighlight={streamingCodeHighlight}
+          />
+        </div>
+      )
+    }
+    try {
+      return renderBlockTokens(marked.lexer(src), { isReasoning, isStreaming, streamingCodeHighlight }, 'md')
+    } catch {
+      return <p className={isReasoning ? 'text-[length:var(--fs-sm)] mb-2 last:mb-0 leading-5 text-text-400' : 'mb-4 last:mb-0 leading-7 text-text-200'}>{src}</p>
+    }
+  }, [complete, isReasoning, isStreaming, language, mode, src, streamingCodeHighlight])
+
+  return <>{content}</>
+})
+
+const MarkdownDomBlock = memo(function MarkdownDomBlock({ src, isReasoning }: { src: string; isReasoning: boolean }) {
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const html = useMemo(() => renderMarkdownHtmlBlock(src, isReasoning), [isReasoning, src])
+
+  useLayoutEffect(() => {
+    const root = rootRef.current
+    if (!root) return
+    const next = document.createElement('div')
+    next.innerHTML = html
+    decorateMarkdownHtml(next, isReasoning)
+    morphdom(root, next, {
+      childrenOnly: true,
+      onBeforeElUpdated: (fromEl, toEl) => {
+        if (fromEl.isEqualNode(toEl)) return false
+        return true
+      },
+    })
+  }, [html, isReasoning])
+
+  const handleClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const target = event.target instanceof Element ? event.target : null
+    const copyButton = target?.closest<HTMLButtonElement>('[data-markdown-copy]')
+    const copyText = copyButton?.getAttribute('data-markdown-copy')
+    if (!copyButton || !copyText) return
+    event.preventDefault()
+    void copyTextToClipboard(copyText).catch(() => {})
+  }, [])
+
+  return <div ref={rootRef} onClick={handleClick} />
 })
 
 // ─── Main Renderer ─────────────────────────────────────────────
@@ -1249,9 +1527,19 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   variant = 'default',
 }: MarkdownRendererProps) {
   const isReasoning = variant === 'reasoning'
+  const projectionKey = useId()
   const smoothedContent = useSmoothMarkdownStream(content, isStreaming)
   const renderedContent = isStreaming ? smoothedContent : content
-  const streamBlocks = useMemo(() => splitMarkdownStream(renderedContent, isStreaming), [renderedContent, isStreaming])
+  const streamBlocks = useMemo(() => {
+    const projection = projectMarkdownStream(markdownProjectionCache.get(projectionKey), renderedContent, isStreaming)
+    markdownProjectionCache.set(projectionKey, projection)
+    return projection.blocks
+  }, [projectionKey, renderedContent, isStreaming])
+  useEffect(() => {
+    return () => {
+      markdownProjectionCache.delete(projectionKey)
+    }
+  }, [projectionKey])
   const handleClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (event.defaultPrevented) return
     const target = event.target instanceof Element ? event.target : null
@@ -1271,9 +1559,12 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         <MarkdownStreamBlock
           key={block.key}
           src={block.src}
+          mode={block.mode}
+          language={block.language}
+          complete={block.complete}
           isReasoning={isReasoning}
           isStreaming={isStreaming}
-          streamingCodeHighlight={isStreaming && block.mode === 'live'}
+          streamingCodeHighlight={isStreaming && block.mode === 'code' && index === streamBlocks.length - 1}
           isFirst={index === 0}
           isLast={index === streamBlocks.length - 1}
         />

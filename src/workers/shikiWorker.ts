@@ -38,6 +38,8 @@ type Stream = {
 }
 
 const streams = new Map<string, Stream>()
+const activeHighlights = new Set<string>()
+const queuedHighlights = new Map<string, Extract<WorkerRequest, { type: 'highlight' }>>()
 let highlighter: Promise<HighlighterCore> | undefined
 let onigWasmPromise: Promise<ArrayBuffer> | null = null
 
@@ -189,6 +191,28 @@ function post(response: WorkerResponse) {
   self.postMessage(response)
 }
 
+function runQueuedHighlight(request: Extract<WorkerRequest, { type: 'highlight' }>) {
+  activeHighlights.add(request.key)
+  void highlight(request).finally(() => {
+    activeHighlights.delete(request.key)
+    const next = queuedHighlights.get(request.key)
+    if (!next) return
+    queuedHighlights.delete(request.key)
+    runQueuedHighlight(next)
+  })
+}
+
+function queueHighlight(request: Extract<WorkerRequest, { type: 'highlight' }>) {
+  if (!activeHighlights.has(request.key)) {
+    runQueuedHighlight(request)
+    return
+  }
+
+  const previous = queuedHighlights.get(request.key)
+  if (previous) post({ type: 'superseded', id: previous.id, key: previous.key })
+  queuedHighlights.set(request.key, request)
+}
+
 const themeLoaders: Record<string, () => Promise<unknown>> = {
   'github-dark-default': () => import('shiki/themes/github-dark-default.mjs'),
   'github-light-default': () => import('shiki/themes/github-light-default.mjs'),
@@ -206,8 +230,11 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
     return
   }
   if (msg.type === 'dispose') {
+    const queued = queuedHighlights.get(msg.key)
+    if (queued) post({ type: 'superseded', id: queued.id, key: queued.key })
+    queuedHighlights.delete(msg.key)
     streams.delete(msg.key)
     return
   }
-  void highlight(msg)
+  queueHighlight(msg)
 }

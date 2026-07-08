@@ -108,6 +108,28 @@ describe('MarkdownRenderer', () => {
     expect(screen.getByRole('paragraph')).toHaveTextContent('Hello world')
   })
 
+  it('renders streaming inline math through the DOM renderer', () => {
+    const { container } = render(<MarkdownRenderer content={'Inline $x + y$ math'} isStreaming />)
+
+    expect(container.querySelector('.katex')).toBeInTheDocument()
+  })
+
+  it('renders sanitized streaming raw HTML through the DOM renderer', () => {
+    const { container } = render(<MarkdownRenderer content={'<div style="display: grid; gap: 12px"><span>Python</span></div>'} isStreaming />)
+
+    const grid = container.querySelector('div[style*="display: grid"]')
+    expect(grid).toBeInTheDocument()
+    expect(grid).toHaveStyle({ display: 'grid', gap: '12px' })
+    expect(screen.getByText('Python')).toBeInTheDocument()
+  })
+
+  it('blocks unsafe streaming markdown links through the DOM renderer', () => {
+    render(<MarkdownRenderer content={'[bad](javascript:alert(1))'} isStreaming />)
+
+    expect(screen.getByText('bad [blocked]')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'bad' })).not.toBeInTheDocument()
+  })
+
   it('renders with reasoning variant using subdued styles', () => {
     render(<MarkdownRenderer content={'# Heading\n\nSome text with `code`'} variant="reasoning" />)
 
@@ -345,6 +367,14 @@ $$`
     // Table should be rendered
     expect(screen.getByRole('table')).toBeInTheDocument()
     // Copy button should exist
+    expect(screen.getByTestId('copy-button')).toBeInTheDocument()
+  })
+
+  it('renders streaming markdown table with copy button in default mode', () => {
+    const md = '| A | B |\n|---|---|\n| 1 | 2 |'
+    render(<MarkdownRenderer content={md} isStreaming />)
+
+    expect(screen.getByRole('table')).toBeInTheDocument()
     expect(screen.getByTestId('copy-button')).toBeInTheDocument()
   })
 

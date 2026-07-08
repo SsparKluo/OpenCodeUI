@@ -178,6 +178,21 @@ describe('CodeBlock', () => {
     )
   })
 
+  it('reuses stable streaming token DOM while appending suffix text', () => {
+    useStreamingSyntaxHighlightMock.mockImplementation((code: string): HighlightMockOutput => ({
+      highlightedCode: code.startsWith('const') ? 'const' : code,
+      output: [[{ content: 'const', color: '#fff' }]],
+    }))
+
+    const { container, rerender } = render(<CodeBlock code="const" language="ts" forceHighlight streamingHighlight />)
+    const firstSpan = container.querySelector('code span')
+
+    rerender(<CodeBlock code="const value" language="ts" forceHighlight streamingHighlight />)
+
+    expect(container.querySelector('code span')).toBe(firstSpan)
+    expect(container.querySelector('pre')).toHaveTextContent('const value')
+  })
+
   it('keeps the live suffix when streaming tokens lag behind code', () => {
     useStreamingSyntaxHighlightMock.mockReturnValue({
       highlightedCode: 'const',
