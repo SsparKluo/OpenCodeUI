@@ -1062,12 +1062,3 @@ body {
     transition: none;
   }
 }
-
-/* ============================================
- * content-visibility — 屏幕外消息跳过 layout/paint
- * 参照官方 opencode message-part.css
- * ============================================ */
-[data-message-role='assistant'] {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 120px;
-}
