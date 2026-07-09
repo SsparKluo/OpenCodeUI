@@ -7,13 +7,13 @@ FROM docker:29-cli AS docker-cli
 
 FROM debian:bookworm-slim
 
+ARG TARGETARCH
 ARG USE_CHINA_MIRROR=0
 ARG APT_MIRROR=http://mirrors.tuna.tsinghua.edu.cn/debian
 ARG APT_SECURITY_MIRROR=http://mirrors.tuna.tsinghua.edu.cn/debian-security
 ARG NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
 ARG NODEJS_ORG_MIRROR=https://npmmirror.com/mirrors/node
 ARG MISE_INSTALL_URL=https://mise.run
-ARG OPENCODE_INSTALL_URL=https://opencode.ai/install
 
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
@@ -76,19 +76,32 @@ COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/
 # Debian 的 fd 二进制叫 fdfind，补一个常见命令名。
 RUN ln -sf /usr/bin/fdfind /usr/local/bin/fd
 
-# 安装 mise。GitHub Actions 等 CI 环境会在构建时下载，运行时安装的工具仍落在持久化 /root。
-RUN curl -fsSL "${MISE_INSTALL_URL}" | sh \
-    && MISE_BIN="$(find /root -name mise -type f 2>/dev/null | head -1)" \
-    && if [ -z "${MISE_BIN}" ]; then echo "mise binary not found" >&2; exit 1; fi \
-    && cp "${MISE_BIN}" /usr/local/bin/mise \
-    && chmod +x /usr/local/bin/mise \
+# 安装 mise。走 mise.run 安装脚本但强制从 GitHub Releases 下载（MISE_INSTALL_FROM_GITHUB=1），
+# 避开 mise.jdx.dev CDN 与每日版本号不同步导致的下载 404 / 校验失败。
+# arm64 的 gnu 二进制需要 GLIBC_2.38+，但 bookworm-slim 只有 2.36，故 arm64 改用静态链接的
+# musl 变体（MISE_INSTALL_ARCH 覆盖脚本的 ldd 探测）。用 MISE_INSTALL_PATH 直接落位，免去 find/cp。
+RUN case "${TARGETARCH}" in \
+      amd64) MISE_ARCH=x64 ;; \
+      arm64) MISE_ARCH=arm64-musl ;; \
+      *) echo "unsupported arch: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL "${MISE_INSTALL_URL}" \
+      | MISE_INSTALL_PATH=/usr/local/bin/mise MISE_INSTALL_FROM_GITHUB=1 MISE_INSTALL_ARCH="${MISE_ARCH}" sh \
     && mise --version
 
-# 安装 opencode。
-RUN curl -fsSL "${OPENCODE_INSTALL_URL}" | bash \
-    && OPENCODE_BIN="$(find /root -name opencode -type f 2>/dev/null | head -1)" \
-    && if [ -z "${OPENCODE_BIN}" ]; then echo "opencode binary not found" >&2; exit 1; fi \
-    && cp "${OPENCODE_BIN}" /usr/local/bin/opencode \
+# 安装 opencode。直接从 GitHub Releases 拉 tarball 解压，绕开 opencode.ai/install 脚本：
+# 该脚本为拼一个版本号字符串去调 api.github.com（未鉴权，60 次/小时/IP），
+# GitHub Actions 共享 runner IP 极易触发限流而 exit 1；而 releases/latest/download
+# 本身是 302 跳转，不需要版本号。tarball 内仅含单个 opencode 二进制。
+RUN case "${TARGETARCH}" in \
+      amd64) OC_ARCH=x64 ;; \
+      arm64) OC_ARCH=arm64 ;; \
+      *) echo "unsupported arch: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL -o /tmp/opencode.tar.gz \
+      "https://github.com/anomalyco/opencode/releases/latest/download/opencode-linux-${OC_ARCH}.tar.gz" \
+    && tar -xzf /tmp/opencode.tar.gz -C /usr/local/bin opencode \
+    && rm -f /tmp/opencode.tar.gz \
     && chmod +x /usr/local/bin/opencode \
     && opencode --version
 
