@@ -712,6 +712,27 @@ $$`
     expect(screen.getByTitle('HTML preview')).toBeInTheDocument()
   })
 
+  it('uses tap-to-reveal HTML source controls for touch-preferred input', () => {
+    useInputCapabilitiesMock.mockReturnValue({
+      canHover: false,
+      hasCoarsePointer: true,
+      hasTouch: true,
+      preferTouchUi: true,
+    })
+
+    render(<MarkdownRenderer content={'```html\n<div>Preview</div>\n```'} />)
+
+    const frame = screen.getByTitle('HTML preview')
+    const container = frame.parentElement
+    const sourceButton = screen.getByRole('button', { name: 'View HTML source' })
+
+    expect(container).toHaveAttribute('tabindex', '0')
+    expect(sourceButton.className).toContain('[@media(hover:none)]:opacity-0')
+
+    fireEvent.click(container!)
+    expect(container).toHaveFocus()
+  })
+
   it('updates a canonical HTML preview theme without reloading its document', async () => {
     const view = render(<MarkdownRenderer content={'```html\n<div>themed</div>\n```'} />)
     const lightFrame = screen.getByTitle('HTML preview') as HTMLIFrameElement

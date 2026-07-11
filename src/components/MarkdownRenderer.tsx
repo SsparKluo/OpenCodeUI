@@ -57,7 +57,7 @@ const htmlCache = new Map<string, string>()
 const HTML_CACHE_MAX = 64
 const MARKDOWN_BLOCK_CONTENT_CLASS = 'space-y-4 whitespace-normal [&>*:first-child]:mt-0 [&>*:last-child]:mb-0'
 const MARKDOWN_USER_STATE_ATTRIBUTE = 'data-markdown-user-state'
-const HTML_SOURCE_BUTTON_CLASS = 'absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md bg-bg-300/70 p-2 text-text-400 opacity-0 shadow-sm backdrop-blur-md transition-all hover:bg-bg-300/90 hover:text-text-200 group-hover/html-preview:opacity-100 group-focus-within/html-preview:opacity-100 [@media(hover:none)]:opacity-100'
+const HTML_SOURCE_BUTTON_CLASS = 'absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md bg-bg-300/70 p-2 text-text-400 opacity-0 shadow-sm backdrop-blur-md transition-all hover:bg-bg-300/90 hover:text-text-200 group-hover/html-preview:opacity-100 group-focus-within/html-preview:opacity-100'
 const BLOCK_HTML_SOURCE_PATTERN = /^\s*<(?:address|article|aside|blockquote|center|details|dialog|div|dl|fieldset|figure|footer|form|header|html|main|nav|ol|section|table|ul)\b/i
 const ARTIFACT_HTML_SOURCE_PATTERN = /(?:<!doctype\s+html\b|<html\b|<style\b|<script\b|<canvas\b|\son[a-z]+\s*=|(?:href|src)\s*=\s*["']?\s*javascript:)/i
 const STREAMING_HTML_CONTENT_PATTERN = /(?:```(?:html|htm)\b|<(?:address|article|aside|blockquote|center|details|dialog|div|dl|fieldset|figure|footer|form|header|html|main|nav|ol|section|style|table|ul)\b)/i
@@ -933,6 +933,50 @@ function createStreamingHtmlDocument(resizeId: string, theme: 'light' | 'dark'):
   return `<!doctype html><html><head>${HTML_SANDBOX_SECURITY_HEAD}${themeHead}${bridge}</head><body></body></html>`
 }
 
+function HtmlPreviewSurface({
+  children,
+  className = '',
+  onViewSource,
+  style,
+}: {
+  children: React.ReactNode
+  className?: string
+  onViewSource: () => void
+  style?: React.CSSProperties
+}) {
+  const { preferTouchUi } = useInputCapabilities()
+
+  const handleClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest('button, a, input, textarea, select, summary, [contenteditable]')
+    ) {
+      return
+    }
+    event.currentTarget.focus({ preventScroll: true })
+  }, [])
+
+  return (
+    <div
+      className={`group/html-preview relative max-w-full overflow-hidden contain-content ${preferTouchUi ? 'focus:outline-none' : ''} ${className}`}
+      style={style}
+      tabIndex={preferTouchUi ? 0 : undefined}
+      onClick={preferTouchUi ? handleClick : undefined}
+    >
+      <button
+        type="button"
+        onClick={onViewSource}
+        className={`${HTML_SOURCE_BUTTON_CLASS} ${preferTouchUi ? '[@media(hover:none)]:opacity-0' : '[@media(hover:none)]:opacity-100'}`}
+        title="View HTML source"
+        aria-label="View HTML source"
+      >
+        <CodeIcon />
+      </button>
+      {children}
+    </div>
+  )
+}
+
 function MarkdownHtmlArtifact({
   code,
   isReasoning,
@@ -1022,19 +1066,11 @@ function MarkdownHtmlArtifact({
   }
 
   return (
-    <div
-      className="group/html-preview relative my-4 first:mt-0 last:mb-0 w-full max-w-full overflow-hidden contain-content transition-[height] duration-75 ease-out"
+    <HtmlPreviewSurface
+      className="my-4 first:mt-0 last:mb-0 w-full transition-[height] duration-75 ease-out"
       style={{ height: `${contentHeight}px` }}
+      onViewSource={() => setView('code')}
     >
-      <button
-        type="button"
-        onClick={() => setView('code')}
-        className={HTML_SOURCE_BUTTON_CLASS}
-        title="View HTML source"
-        aria-label="View HTML source"
-      >
-        <CodeIcon />
-      </button>
       {usesStreamBridge && !canonicalReady && (
         <iframe
           ref={streamFrameRef}
@@ -1067,7 +1103,7 @@ function MarkdownHtmlArtifact({
           className={`absolute inset-0 block h-full w-full border-0 bg-transparent ${usesStreamBridge && !canonicalReady ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
         />
       )}
-    </div>
+    </HtmlPreviewSurface>
   )
 }
 
@@ -1261,18 +1297,9 @@ function MarkdownHtmlIsland({
   }
 
   return (
-    <div className="group/html-preview relative max-w-full overflow-hidden contain-content">
-      <button
-        type="button"
-        onClick={() => setShowSource(true)}
-        className={HTML_SOURCE_BUTTON_CLASS}
-        title="View HTML source"
-        aria-label="View HTML source"
-      >
-        <CodeIcon />
-      </button>
+    <HtmlPreviewSurface onViewSource={() => setShowSource(true)}>
       <MarkdownDomBlock src={src} isReasoning={isReasoning} isLive={isLive} />
-    </div>
+    </HtmlPreviewSurface>
   )
 }
 
