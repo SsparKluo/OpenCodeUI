@@ -6,24 +6,15 @@ ensure_mise() {
     return
   fi
 
-  if [ -x /root/.local/bin/mise ]; then
-    rm -f /usr/local/bin/mise
-    cp /root/.local/bin/mise /usr/local/bin/mise
-    chmod +x /usr/local/bin/mise
-    return
-  fi
+  # arm64 用 musl 变体（静态链接），避免 gnu 版对 GLIBC_2.38+ 的依赖。
+  case "$(uname -m)" in
+    x86_64)  MISE_ARCH=x64 ;;
+    aarch64|arm64) MISE_ARCH=arm64-musl ;;
+    *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
+  esac
 
-  curl -fsSL "${MISE_INSTALL_URL:-https://mise.run}" | sh
-
-  MISE_BIN="$(find /root -name mise -type f 2>/dev/null | head -1)"
-  if [ -z "${MISE_BIN}" ]; then
-    echo "mise install failed: binary not found" >&2
-    exit 1
-  fi
-
-  rm -f /usr/local/bin/mise
-  cp "${MISE_BIN}" /usr/local/bin/mise
-  chmod +x /usr/local/bin/mise
+  curl -fsSL "${MISE_INSTALL_URL:-https://mise.run}" \
+    | MISE_INSTALL_PATH=/usr/local/bin/mise MISE_INSTALL_FROM_GITHUB=1 MISE_INSTALL_ARCH="${MISE_ARCH}" sh
 }
 
 ensure_opencode() {
@@ -31,26 +22,18 @@ ensure_opencode() {
     return
   fi
 
-  OPENCODE_BIN="$(find /root -name opencode -type f 2>/dev/null | head -1)"
-  if [ -n "${OPENCODE_BIN}" ]; then
-    rm -f /usr/local/bin/opencode
-    cp "${OPENCODE_BIN}" /usr/local/bin/opencode
-    chmod +x /usr/local/bin/opencode
-    if opencode --version >/dev/null 2>&1; then
-      return
-    fi
-  fi
+  # 直接从 GitHub Releases 拉 tarball，绕开 opencode.ai/install 脚本对
+  # api.github.com 的依赖（共享 IP 易触发限流）。
+  case "$(uname -m)" in
+    x86_64)  OC_ARCH=x64 ;;
+    aarch64|arm64) OC_ARCH=arm64 ;;
+    *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
+  esac
 
-  curl -fsSL "${OPENCODE_INSTALL_URL:-https://opencode.ai/install}" | bash
-
-  OPENCODE_BIN="$(find /root -name opencode -type f 2>/dev/null | head -1)"
-  if [ -z "${OPENCODE_BIN}" ]; then
-    echo "opencode install failed: binary not found" >&2
-    exit 1
-  fi
-
-  rm -f /usr/local/bin/opencode
-  cp "${OPENCODE_BIN}" /usr/local/bin/opencode
+  curl -fsSL -o /tmp/opencode.tar.gz \
+    "https://github.com/anomalyco/opencode/releases/latest/download/opencode-linux-${OC_ARCH}.tar.gz"
+  tar -xzf /tmp/opencode.tar.gz -C /usr/local/bin opencode
+  rm -f /tmp/opencode.tar.gz
   chmod +x /usr/local/bin/opencode
 }
 
