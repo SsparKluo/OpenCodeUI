@@ -174,7 +174,7 @@ interface TaskHeaderProps {
   onStop?: (e: React.MouseEvent) => void
 }
 
-const TaskHeader = memo(function TaskHeader({
+export const TaskHeader = memo(function TaskHeader({
   agentType,
   description,
   status,
@@ -204,29 +204,15 @@ const TaskHeader = memo(function TaskHeader({
   const isError = status === 'error'
   const isCompleted = status === 'completed'
 
-  const titleContent = (
-    <>
-      {/* Agent type badge */}
-      <span
-        className={`px-1.5 py-0.5 text-[length:var(--fs-xxs)] font-medium rounded-xs ${
-          isRunning
-            ? 'bg-accent-main-100/20 text-accent-main-100'
-            : isError
-              ? 'bg-danger-100/20 text-danger-100'
-              : isCompleted
-                ? 'bg-accent-secondary-100/20 text-accent-secondary-100'
-                : 'bg-bg-300 text-text-300'
-        }`}
-      >
-        {agentType}
-      </span>
-
-      {/* Description */}
-      <span className="min-w-0 truncate text-[length:var(--fs-sm)] text-text-300 group-hover/title:text-text-100">
-        {description}
-      </span>
-    </>
-  )
+  const agentBadgeClass = `shrink-0 px-1.5 py-0.5 text-[length:var(--fs-xxs)] font-medium rounded-xs ${
+    isRunning
+      ? 'bg-accent-main-100/20 text-accent-main-100'
+      : isError
+        ? 'bg-danger-100/20 text-danger-100'
+        : isCompleted
+          ? 'bg-accent-secondary-100/20 text-accent-secondary-100'
+          : 'bg-bg-300 text-text-300'
+  }`
 
   return (
     <div className="flex items-center gap-2 py-1 group">
@@ -248,22 +234,26 @@ const TaskHeader = memo(function TaskHeader({
         <button
           type="button"
           onClick={handleOpenSession}
-          className="group/title flex min-w-0 max-w-full flex-shrink items-center gap-2 text-left bg-transparent border-none p-0"
+          className={`${agentBadgeClass} border-none transition-opacity hover:opacity-80`}
           title={t('task.openSession')}
         >
-          {titleContent}
+          {agentType}
         </button>
       ) : (
-        <button
-          type="button"
-          onClick={onToggle}
-          className="group/title flex min-w-0 max-w-full flex-shrink items-center gap-2 text-left bg-transparent border-none p-0"
-        >
-          {titleContent}
-        </button>
+        <span className={agentBadgeClass}>{agentType}</span>
       )}
 
-      <div className="min-w-0 flex-1" />
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="group/title flex min-w-0 flex-1 self-stretch items-center text-left bg-transparent border-none p-0"
+        title={expanded ? t('showLess') : t('showMore')}
+      >
+        <span className="min-w-0 truncate text-[length:var(--fs-sm)] text-text-300 group-hover/title:text-text-100">
+          {description}
+        </span>
+      </button>
 
       {/* Stop button (running) */}
       {onStop && (
