@@ -20,6 +20,7 @@ import {
   CloseIcon,
 } from './Icons'
 import { CodePreview } from './CodePreview'
+import { HtmlFilePreviewFrame } from './HtmlFilePreviewFrame'
 import { PreviewTabsBar, type PreviewTabsBarItem } from './PreviewTabsBar'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { useFullscreenLayer } from '../contexts'
@@ -47,12 +48,19 @@ const MIN_TREE_HEIGHT = 100
 const MIN_PREVIEW_HEIGHT = 150
 
 const MARKDOWN_MIME_TYPES = new Set(['text/markdown', 'text/x-markdown', 'text/md', 'application/markdown'])
+const HTML_MIME_TYPES = new Set(['text/html', 'application/xhtml+xml'])
 const textEncoder = new TextEncoder()
 
 function isMarkdownPreview(language: string, mimeType?: string): boolean {
   if (language === 'markdown' || language === 'mdx') return true
   if (!mimeType) return false
   return MARKDOWN_MIME_TYPES.has(mimeType.split(';', 1)[0].toLowerCase())
+}
+
+function isHtmlPreview(language: string, mimeType?: string): boolean {
+  if (language === 'html') return true
+  if (!mimeType) return false
+  return HTML_MIME_TYPES.has(mimeType.split(';', 1)[0].toLowerCase())
 }
 
 function byteOffsetToCodeUnitIndex(text: string, byteOffset: number): number {
@@ -440,6 +448,7 @@ export const FileExplorer = memo(function FileExplorer({
             onClosePreview={handleClosePreviewTab}
             onReorderPreview={handleReorderPreviewTabs}
             isResizing={isAnyResizing}
+            directory={directory}
           />
         </div>
       )}
@@ -736,6 +745,7 @@ interface FilePreviewProps {
   onClosePreview: (path: string) => void
   onReorderPreview: (draggedPath: string, targetPath: string) => void
   isResizing?: boolean
+  directory?: string
 }
 
 function FilePreview({
@@ -752,6 +762,7 @@ function FilePreview({
   onClosePreview,
   onReorderPreview,
   isResizing = false,
+  directory,
 }: FilePreviewProps) {
   const { t } = useTranslation(['components', 'common'])
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -784,6 +795,13 @@ function FilePreview({
     if (!content) return null
 
     const category = getPreviewCategory(content.mimeType)
+
+    if (isHtmlPreview(language, content.mimeType)) {
+      return {
+        type: 'html' as const,
+        text: isBinaryContent(content.encoding) ? decodeBase64Text(content.content) : content.content,
+      }
+    }
 
     if (isMarkdownPreview(language, content.mimeType)) {
       const text = isBinaryContent(content.encoding) ? decodeBase64Text(content.content) : content.content
@@ -883,6 +901,20 @@ function FilePreview({
             targetRanges={targetRanges}
           />
         )
+      case 'html':
+        return (
+          <HtmlFilePreview
+            key={targetKey ?? path ?? fileName}
+            text={displayContent.text}
+            fileName={fileName}
+            filePath={path ?? fileName}
+            directory={directory}
+            isResizing={false}
+            targetLine={targetLine}
+            targetKey={targetKey}
+            targetRanges={targetRanges}
+          />
+        )
       case 'text':
         return (
           <CodePreview
@@ -896,7 +928,7 @@ function FilePreview({
       default:
         return null
     }
-  }, [displayContent, fileName, handleDownload, language, path, targetKey, targetLine, targetRanges])
+  }, [directory, displayContent, fileName, handleDownload, language, path, targetKey, targetLine, targetRanges])
 
   const fullscreenHeaderRight = useMemo(
     () =>
@@ -920,11 +952,12 @@ function FilePreview({
             title: fileName,
             headerRight: fullscreenHeaderRight,
             content: fullscreenContent,
+            deferContent: displayContent?.type === 'html',
           }
         : null,
-    [fileName, fullscreenContent, fullscreenHeaderRight, path],
+    [displayContent?.type, fileName, fullscreenContent, fullscreenHeaderRight, path],
   )
-  const { open: openFullscreen } = useFullscreenLayer(fullscreenLayer)
+  const { isOpen: isFullscreenOpen, open: openFullscreen } = useFullscreenLayer(fullscreenLayer)
 
   return (
     <div className="flex flex-col h-full relative">
@@ -1000,6 +1033,20 @@ function FilePreview({
             targetKey={targetKey}
             targetRanges={targetRanges}
           />
+        ) : displayContent?.type === 'html' ? (
+          isFullscreenOpen ? null : (
+            <HtmlFilePreview
+              key={targetKey ?? path ?? fileName}
+              text={displayContent.text}
+              fileName={fileName}
+              filePath={path ?? fileName}
+              directory={directory}
+              isResizing={isResizing}
+              targetLine={targetLine}
+              targetKey={targetKey}
+              targetRanges={targetRanges}
+            />
+          )
         ) : // diff 渲染已移至 Changes 面板
         // ) : displayContent?.type === 'diff' ? (
         //   <DiffPreview hunks={displayContent.hunks} isResizing={isResizing} />
@@ -1310,6 +1357,74 @@ function TextMediaPreview({
           <CodePreview
             code={text}
             language={language}
+            isResizing={isResizing}
+            targetLine={targetLine}
+            targetKey={targetKey}
+            targetRanges={targetRanges}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface HtmlFilePreviewProps {
+  text: string
+  fileName: string
+  filePath: string
+  directory?: string
+  isResizing?: boolean
+  targetLine?: number
+  targetKey?: string
+  targetRanges?: readonly TargetLineRange[]
+}
+
+function HtmlFilePreview({
+  text,
+  fileName,
+  filePath,
+  directory,
+  isResizing = false,
+  targetLine,
+  targetKey,
+  targetRanges,
+}: HtmlFilePreviewProps) {
+  const { t } = useTranslation(['components', 'common'])
+  const [mode, setMode] = useState<'preview' | 'code'>(targetLine ? 'code' : 'preview')
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center gap-0.5 border-b border-border-100/30 bg-bg-100/50 px-2 py-1 text-[length:var(--fs-xxs)]">
+        <button
+          type="button"
+          onClick={() => setMode('preview')}
+          className={`rounded px-2 py-0.5 transition-colors ${mode === 'preview' ? 'bg-bg-200 text-text-100' : 'text-text-400 hover:bg-bg-200 hover:text-text-100'}`}
+        >
+          {t('common:preview')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('code')}
+          className={`rounded px-2 py-0.5 transition-colors ${mode === 'code' ? 'bg-bg-200 text-text-100' : 'text-text-400 hover:bg-bg-200 hover:text-text-100'}`}
+        >
+          {t('common:code')}
+        </button>
+      </div>
+      {mode === 'preview' ? (
+        <div className="min-h-0 flex-1">
+          <HtmlFilePreviewFrame
+            html={text}
+            title={fileName}
+            filePath={filePath}
+            directory={directory}
+            isResizing={isResizing}
+          />
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1">
+          <CodePreview
+            code={text}
+            language="html"
             isResizing={isResizing}
             targetLine={targetLine}
             targetKey={targetKey}
