@@ -30,6 +30,7 @@ describe('HtmlFilePreviewFrame', () => {
     expect(frame.getAttribute('srcdoc')).toContain('Content-Security-Policy')
     expect(frame.getAttribute('srcdoc')).toContain('<main>Preview</main>')
     expect(frame.getAttribute('srcdoc')).toContain('overflow:auto')
+    expect(frame.getAttribute('srcdoc')).toContain('opencode-html-interaction')
   })
 
   it('updates theme without replacing the preview document', async () => {

@@ -784,6 +784,9 @@ function createStreamingHtmlDocument(resizeId: string, theme: 'light' | 'dark'):
       const height = Math.max(120, Math.ceil(body.scrollHeight), Math.ceil(body.getBoundingClientRect().height));
       parent.postMessage({ type: 'opencode-html-resize', id, height }, '*');
     };
+    addEventListener('pointerdown', () => {
+      parent.postMessage({ type: 'opencode-html-interaction', id }, '*');
+    }, true);
     let scheduledScripts = 0;
     let scriptQueue = Promise.resolve();
     const applyTheme = theme => {
@@ -936,12 +939,16 @@ function createStreamingHtmlDocument(resizeId: string, theme: 'light' | 'dark'):
 function HtmlPreviewSurface({
   children,
   className = '',
+  forceTouchControlsVisible = false,
   onViewSource,
+  surfaceRef,
   style,
 }: {
   children: React.ReactNode
   className?: string
+  forceTouchControlsVisible?: boolean
   onViewSource: () => void
+  surfaceRef?: React.RefObject<HTMLDivElement | null>
   style?: React.CSSProperties
 }) {
   const { preferTouchUi } = useInputCapabilities()
@@ -958,6 +965,7 @@ function HtmlPreviewSurface({
 
   return (
     <div
+      ref={surfaceRef}
       className={`group/html-preview relative max-w-full overflow-hidden contain-content ${preferTouchUi ? 'focus:outline-none' : ''} ${className}`}
       style={style}
       tabIndex={preferTouchUi ? 0 : undefined}
@@ -966,7 +974,7 @@ function HtmlPreviewSurface({
       <button
         type="button"
         onClick={onViewSource}
-        className={`${HTML_SOURCE_BUTTON_CLASS} ${preferTouchUi ? '[@media(hover:none)]:opacity-0' : '[@media(hover:none)]:opacity-100'}`}
+        className={`${HTML_SOURCE_BUTTON_CLASS} ${preferTouchUi && !forceTouchControlsVisible ? '[@media(hover:none)]:opacity-0' : '[@media(hover:none)]:opacity-100'}`}
         title="View HTML source"
         aria-label="View HTML source"
       >
@@ -988,6 +996,8 @@ function MarkdownHtmlArtifact({
 }) {
   const [view, setView] = useState<'preview' | 'code'>('preview')
   const [contentHeight, setContentHeight] = useState(120)
+  const [touchControlsVisible, setTouchControlsVisible] = useState(false)
+  const previewSurfaceRef = useRef<HTMLDivElement>(null)
   const streamFrameRef = useRef<HTMLIFrameElement>(null)
   const canonicalFrameRef = useRef<HTMLIFrameElement>(null)
   const [canonicalReady, setCanonicalReady] = useState(false)
@@ -1030,16 +1040,32 @@ function MarkdownHtmlArtifact({
   }, [sendTheme])
 
   useEffect(() => {
-    const handleResize = (event: MessageEvent) => {
-      if (event.data?.type !== 'opencode-html-resize') return
-      const fromStream = event.source === streamFrameRef.current?.contentWindow && event.data.id === resizeId
-      const fromCanonical = event.source === canonicalFrameRef.current?.contentWindow && event.data.id === canonicalResizeId
+    if (!touchControlsVisible) return
+    const hideControlsOutsidePreview = (event: PointerEvent) => {
+      if (event.target instanceof Node && !previewSurfaceRef.current?.contains(event.target)) {
+        setTouchControlsVisible(false)
+      }
+    }
+    window.addEventListener('pointerdown', hideControlsOutsidePreview, true)
+    return () => window.removeEventListener('pointerdown', hideControlsOutsidePreview, true)
+  }, [touchControlsVisible])
+
+  useEffect(() => {
+    const handleFrameMessage = (event: MessageEvent) => {
+      const data = event.data
+      if (data?.type !== 'opencode-html-interaction' && data?.type !== 'opencode-html-resize') return
+      const fromStream = event.source === streamFrameRef.current?.contentWindow && data.id === resizeId
+      const fromCanonical = event.source === canonicalFrameRef.current?.contentWindow && data.id === canonicalResizeId
       if (!fromStream && !fromCanonical) return
-      const height = Number(event.data.height)
+      if (data.type === 'opencode-html-interaction') {
+        setTouchControlsVisible(true)
+        return
+      }
+      const height = Number(data.height)
       if (Number.isFinite(height)) setContentHeight(Math.min(4000, Math.max(120, Math.round(height))))
     }
-    window.addEventListener('message', handleResize)
-    return () => window.removeEventListener('message', handleResize)
+    window.addEventListener('message', handleFrameMessage)
+    return () => window.removeEventListener('message', handleFrameMessage)
   }, [canonicalResizeId, resizeId])
 
   if (view === 'code') {
@@ -1068,8 +1094,10 @@ function MarkdownHtmlArtifact({
   return (
     <HtmlPreviewSurface
       className="my-4 first:mt-0 last:mb-0 w-full transition-[height] duration-75 ease-out"
+      forceTouchControlsVisible={touchControlsVisible}
       style={{ height: `${contentHeight}px` }}
       onViewSource={() => setView('code')}
+      surfaceRef={previewSurfaceRef}
     >
       {usesStreamBridge && !canonicalReady && (
         <iframe

@@ -712,7 +712,7 @@ $$`
     expect(screen.getByTitle('HTML preview')).toBeInTheDocument()
   })
 
-  it('uses tap-to-reveal HTML source controls for touch-preferred input', () => {
+  it('keeps touch-revealed HTML source controls visible until tapping outside', async () => {
     useInputCapabilitiesMock.mockReturnValue({
       canHover: false,
       hasCoarsePointer: true,
@@ -729,8 +729,23 @@ $$`
     expect(container).toHaveAttribute('tabindex', '0')
     expect(sourceButton.className).toContain('[@media(hover:none)]:opacity-0')
 
-    fireEvent.click(container!)
-    expect(container).toHaveFocus()
+    const srcDoc = frame.getAttribute('srcdoc') ?? ''
+    const resizeId = JSON.parse(srcDoc.match(/const id=("[^"]+")/)?.[1] ?? 'null') as string | null
+    expect(resizeId).not.toBeNull()
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'opencode-html-interaction', id: resizeId },
+        source: (frame as HTMLIFrameElement).contentWindow,
+      }),
+    )
+    await waitFor(() => expect(sourceButton.className).toContain('[@media(hover:none)]:opacity-100'))
+
+    fireEvent.pointerUp(frame, { pointerType: 'touch' })
+    expect(sourceButton.className).toContain('[@media(hover:none)]:opacity-100')
+
+    fireEvent.pointerDown(document.body, { pointerType: 'touch' })
+    await waitFor(() => expect(sourceButton.className).toContain('[@media(hover:none)]:opacity-0'))
   })
 
   it('updates a canonical HTML preview theme without reloading its document', async () => {
