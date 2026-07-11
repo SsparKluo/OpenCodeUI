@@ -1,5 +1,38 @@
 # Changelog
 
+## [v0.6.25] - 2026-07-11
+
+- fix: reveal HTML preview controls on touch (5e102a2)
+- feat: preview HTML files in file explorer (8705599)
+- feat: add sandboxed interactive HTML previews (d3a3abb)
+- fix: render aligned math and markdown alerts (cb12cb0)
+- fix: separate task header navigation and disclosure (c65f8fc)
+- fix: redraw collapsed tool content on mobile (55daadd)
+- fix: harden chat rendering edge cases (75e769e)
+- perf: restore smooth chat page transitions (4c84e0a)
+- perf: make chat virtualization content-aware (83dc3a7)
+- fix: stabilize chat scrolling with async media (1c576ae)
+- refactor: consolidate syntax highlighting into worker-only architecture (7224c65)
+- fix: restore inline style filtering for rich HTML markdown (47e4546)
+- fix(docker): fix backend image build (mise CDN lag, opencode api rate limit, TARGETARCH) (c73c2a6)
+- fix: harden markdown rendering and cleanup render residues (ef40a33)
+- chore: remove unused message role visibility rule (c30f9e6)
+- fix: restore stable chat virtualization baseline (7ca2382)
+- feat: replace streamdown markdown renderer (f7e3a3f)
+- perf: stabilize markdown and shiki highlighting (1d615d7)
+- fix: restore markdown DOM styles (addfb1a)
+- perf: patch streaming markdown updates (fa995ae)
+- perf: optimize streaming markdown rendering (3410212)
+- fix: preserve file preview target navigation (3aac8c5)
+- fix: remove chat page paint containment (0213d64)
+- fix: stabilize chat scroll anchors (b3784b4)
+- fix: isolate hidden chat premeasurement (759db6e)
+- fix: restore readonly CodeMirror remount on render (829429b)
+- fix: change PageBlock from contain-content to contain-layout-style to prevent paint clipping of expanded tool content on mobile (e48e6ca)
+- fix: preserve scroll position after loading history (fc6ce8e)
+- fix: premeasure chat pages after user scroll intent (4118ca6)
+- fix: commit initial chat page heights synchronously (9c60328)
+
 ## [v0.6.24] - 2026-07-03
 
 - perf: reduce layout thrash in streaming render (95994a8)
