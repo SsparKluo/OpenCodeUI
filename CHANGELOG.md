@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.27] - 2026-07-11
+
+- fix: scroll HTML previews like code results (483fa01)
+
 ## [v0.6.26] - 2026-07-11
 
 - fix: persist HTML preview controls on touch (ccd25c2)
