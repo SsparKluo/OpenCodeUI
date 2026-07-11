@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.26] - 2026-07-11
+
+- fix: persist HTML preview controls on touch (ccd25c2)
+
 ## [v0.6.25] - 2026-07-11
 
 - fix: reveal HTML preview controls on touch (5e102a2)
