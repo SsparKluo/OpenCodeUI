@@ -22,7 +22,13 @@ import { marked } from 'marked'
 import type { Tokens } from 'marked'
 import { projectMarkdownStream, type MarkdownStreamProjection } from './markdownStream'
 import { renderMarkdownToHtml } from './markdownHtmlRenderer'
-import { createSandboxedHtmlDocument, HTML_SANDBOX_SECURITY_HEAD } from './htmlSandbox'
+import {
+  buildHtmlSandboxThemeCss,
+  createHtmlSandboxMeasureScript,
+  createSandboxedHtmlDocument,
+  HTML_SANDBOX_SECURITY_HEAD,
+  HTML_SANDBOX_VIEWPORT_HEAD,
+} from './htmlSandbox'
 import { getCachedMermaidSvg, getOrRenderMermaidSvg } from './mermaidRenderCache'
 import { inferImageDimensions } from './imageDimensions'
 
@@ -775,27 +781,25 @@ function decodeLocalFileHrefInline(href?: string): string | null {
 }
 
 function createStreamingHtmlDocument(resizeId: string, theme: 'light' | 'dark'): string {
-  const themeHead = `<style id="opencode-html-theme">:root{color-scheme:${theme};font-family:system-ui,sans-serif}html,body{margin:0;overflow:hidden;background:transparent;color:${theme === 'dark' ? '#d8d8d8' : '#2b2b2b'}}</style>`
+  const themeHead = `<style id="opencode-html-theme">${buildHtmlSandboxThemeCss(theme, 'hidden')}</style>`
+  const measureScript = createHtmlSandboxMeasureScript(resizeId)
   const bridge = `<script>
   (() => {
     const id = ${JSON.stringify(resizeId)};
-    const send = () => {
-      const body = document.body;
-      const height = Math.max(120, Math.ceil(body.scrollHeight), Math.ceil(body.getBoundingClientRect().height));
-      parent.postMessage({ type: 'opencode-html-resize', id, height }, '*');
-    };
-    addEventListener('pointerdown', () => {
-      parent.postMessage({ type: 'opencode-html-interaction', id }, '*');
-    }, true);
+    const measure = () => dispatchEvent(new Event('opencode-html-measure'));
     let scheduledScripts = 0;
     let scriptQueue = Promise.resolve();
     const applyTheme = theme => {
       document.documentElement.style.colorScheme = theme;
       document.documentElement.dataset.theme = theme;
       const style = document.getElementById('opencode-html-theme');
-      if (style) style.textContent = ':root{color-scheme:' + theme + ';font-family:system-ui,sans-serif}html,body{margin:0;overflow:hidden;background:transparent;color:' + (theme === 'dark' ? '#d8d8d8' : '#2b2b2b') + '}';
+      if (style) {
+        const textColor = theme === 'dark' ? '#d8d8d8' : '#2b2b2b';
+        style.textContent = ':root{color-scheme:' + theme + ';font-family:system-ui,sans-serif}html,body{margin:0;overflow:hidden;background:transparent;color:' + textColor + '}';
+      }
       dispatchEvent(new CustomEvent('opencode-theme-change', { detail: { theme } }));
       dispatchEvent(new Event('resize'));
+      measure();
     };
     const clean = (doc, scriptCount) => {
       const descriptors = [];
@@ -910,7 +914,7 @@ function createStreamingHtmlDocument(resizeId: string, theme: 'light' | 'dark'):
           if (!waitsForLoad) resolve();
         }));
       }
-      scriptQueue.then(send);
+      scriptQueue.then(measure);
     };
     addEventListener('message', event => {
       const data = event.data;
@@ -925,16 +929,13 @@ function createStreamingHtmlDocument(resizeId: string, theme: 'light' | 'dark'):
       patchHead(next);
       patch(document.body, next.body);
       runScripts(descriptors);
-      send();
-    });
-    addEventListener('load', () => {
-      if (typeof ResizeObserver !== 'undefined') new ResizeObserver(send).observe(document.body);
-      send();
+      measure();
     });
   })();
   </script>`
-  return `<!doctype html><html><head>${HTML_SANDBOX_SECURITY_HEAD}${themeHead}${bridge}</head><body></body></html>`
+  return `<!doctype html><html><head>${HTML_SANDBOX_SECURITY_HEAD}${HTML_SANDBOX_VIEWPORT_HEAD}${themeHead}</head><body>${measureScript}${bridge}</body></html>`
 }
+
 
 function HtmlPreviewSurface({
   children,
@@ -996,8 +997,10 @@ function MarkdownHtmlArtifact({
 }) {
   const [view, setView] = useState<'preview' | 'code'>('preview')
   const [contentHeight, setContentHeight] = useState(120)
+  const [contentWidth, setContentWidth] = useState<number | null>(null)
   const [touchControlsVisible, setTouchControlsVisible] = useState(false)
   const previewSurfaceRef = useRef<HTMLDivElement>(null)
+  const scrollportRef = useRef<HTMLDivElement>(null)
   const streamFrameRef = useRef<HTMLIFrameElement>(null)
   const canonicalFrameRef = useRef<HTMLIFrameElement>(null)
   const [canonicalReady, setCanonicalReady] = useState(false)
@@ -1051,6 +1054,21 @@ function MarkdownHtmlArtifact({
   }, [touchControlsVisible])
 
   useEffect(() => {
+    const scrollport = scrollportRef.current
+    if (!scrollport || typeof ResizeObserver === 'undefined') return
+    let lastWidth = scrollport.clientWidth
+    const observer = new ResizeObserver(() => {
+      const nextWidth = scrollport.clientWidth
+      if (nextWidth === lastWidth) return
+      lastWidth = nextWidth
+      // Unlock width only. Height updates from the next content measure after reflow.
+      setContentWidth(current => (current == null ? current : null))
+    })
+    observer.observe(scrollport)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
     const handleFrameMessage = (event: MessageEvent) => {
       const data = event.data
       if (data?.type !== 'opencode-html-interaction' && data?.type !== 'opencode-html-resize') return
@@ -1062,7 +1080,16 @@ function MarkdownHtmlArtifact({
         return
       }
       const height = Number(data.height)
+      const width = Number(data.width)
       if (Number.isFinite(height)) setContentHeight(Math.min(4000, Math.max(120, Math.round(height))))
+      if (Number.isFinite(width)) {
+        const measured = Math.min(10000, Math.max(1, Math.round(width)))
+        const available = scrollportRef.current?.clientWidth ?? 0
+        setContentWidth(current => {
+          const next = available > 0 && measured <= available + 1 ? null : measured
+          return current === next ? current : next
+        })
+      }
     }
     window.addEventListener('message', handleFrameMessage)
     return () => window.removeEventListener('message', handleFrameMessage)
@@ -1093,44 +1120,53 @@ function MarkdownHtmlArtifact({
 
   return (
     <HtmlPreviewSurface
-      className="my-4 first:mt-0 last:mb-0 w-full transition-[height] duration-75 ease-out"
+      className="my-4 first:mt-0 last:mb-0 w-full max-w-full transition-[height] duration-75 ease-out"
       forceTouchControlsVisible={touchControlsVisible}
       style={{ height: `${contentHeight}px` }}
       onViewSource={() => setView('code')}
       surfaceRef={previewSurfaceRef}
     >
-      {usesStreamBridge && !canonicalReady && (
-        <iframe
-          ref={streamFrameRef}
-          title="HTML preview"
-          sandbox="allow-scripts"
-          scrolling="no"
-          referrerPolicy="no-referrer"
-          srcDoc={streamSrcDoc}
-          onLoad={() => {
-            sendStreamingHtml()
-            sendTheme()
-          }}
-          style={{ colorScheme: theme }}
-          className="absolute inset-0 block h-full w-full border-0 bg-transparent"
-        />
-      )}
-      {showCanonical && (
-        <iframe
-          ref={canonicalFrameRef}
-          title="HTML preview"
-          sandbox="allow-scripts"
-          scrolling="no"
-          referrerPolicy="no-referrer"
-          srcDoc={canonicalSrcDoc}
-          onLoad={() => {
-            setCanonicalReady(true)
-            sendTheme()
-          }}
-          style={{ colorScheme: theme }}
-          className={`absolute inset-0 block h-full w-full border-0 bg-transparent ${usesStreamBridge && !canonicalReady ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
-        />
-      )}
+      <div
+        ref={scrollportRef}
+        className="h-full w-full max-w-full overflow-x-auto overflow-y-hidden code-scrollbar"
+        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y', overscrollBehaviorX: 'contain' }}
+      >
+        <div
+          className="relative h-full w-full"
+          style={{ minWidth: contentWidth == null ? '100%' : `${contentWidth}px` }}
+        >
+          {usesStreamBridge && !canonicalReady && (
+            <iframe
+              ref={streamFrameRef}
+              title="HTML preview"
+              sandbox="allow-scripts"
+              referrerPolicy="no-referrer"
+              srcDoc={streamSrcDoc}
+              onLoad={() => {
+                sendStreamingHtml()
+                sendTheme()
+              }}
+              style={{ colorScheme: theme }}
+              className="absolute inset-0 block h-full w-full border-0 bg-transparent"
+            />
+          )}
+          {showCanonical && (
+            <iframe
+              ref={canonicalFrameRef}
+              title="HTML preview"
+              sandbox="allow-scripts"
+              referrerPolicy="no-referrer"
+              srcDoc={canonicalSrcDoc}
+              onLoad={() => {
+                setCanonicalReady(true)
+                sendTheme()
+              }}
+              style={{ colorScheme: theme }}
+              className={`absolute inset-0 block h-full w-full border-0 bg-transparent ${usesStreamBridge && !canonicalReady ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
+            />
+          )}
+        </div>
+      </div>
     </HtmlPreviewSurface>
   )
 }

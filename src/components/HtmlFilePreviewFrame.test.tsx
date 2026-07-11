@@ -28,9 +28,26 @@ describe('HtmlFilePreviewFrame', () => {
     expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin')
     expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer')
     expect(frame.getAttribute('srcdoc')).toContain('Content-Security-Policy')
+    expect(frame.getAttribute('srcdoc')).toContain('name="viewport" content="width=device-width, initial-scale=1"')
     expect(frame.getAttribute('srcdoc')).toContain('<main>Preview</main>')
-    expect(frame.getAttribute('srcdoc')).toContain('overflow:auto')
+    expect(frame.getAttribute('srcdoc')).toContain('html{height:100%;width:100%;margin:0;overflow:hidden}')
+    expect(frame.getAttribute('srcdoc')).toContain('body{height:100%;width:100%;margin:0;overflow:auto')
+    expect(frame.getAttribute('srcdoc')).toContain('::-webkit-scrollbar-thumb')
+    expect(frame.getAttribute('srcdoc')).toContain('rgba(100,100,100,.35)')
     expect(frame.getAttribute('srcdoc')).toContain('opencode-html-interaction')
+  })
+
+  it('preserves an existing document viewport instead of injecting a duplicate', () => {
+    render(
+      <HtmlFilePreviewFrame
+        html={'<html><head><meta name="viewport" content="width=640"></head><body>Preview</body></html>'}
+        title="custom-viewport.html"
+      />,
+    )
+
+    const srcDoc = screen.getByTitle('custom-viewport.html').getAttribute('srcdoc') ?? ''
+    expect(srcDoc.match(/name="viewport"/g)).toHaveLength(1)
+    expect(srcDoc).toContain('name="viewport" content="width=640"')
   })
 
   it('updates theme without replacing the preview document', async () => {

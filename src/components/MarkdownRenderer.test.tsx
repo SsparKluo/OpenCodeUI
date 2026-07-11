@@ -702,6 +702,12 @@ $$`
     expect(frame).toHaveAttribute('sandbox', 'allow-scripts')
     expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin')
     expect(frame.getAttribute('srcdoc')).toContain('Content-Security-Policy')
+    expect(frame.getAttribute('srcdoc')).toContain('name="viewport" content="width=device-width, initial-scale=1"')
+    expect(frame.getAttribute('srcdoc')).toContain('overflow:hidden')
+    expect(frame.getAttribute('srcdoc')).toContain('opencode-html-resize')
+    expect(frame).not.toHaveAttribute('scrolling')
+    expect(frame.parentElement?.parentElement?.className).toContain('overflow-x-auto')
+    expect(frame.parentElement?.parentElement?.className).toContain('code-scrollbar')
     expect(frame.getAttribute('srcdoc')).toContain('background:transparent')
     expect(frame.getAttribute('srcdoc')).toContain('<script>document.title="artifact"</script>')
     expect(document.title).not.toBe('artifact')
@@ -710,6 +716,92 @@ $$`
     expect(screen.getByTestId('code-block')).toHaveTextContent('html:<button')
     fireEvent.click(screen.getByRole('button', { name: 'Preview HTML' }))
     expect(screen.getByTitle('HTML preview')).toBeInTheDocument()
+  })
+
+  it('sizes the HTML iframe to content width so the parent container can scroll horizontally', async () => {
+    render(<MarkdownRenderer content={'```html\n<div style="width:1200px">wide preview</div>\n```'} />)
+
+    const frame = screen.getByTitle('HTML preview') as HTMLIFrameElement
+    const scrollport = frame.parentElement?.parentElement
+    expect(scrollport?.className).toContain('overflow-x-auto')
+    expect(scrollport?.className).toContain('code-scrollbar')
+
+    const srcDoc = frame.getAttribute('srcdoc') ?? ''
+    const resizeId = JSON.parse(srcDoc.match(/const id=("[^"]+")/)?.[1] ?? 'null') as string | null
+    expect(resizeId).not.toBeNull()
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'opencode-html-resize', id: resizeId, height: 180, width: 1200 },
+        source: frame.contentWindow,
+      }),
+    )
+
+    await waitFor(() => {
+      expect(frame.parentElement).toHaveStyle({ minWidth: '1200px' })
+    })
+  })
+
+  it('releases locked HTML preview minWidth when content fits the container again', async () => {
+    render(<MarkdownRenderer content={'```html\n<div style="width:1200px">wide preview</div>\n```'} />)
+
+    const frame = screen.getByTitle('HTML preview') as HTMLIFrameElement
+    const scrollport = frame.parentElement?.parentElement as HTMLDivElement
+    const srcDoc = frame.getAttribute('srcdoc') ?? ''
+    const resizeId = JSON.parse(srcDoc.match(/const id=("[^"]+")/)?.[1] ?? 'null') as string | null
+    expect(resizeId).not.toBeNull()
+
+    Object.defineProperty(scrollport, 'clientWidth', { configurable: true, value: 360 })
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'opencode-html-resize', id: resizeId, height: 180, width: 1200 },
+        source: frame.contentWindow,
+      }),
+    )
+    await waitFor(() => {
+      expect(frame.parentElement).toHaveStyle({ minWidth: '1200px' })
+    })
+
+    Object.defineProperty(scrollport, 'clientWidth', { configurable: true, value: 1300 })
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'opencode-html-resize', id: resizeId, height: 180, width: 1200 },
+        source: frame.contentWindow,
+      }),
+    )
+    await waitFor(() => {
+      expect(frame.parentElement).toHaveStyle({ minWidth: '100%' })
+    })
+  })
+
+  it('shrinks HTML preview height when content reports a smaller size', async () => {
+    render(<MarkdownRenderer content={'```html\n<div>Preview</div>\n```'} />)
+
+    const frame = screen.getByTitle('HTML preview') as HTMLIFrameElement
+    const surface = screen.getByRole('button', { name: 'View HTML source' }).parentElement
+    const srcDoc = frame.getAttribute('srcdoc') ?? ''
+    const resizeId = JSON.parse(srcDoc.match(/const id=("[^"]+")/)?.[1] ?? 'null') as string | null
+    expect(resizeId).not.toBeNull()
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'opencode-html-resize', id: resizeId, height: 480, width: 320 },
+        source: frame.contentWindow,
+      }),
+    )
+    await waitFor(() => {
+      expect(surface).toHaveStyle({ height: '480px' })
+    })
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'opencode-html-resize', id: resizeId, height: 160, width: 320 },
+        source: frame.contentWindow,
+      }),
+    )
+    await waitFor(() => {
+      expect(surface).toHaveStyle({ height: '160px' })
+    })
   })
 
   it('keeps touch-revealed HTML source controls visible until tapping outside', async () => {
@@ -723,10 +815,10 @@ $$`
     render(<MarkdownRenderer content={'```html\n<div>Preview</div>\n```'} />)
 
     const frame = screen.getByTitle('HTML preview')
-    const container = frame.parentElement
     const sourceButton = screen.getByRole('button', { name: 'View HTML source' })
+    const surface = sourceButton.parentElement
 
-    expect(container).toHaveAttribute('tabindex', '0')
+    expect(surface).toHaveAttribute('tabindex', '0')
     expect(sourceButton.className).toContain('[@media(hover:none)]:opacity-0')
 
     const srcDoc = frame.getAttribute('srcdoc') ?? ''
@@ -778,6 +870,12 @@ $$`
     const frame = screen.getByTitle('HTML preview')
     expect(frame).toHaveAttribute('sandbox', 'allow-scripts')
     expect(frame.getAttribute('srcdoc')).toContain('opencode-html-stream')
+    expect(frame.getAttribute('srcdoc')).toContain('name="viewport" content="width=device-width, initial-scale=1"')
+    expect(frame.getAttribute('srcdoc')).toContain('overflow:hidden')
+    expect(frame.getAttribute('srcdoc')).toContain('opencode-html-measure')
+    expect(frame.getAttribute('srcdoc')).toContain('opencode-html-resize')
+    expect(frame).not.toHaveAttribute('scrolling')
+    expect(frame.parentElement?.parentElement?.className).toContain('overflow-x-auto')
     expect(frame.getAttribute('srcdoc')).toContain('scriptQueue')
     expect(frame.getAttribute('srcdoc')).toContain('data-opencode-script-executed')
     expect(frame.getAttribute('srcdoc')).not.toContain('window.bad')

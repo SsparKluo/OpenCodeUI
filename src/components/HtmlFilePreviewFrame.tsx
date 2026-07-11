@@ -77,7 +77,7 @@ export function HtmlFilePreviewFrame({
       referrerPolicy="no-referrer"
       srcDoc={srcDoc}
       onLoad={sendTheme}
-      style={{ colorScheme: theme }}
+      style={{ colorScheme: theme, touchAction: 'pan-x pan-y' }}
       className={`block h-full min-h-0 w-full border-0 bg-transparent ${isResizing ? 'pointer-events-none' : ''}`}
     />
   )
