@@ -772,17 +772,22 @@ $$`
     expect(screen.getByTestId('code-block')).toHaveTextContent('<!-- diagram -->')
   })
 
-  it('renders a bare SVG through the sanitized DOM path without enabling scripts', () => {
-    const { container } = render(
-      <MarkdownRenderer
-        content={'<svg viewBox="0 0 100 100" onclick="alert(1)"><text>Bare SVG</text><script>window.bad=1</script></svg>'}
-      />,
-    )
+  it('sandboxes a styled interactive bare SVG with inherited theme variables', () => {
+    const content = `<svg viewBox="0 0 100 100" onclick="this.dataset.clicked='true'">
+<style>.surface { fill: var(--surface-1); stroke: var(--border-strong); }</style>
+<rect class="surface" width="100" height="100"/>
+<text>Bare SVG</text>
+</svg>`
+    render(<MarkdownRenderer content={content} />)
 
-    expect(screen.queryByTitle('HTML preview')).not.toBeInTheDocument()
-    expect(container.querySelector('svg')).toBeInTheDocument()
-    expect(container.querySelector('svg')).not.toHaveAttribute('onclick')
-    expect(container.querySelector('script')).not.toBeInTheDocument()
+    const frame = screen.getByTitle('HTML preview')
+    const srcDoc = frame.getAttribute('srcdoc') ?? ''
+    expect(frame).toHaveAttribute('sandbox', 'allow-scripts')
+    expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin')
+    expect(srcDoc).toContain('<style>.surface { fill: var(--surface-1); stroke: var(--border-strong); }</style>')
+    expect(srcDoc).toContain("onclick=\"this.dataset.clicked='true'\"")
+    expect(srcDoc).toContain('--surface-1:#f5f4f1')
+    expect(srcDoc).toContain('--border-strong:#cfccc2')
   })
 
   it('runs complete HTML code fences only inside an isolated sandbox preview', () => {

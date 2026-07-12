@@ -3,11 +3,49 @@ export type HtmlColorScheme = 'light' | 'dark'
 export const HTML_SANDBOX_SECURITY_HEAD = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; img-src https: http: data: blob:; media-src https: http: data: blob:; font-src https: http: data:; style-src 'unsafe-inline' https: http:; script-src 'unsafe-inline' 'unsafe-eval' https: http: blob:; connect-src https: http:">`
 export const HTML_SANDBOX_VIEWPORT_HEAD = '<meta name="viewport" content="width=device-width, initial-scale=1">'
 export const HTML_SANDBOX_EDGE_OVERFLOW_TOLERANCE = 2
+const HTML_SANDBOX_THEME_VARIABLES = {
+  light: {
+    '--surface-0': '#ffffff',
+    '--surface-1': '#f5f4f1',
+    '--surface-2': '#ffffff',
+    '--text-primary': '#0b0b0b',
+    '--text-secondary': '#52514e',
+    '--text-muted': '#898781',
+    '--border': '#e3e1da',
+    '--border-strong': '#cfccc2',
+    '--text-accent': '#185fa5',
+    '--bg-accent': '#e6f1fb',
+    '--bg-success': '#eaf3de',
+    '--text-success': '#27500a',
+    '--radius': '8px',
+  },
+  dark: {
+    '--surface-0': '#161614',
+    '--surface-1': '#2a2a28',
+    '--surface-2': '#1f1f1d',
+    '--text-primary': '#ffffff',
+    '--text-secondary': '#c3c2b7',
+    '--text-muted': '#898781',
+    '--border': '#3a3a37',
+    '--border-strong': '#52514e',
+    '--text-accent': '#85b7eb',
+    '--bg-accent': '#042c53',
+    '--bg-success': '#173404',
+    '--text-success': '#97c459',
+    '--radius': '8px',
+  },
+} as const
 
 export function normalizeHtmlSandboxContentWidth(measuredWidth: number, viewportWidth: number): number {
   const measured = Math.max(1, Math.ceil(measuredWidth))
   const viewport = Math.max(1, Math.ceil(viewportWidth))
   return measured <= viewport + HTML_SANDBOX_EDGE_OVERFLOW_TOLERANCE ? viewport : measured
+}
+
+function sandboxThemeVariablesCss(theme: HtmlColorScheme): string {
+  return Object.entries(HTML_SANDBOX_THEME_VARIABLES[theme])
+    .map(([name, value]) => `${name}:${value}`)
+    .join(';')
 }
 
 function scrollbarCss(theme: HtmlColorScheme): string {
@@ -18,7 +56,7 @@ function scrollbarCss(theme: HtmlColorScheme): string {
 
 export function buildHtmlSandboxThemeCss(theme: HtmlColorScheme, overflow: 'auto' | 'hidden' = 'hidden'): string {
   const textColor = theme === 'dark' ? '#d8d8d8' : '#2b2b2b'
-  const root = `:root{color-scheme:${theme};font-family:system-ui,sans-serif}`
+  const root = `:root{color-scheme:${theme};font-family:system-ui,sans-serif;${sandboxThemeVariablesCss(theme)}}`
   if (overflow === 'auto') {
     // File preview: pin the document to the iframe viewport so body is the scrollport.
     return `${root}html{height:100%;width:100%;margin:0;overflow:hidden}body{height:100%;width:100%;margin:0;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior:contain;background:transparent;color:${textColor}}${scrollbarCss(theme)}`
@@ -38,7 +76,7 @@ export function createHtmlSandboxMeasureScript(resizeId: string): string {
 
 function createThemeApplyScript(overflow: 'auto' | 'hidden'): string {
   // Keep the runtime theme builder aligned with buildHtmlSandboxThemeCss().
-  return `<script>(()=>{const overflow=${JSON.stringify(overflow)};const buildCss=theme=>{const textColor=theme==='dark'?'#d8d8d8':'#2b2b2b';const root=':root{color-scheme:'+theme+';font-family:system-ui,sans-serif}';if(overflow==='auto'){const thumb=theme==='dark'?'rgba(210,210,210,.35)':'rgba(100,100,100,.35)';const thumbHover=theme==='dark'?'rgba(210,210,210,.6)':'rgba(100,100,100,.6)';const scrollbar='*{scrollbar-width:thin;scrollbar-color:'+thumb+' transparent}*::-webkit-scrollbar{width:12px;height:12px;background:transparent}*::-webkit-scrollbar-button{display:none;width:0;height:0}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background-color:'+thumb+';background-clip:content-box;border:4px solid transparent;border-radius:9999px}*::-webkit-scrollbar-thumb:hover{background-color:'+thumbHover+'}';return root+'html{height:100%;width:100%;margin:0;overflow:hidden}body{height:100%;width:100%;margin:0;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior:contain;background:transparent;color:'+textColor+'}'+scrollbar}return root+'html,body{margin:0;overflow:hidden;background:transparent;color:'+textColor+'}'};const apply=theme=>{document.documentElement.style.colorScheme=theme;document.documentElement.dataset.theme=theme;const style=document.getElementById('opencode-html-theme');if(style)style.textContent=buildCss(theme);dispatchEvent(new CustomEvent('opencode-theme-change',{detail:{theme}}));dispatchEvent(new Event('resize'))};addEventListener('message',event=>{if(event.data?.type==='opencode-html-theme')apply(event.data.theme)})})()</script>`
+  return `<script>(()=>{const overflow=${JSON.stringify(overflow)};const themes=${JSON.stringify(HTML_SANDBOX_THEME_VARIABLES)};const buildCss=theme=>{const textColor=theme==='dark'?'#d8d8d8':'#2b2b2b';const vars=Object.entries(themes[theme]).map(([name,value])=>name+':'+value).join(';');const root=':root{color-scheme:'+theme+';font-family:system-ui,sans-serif;'+vars+'}';if(overflow==='auto'){const thumb=theme==='dark'?'rgba(210,210,210,.35)':'rgba(100,100,100,.35)';const thumbHover=theme==='dark'?'rgba(210,210,210,.6)':'rgba(100,100,100,.6)';const scrollbar='*{scrollbar-width:thin;scrollbar-color:'+thumb+' transparent}*::-webkit-scrollbar{width:12px;height:12px;background:transparent}*::-webkit-scrollbar-button{display:none;width:0;height:0}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background-color:'+thumb+';background-clip:content-box;border:4px solid transparent;border-radius:9999px}*::-webkit-scrollbar-thumb:hover{background-color:'+thumbHover+'}';return root+'html{height:100%;width:100%;margin:0;overflow:hidden}body{height:100%;width:100%;margin:0;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior:contain;background:transparent;color:'+textColor+'}'+scrollbar}return root+'html,body{margin:0;overflow:hidden;background:transparent;color:'+textColor+'}'};const apply=theme=>{document.documentElement.style.colorScheme=theme;document.documentElement.dataset.theme=theme;const style=document.getElementById('opencode-html-theme');if(style)style.textContent=buildCss(theme);dispatchEvent(new CustomEvent('opencode-theme-change',{detail:{theme}}));dispatchEvent(new Event('resize'))};addEventListener('message',event=>{if(event.data?.type==='opencode-html-theme')apply(event.data.theme)})})()</script>`
 }
 
 export function createSandboxedHtmlDocument(

@@ -1443,9 +1443,8 @@ const MarkdownStreamBlock = memo(function MarkdownStreamBlock({
 
   const htmlSourceStart = stripLeadingHtmlComments(src)
   const isHtmlDocument = /^(?:<!doctype\s+html\b|<html\b)/i.test(htmlSourceStart)
-  const isBareSvg = /^<svg\b/i.test(htmlSourceStart)
   const isHtmlArtifact =
-    !isBareSvg && ARTIFACT_HTML_SOURCE_PATTERN.test(src) &&
+    ARTIFACT_HTML_SOURCE_PATTERN.test(src) &&
     (BLOCK_HTML_SOURCE_PATTERN.test(htmlSourceStart) || PREFIXED_BLOCK_HTML_SOURCE_PATTERN.test(htmlSourceStart))
   if (!isReasoning && (isHtmlDocument || isHtmlArtifact)) {
     return (

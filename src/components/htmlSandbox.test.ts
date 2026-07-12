@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildHtmlSandboxThemeCss,
   createHtmlSandboxMeasureScript,
   HTML_SANDBOX_EDGE_OVERFLOW_TOLERANCE,
   normalizeHtmlSandboxContentWidth,
@@ -20,5 +21,23 @@ describe('HTML sandbox measurement', () => {
     const script = createHtmlSandboxMeasureScript('preview')
 
     expect(script).toContain(`measuredWidth<=viewportWidth+${HTML_SANDBOX_EDGE_OVERFLOW_TOLERANCE}`)
+  })
+})
+
+describe('HTML sandbox theme', () => {
+  it('provides light theme variables for standalone artifacts', () => {
+    const css = buildHtmlSandboxThemeCss('light')
+
+    expect(css).toContain('--surface-1:#f5f4f1')
+    expect(css).toContain('--text-primary:#0b0b0b')
+    expect(css).toContain('--border-strong:#cfccc2')
+  })
+
+  it('provides dark theme variables for standalone artifacts', () => {
+    const css = buildHtmlSandboxThemeCss('dark')
+
+    expect(css).toContain('--surface-1:#2a2a28')
+    expect(css).toContain('--text-primary:#ffffff')
+    expect(css).toContain('--border-strong:#52514e')
   })
 })
