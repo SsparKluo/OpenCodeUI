@@ -63,7 +63,7 @@ const htmlCache = new Map<string, string>()
 const HTML_CACHE_MAX = 64
 const MARKDOWN_BLOCK_CONTENT_CLASS = 'space-y-4 whitespace-normal [&>*:first-child]:mt-0 [&>*:last-child]:mb-0'
 const MARKDOWN_USER_STATE_ATTRIBUTE = 'data-markdown-user-state'
-const HTML_SOURCE_BUTTON_CLASS = 'absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md bg-bg-300/70 p-2 text-text-400 opacity-0 shadow-sm backdrop-blur-md transition-all hover:bg-bg-300/90 hover:text-text-200 group-hover/html-preview:opacity-100 group-focus-within/html-preview:opacity-100'
+const HTML_SOURCE_BUTTON_CLASS = 'absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md bg-bg-300/70 p-2 text-accent-main-100 opacity-0 shadow-sm backdrop-blur-md transition-all hover:bg-bg-300/90 hover:text-accent-main-100 group-hover/html-preview:opacity-100 group-focus-within/html-preview:opacity-100'
 const BLOCK_HTML_SOURCE_PATTERN = /^\s*<(?:address|article|aside|blockquote|center|details|dialog|div|dl|fieldset|figure|footer|form|header|html|main|nav|ol|section|table|ul)\b/i
 const ARTIFACT_HTML_SOURCE_PATTERN = /(?:<!doctype\s+html\b|<html\b|<style\b|<script\b|<canvas\b|\son[a-z]+\s*=|(?:href|src)\s*=\s*["']?\s*javascript:)/i
 const STREAMING_HTML_CONTENT_PATTERN = /(?:```(?:html|htm)\b|<(?:address|article|aside|blockquote|center|details|dialog|div|dl|fieldset|figure|footer|form|header|html|main|nav|ol|section|style|table|ul)\b)/i
