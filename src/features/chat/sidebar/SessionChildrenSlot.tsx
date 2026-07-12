@@ -106,7 +106,15 @@ export function SessionChildrenSlot({
           <SpinnerIcon size={10} className="animate-spin text-text-500" />
         </div>
       ) : (
-        list!.map(child => (
+        list!.map((child, index) => {
+          const isChecked = selectedSessionIds?.has(child.id) ?? false
+          const prevChecked =
+            isEditMode && index > 0 && (selectedSessionIds?.has(list![index - 1].id) ?? false)
+          const nextChecked =
+            isEditMode &&
+            index < list!.length - 1 &&
+            (selectedSessionIds?.has(list![index + 1].id) ?? false)
+          return (
           <SessionListItem
             key={child.id}
             session={child}
@@ -119,12 +127,15 @@ export function SessionChildrenSlot({
             showStats={false}
             showDirectory={false}
             isEditMode={isEditMode}
-            isChecked={selectedSessionIds?.has(child.id)}
+            isChecked={isChecked}
+            checkedPrev={prevChecked}
+            checkedNext={nextChecked}
             onToggleCheck={
               onToggleSessionSelection ? options => onToggleSessionSelection(child.id, options) : undefined
             }
           />
-        ))
+          )
+        })
       )}
       <ConfirmDialog
         isOpen={deleteConfirm.isOpen}

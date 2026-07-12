@@ -17,9 +17,9 @@ import {
   TrashIcon,
   SearchIcon,
   ChevronDownIcon,
-  PencilIcon,
+  ListFilterIcon,
+  FolderMinusIcon,
   CheckIcon,
-  CloseIcon,
   SpinnerIcon,
 } from '../../../components/Icons'
 import { useDirectory, useSessionStats, useKeybindingLabel, useGitWorkspaceCatalog, useVcsInfo } from '../../../hooks'
@@ -183,7 +183,12 @@ export function SidePanel({
           const range = getSelectionRange(visibleIds, anchorId, sessionId)
           if (range) {
             const next = new Set(prev)
-            for (const id of range) next.add(id)
+            // 目标已选中 → 整段取消；未选中 → 整段选中
+            const shouldSelect = !prev.has(sessionId)
+            for (const id of range) {
+              if (shouldSelect) next.add(id)
+              else next.delete(id)
+            }
             return next
           }
         }
@@ -193,7 +198,10 @@ export function SidePanel({
         else next.add(sessionId)
         return next
       })
-      sessionSelectionAnchorIdRef.current = sessionId
+      // Shift 范围操作后仍保留锚点，方便连续扩选/缩选
+      if (!(options?.shiftKey && anchorId)) {
+        sessionSelectionAnchorIdRef.current = sessionId
+      }
     },
     [getVisibleSelectionIds],
   )
@@ -208,7 +216,11 @@ export function SidePanel({
           const range = getSelectionRange(visibleIds, anchorId, projectId)
           if (range) {
             const next = new Set(prev)
-            for (const id of range) next.add(id)
+            const shouldSelect = !prev.has(projectId)
+            for (const id of range) {
+              if (shouldSelect) next.add(id)
+              else next.delete(id)
+            }
             return next
           }
         }
@@ -218,7 +230,9 @@ export function SidePanel({
         else next.add(projectId)
         return next
       })
-      projectSelectionAnchorIdRef.current = projectId
+      if (!(options?.shiftKey && anchorId)) {
+        projectSelectionAnchorIdRef.current = projectId
+      }
     },
     [getVisibleSelectionIds],
   )
@@ -1113,93 +1127,116 @@ export function SidePanel({
         {/* Tab Bar: Recents / Active */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="flex items-center mx-2 gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                setSidebarTab('recents')
-                if (sidebarTab !== 'recents') exitEditMode()
-              }}
-              className={`pl-[6px] pr-2 py-1.5 text-[length:var(--fs-xxs)] font-semibold uppercase tracking-wider transition-colors duration-150 ${
-                sidebarTab === 'recents' ? 'text-text-100' : 'text-text-500 hover:text-text-300'
-              }`}
-            >
-              {t('sidebar.recents')}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSidebarTab('active')
-                exitEditMode()
-              }}
-              className={`pl-[6px] pr-2 py-1.5 text-[length:var(--fs-xxs)] font-semibold uppercase tracking-wider transition-colors duration-150 flex items-center gap-1 ${
-                sidebarTab === 'active' ? 'text-text-100' : 'text-text-500 hover:text-text-300'
-              }`}
-            >
-              <span className="inline-flex h-4 items-center leading-none">{t('sidebar.active')}</span>
-              {attentionCount > 0 && (
-                <span
-                  className={`inline-flex h-[15px] min-w-[15px] shrink-0 items-center justify-center self-center rounded-full px-1 text-[length:var(--fs-xxs)] font-medium leading-none transition-colors ${
-                    attentionCount > busyCount
-                      ? 'bg-accent-main-100/10 text-accent-main-100'
-                      : 'bg-success-100/10 text-success-100'
+            {isEditMode && sidebarTab === 'recents' ? (
+              <>
+                {/* 与 tab 同字号字重，左侧文案变成状态提示 */}
+                <span className="pl-[6px] pr-2 py-1.5 text-[length:var(--fs-xxs)] font-semibold uppercase tracking-wider text-text-100 min-w-0 truncate">
+                  {selectedSessionIds.size === 0 && selectedProjectIds.size === 0
+                    ? t('sidebar.selectItems')
+                    : selectedSessionIds.size > 0 && selectedProjectIds.size > 0
+                      ? t('sidebar.selectedMixed', {
+                          sessions: selectedSessionIds.size,
+                          projects: selectedProjectIds.size,
+                        })
+                      : selectedSessionIds.size > 0
+                        ? t('sidebar.selectedSessions', { count: selectedSessionIds.size })
+                        : t('sidebar.selectedProjects', { count: selectedProjectIds.size })}
+                </span>
+                <div className="ml-auto flex items-center gap-1.5">
+                  {selectedSessionIds.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setBatchDeleteSessionConfirm(true)}
+                      className="p-1.5 rounded-md text-text-500 hover:text-danger-100 hover:bg-danger-100/10 active:bg-danger-100/15 transition-colors duration-150"
+                      title={t('sidebar.deleteSessionsWithCount', { count: selectedSessionIds.size })}
+                      aria-label={t('sidebar.deleteSessionsWithCount', { count: selectedSessionIds.size })}
+                    >
+                      <TrashIcon size={14} />
+                    </button>
+                  )}
+                  {selectedProjectIds.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setBatchRemoveProjectConfirm(true)}
+                      className="p-1.5 rounded-md text-text-500 hover:text-warning-100 hover:bg-warning-100/10 active:bg-warning-100/15 transition-colors duration-150"
+                      title={t('sidebar.removeProjectsWithCount', { count: selectedProjectIds.size })}
+                      aria-label={t('sidebar.removeProjectsWithCount', { count: selectedProjectIds.size })}
+                    >
+                      <FolderMinusIcon size={14} />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={exitEditMode}
+                    aria-label={t('sidebar.doneManaging')}
+                    aria-pressed
+                    className="p-1.5 rounded-md text-text-500 hover:text-text-100 hover:bg-bg-300 active:bg-bg-300 transition-colors duration-150"
+                    title={t('sidebar.doneManaging')}
+                  >
+                    <CheckIcon size={14} />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSidebarTab('recents')
+                    if (sidebarTab !== 'recents') exitEditMode()
+                  }}
+                  className={`pl-[6px] pr-2 py-1.5 text-[length:var(--fs-xxs)] font-semibold uppercase tracking-wider transition-colors duration-150 ${
+                    sidebarTab === 'recents' ? 'text-text-100' : 'text-text-500 hover:text-text-300'
                   }`}
                 >
-                  {attentionCount}
-                </span>
-              )}
-            </button>
-            {/* 编辑按钮 — 只在 Recents tab 显示 */}
-            {sidebarTab === 'recents' && (
-              <button
-                type="button"
-                onMouseDown={e => e.preventDefault()}
-                onClick={isEditMode ? exitEditMode : enterEditMode}
-                aria-label={isEditMode ? t('common:done') : t('common:edit')}
-                className={`ml-auto p-1 rounded-md transition-colors duration-150 ${
-                  isEditMode
-                    ? 'text-accent-main-100 hover:bg-accent-main-100/10'
-                    : 'text-text-500 hover:text-text-300 hover:bg-bg-200/50'
-                }`}
-                title={isEditMode ? t('common:done') : t('common:edit')}
-              >
-                {isEditMode ? <CheckIcon size={14} /> : <PencilIcon size={14} />}
-              </button>
+                  {t('sidebar.recents')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSidebarTab('active')
+                    exitEditMode()
+                  }}
+                  className={`pl-[6px] pr-2 py-1.5 text-[length:var(--fs-xxs)] font-semibold uppercase tracking-wider transition-colors duration-150 flex items-center gap-1 ${
+                    sidebarTab === 'active' ? 'text-text-100' : 'text-text-500 hover:text-text-300'
+                  }`}
+                >
+                  <span className="inline-flex h-4 items-center leading-none">{t('sidebar.active')}</span>
+                  {attentionCount > 0 && (
+                    <span
+                      className={`inline-flex h-[15px] min-w-[15px] shrink-0 items-center justify-center self-center rounded-full px-1 text-[length:var(--fs-xxs)] font-medium leading-none transition-colors ${
+                        attentionCount > busyCount
+                          ? 'bg-accent-main-100/10 text-accent-main-100'
+                          : 'bg-success-100/10 text-success-100'
+                      }`}
+                    >
+                      {attentionCount}
+                    </span>
+                  )}
+                </button>
+                {sidebarTab === 'recents' && (
+                  <button
+                    type="button"
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={enterEditMode}
+                    aria-label={t('sidebar.manageSessions')}
+                    className="ml-auto p-1 rounded-md text-text-500 hover:text-text-300 hover:bg-bg-200/50 transition-colors duration-150"
+                    title={t('sidebar.manageSessions')}
+                  >
+                    <ListFilterIcon size={14} />
+                  </button>
+                )}
+              </>
             )}
           </div>
 
-          {/* 编辑模式批量操作条 */}
-          {isEditMode && sidebarTab === 'recents' && (
-            <div className="shrink-0 px-3 py-1.5 flex items-center gap-1.5 border-b border-border-200/30">
-              <span className="text-[length:var(--fs-xxs)] text-text-400 flex-1 min-w-0 truncate">
-                {selectedSessionIds.size > 0 && t('sidebar.selectedSessions', { count: selectedSessionIds.size })}
-                {selectedSessionIds.size > 0 && selectedProjectIds.size > 0 && ' / '}
-                {selectedProjectIds.size > 0 && t('sidebar.selectedProjects', { count: selectedProjectIds.size })}
-                {selectedSessionIds.size === 0 && selectedProjectIds.size === 0 && t('sidebar.selectItems')}
-              </span>
-              {selectedSessionIds.size > 0 && (
-                <button
-                  onClick={() => setBatchDeleteSessionConfirm(true)}
-                  className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-[length:var(--fs-xxs)] font-medium text-danger-100 bg-danger-100/10 hover:bg-danger-100/20 transition-colors"
-                >
-                  <TrashIcon size={11} />
-                  {t('sidebar.deleteSessions', { count: selectedSessionIds.size })}
-                </button>
-              )}
-              {selectedProjectIds.size > 0 && (
-                <button
-                  onClick={() => setBatchRemoveProjectConfirm(true)}
-                  className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-[length:var(--fs-xxs)] font-medium text-warning-100 bg-warning-100/10 hover:bg-warning-100/20 transition-colors"
-                >
-                  <CloseIcon size={11} />
-                  {t('sidebar.removeProjects', { count: selectedProjectIds.size })}
-                </button>
-              )}
-            </div>
-          )}
-
           {/* Recents Tab */}
           {sidebarTab === 'recents' && (
-            <div ref={recentsSelectionRootRef} className="flex-1 overflow-hidden">
+            <div
+              ref={recentsSelectionRootRef}
+              className={`flex-1 overflow-hidden ${isEditMode ? 'select-none' : ''}`}
+            >
               {canShowFolderRecents ? (
                 <FolderRecentList
                   projects={folderProjects}

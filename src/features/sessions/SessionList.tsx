@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback, useState, useMemo, useSyncExternalStore, type PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { SearchIcon, PencilIcon, TrashIcon, ComposeIcon, CheckIcon, PinIcon } from '../../components/Icons'
+import { SearchIcon, PencilIcon, TrashIcon, ComposeIcon, PinIcon } from '../../components/Icons'
+import { getSelectionRoundClass } from './selectionRound'
 import { formatRelativeTime } from '../../utils/dateUtils'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useInputCapabilities } from '../../hooks/useInputCapabilities'
@@ -197,8 +198,16 @@ export function SessionList({
                 <h3 className="px-3 mb-1.5 mt-2 text-[length:var(--fs-xxs)] font-bold text-text-400/60 uppercase tracking-widest select-none">
                   {t(`sessions.groups.${group}`)}
                 </h3>
-                <div className="space-y-0.5">
-                  {groupSessions.map(session => (
+                <div className={isEditMode ? 'space-y-0' : 'space-y-0.5'}>
+                  {groupSessions.map((session, index) => {
+                    const isChecked = selectedSessionIds?.has(session.id) ?? false
+                    const prevChecked =
+                      isEditMode && index > 0 && (selectedSessionIds?.has(groupSessions[index - 1].id) ?? false)
+                    const nextChecked =
+                      isEditMode &&
+                      index < groupSessions.length - 1 &&
+                      (selectedSessionIds?.has(groupSessions[index + 1].id) ?? false)
+                    return (
                     <div key={session.id}>
                       <SessionListItem
                         session={session}
@@ -211,7 +220,9 @@ export function SessionList({
                         showStats={showStats}
                         showDirectory={showDirectory}
                         isEditMode={isEditMode}
-                        isChecked={selectedSessionIds?.has(session.id)}
+                        isChecked={isChecked}
+                        checkedPrev={prevChecked}
+                        checkedNext={nextChecked}
                         onToggleCheck={
                           onToggleSessionSelection
                             ? options => onToggleSessionSelection(session.id, options)
@@ -232,19 +243,28 @@ export function SessionList({
                           />
                         )}
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )
           })
         ) : (
           // Flat View
-          <div className="space-y-0.5 mt-1">
-            {sessions.map(session => {
+          <div className={`${isEditMode ? 'space-y-0' : 'space-y-0.5'} mt-1`}>
+            {sessions.map((session, index) => {
               const inlineChildren = inlineChildSessions?.get(session.id)
               const shouldFetchAll = expandedChildSessionIds?.has(session.id)
               const hasChildren = shouldFetchAll || (inlineChildren && inlineChildren.length > 0)
               const showPinnedDivider = pinnedDividerAfterIds?.has(session.id)
+              const isChecked = selectedSessionIds?.has(session.id) ?? false
+              const prevChecked =
+                isEditMode && index > 0 && (selectedSessionIds?.has(sessions[index - 1].id) ?? false)
+              const nextChecked =
+                isEditMode &&
+                index < sessions.length - 1 &&
+                (selectedSessionIds?.has(sessions[index + 1].id) ?? false) &&
+                !showPinnedDivider
               return (
                 <div key={session.id}>
                   <SessionListItem
@@ -258,7 +278,9 @@ export function SessionList({
                     showStats={showStats}
                     showDirectory={showDirectory}
                     isEditMode={isEditMode}
-                    isChecked={selectedSessionIds?.has(session.id)}
+                    isChecked={isChecked}
+                    checkedPrev={prevChecked}
+                    checkedNext={nextChecked}
                     onToggleCheck={
                       onToggleSessionSelection ? options => onToggleSessionSelection(session.id, options) : undefined
                     }
@@ -324,6 +346,10 @@ export interface SessionListItemProps {
   // ---- 编辑模式 ----
   isEditMode?: boolean
   isChecked?: boolean
+  /** 上一项也选中时，去掉上圆角，拼成连续选中块 */
+  checkedPrev?: boolean
+  /** 下一项也选中时，去掉下圆角 */
+  checkedNext?: boolean
   onToggleCheck?: (options?: { shiftKey?: boolean }) => void
 }
 
@@ -339,6 +365,8 @@ export function SessionListItem({
   showDirectory = false,
   isEditMode = false,
   isChecked = false,
+  checkedPrev = false,
+  checkedNext = false,
   onToggleCheck,
 }: SessionListItemProps) {
   const { t } = useTranslation(['commands', 'common', 'chat'])
@@ -369,7 +397,7 @@ export function SessionListItem({
     session.summary &&
     (session.summary.additions > 0 || session.summary.deletions > 0 || session.summary.files > 0),
   )
-  const itemPaddingClass = isCompact ? (isEditMode ? 'px-3 py-2' : 'pl-[6px] pr-3 py-2') : 'px-3 py-2.5'
+  const itemPaddingClass = isCompact ? 'pl-[6px] pr-3 py-2' : 'px-3 py-2.5'
   const pinnedEntries = useSyncExternalStore(
     pinnedSessionsStore.subscribe,
     pinnedSessionsStore.getSnapshot,
@@ -485,8 +513,11 @@ export function SessionListItem({
     }
   }, [])
 
-  const handleClick = () => {
-    if (isEditMode) return
+  const handleClick = (e?: React.MouseEvent) => {
+    if (isEditMode) {
+      onToggleCheck?.({ shiftKey: e?.shiftKey })
+      return
+    }
     // 如果操作按钮已显示，点击空白区域收起它，不触发 select
     if (showActions) {
       setShowActions(false)
@@ -496,14 +527,11 @@ export function SessionListItem({
     onSelect()
   }
 
-  const handleCheckClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    onToggleCheck?.({ shiftKey: e.shiftKey })
-  }
-
-  const handleCheckMouseDown = (e: React.MouseEvent) => {
+  // 管理模式：阻止浏览器原生文字选区（尤其是 Shift 点选时）
+  const handleSelectionMouseDown = (e: React.MouseEvent) => {
+    if (!isEditMode) return
     e.preventDefault()
-    e.stopPropagation()
+    window.getSelection()?.removeAllRanges()
   }
 
   // 拖拽会话到主信息流进行分屏 / 替换会话
@@ -522,6 +550,13 @@ export function SessionListItem({
   }
 
   const isDraggable = !isEditMode && !isEditing
+  const selectionAttrs = isEditMode
+    ? {
+        'data-selection-kind': 'session' as const,
+        'data-selection-id': session.id,
+        'aria-selected': isChecked,
+      }
+    : {}
 
   if (isEditing) {
     return (
@@ -559,60 +594,55 @@ export function SessionListItem({
     return (
       <div
         ref={itemRef}
-        onClick={!isEditMode ? handleClick : undefined}
+        {...selectionAttrs}
+        onClick={handleClick}
+        onMouseDown={handleSelectionMouseDown}
         onTouchStart={!isEditMode ? handleTouchStart : undefined}
         onTouchMove={!isEditMode ? handleTouchMove : undefined}
         onTouchEnd={!isEditMode ? handleTouchEnd : undefined}
-        className={`group relative flex items-center gap-2 px-2 py-1.5 rounded-md cursor-default transition-colors duration-150 select-none ${
-          isSelected && !isEditMode
-            ? 'bg-bg-200/80 text-text-100'
-            : isEditMode && isChecked
-              ? 'text-text-100'
+        className={`group relative flex items-center gap-2 px-2 py-1.5 cursor-default transition-colors duration-150 select-none ${getSelectionRoundClass(
+          isEditMode && isChecked,
+          checkedPrev,
+          checkedNext,
+          'md',
+        )} ${
+          isEditMode
+            ? isChecked
+              ? 'bg-bg-200/80 text-text-100'
+              : 'text-text-300 hover:bg-bg-200/40 hover:text-text-200'
+            : isSelected
+              ? 'bg-bg-200/80 text-text-100'
               : 'text-text-300 hover:bg-bg-200/40 hover:text-text-200'
         } ${showActions && !isEditMode ? 'bg-bg-200/40' : ''}`}
       >
-        {/* 选中左侧色条 */}
-        {isEditMode && isChecked && (
-          <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-accent-main-100" />
-        )}
-        {/* 编辑模式：checkbox；普通模式：活跃状态圆点 */}
-        {isEditMode ? (
-          <button
-            type="button"
-            aria-pressed={isChecked}
-            data-compact
-            data-selection-kind="session"
-            data-selection-id={session.id}
-            onMouseDown={handleCheckMouseDown}
-            onClick={handleCheckClick}
-            className={`shrink-0 flex items-center justify-center size-5 rounded-full cursor-pointer transition-colors ${
-              isChecked ? 'bg-accent-main-100' : 'border border-text-500/50 hover:border-text-400'
-            }`}
-          >
-            {isChecked && <CheckIcon size={9} className="text-white" />}
-          </button>
-        ) : (
-          <span className="relative shrink-0 flex items-center justify-center size-5" title={statusIndicatorTitle}>
-            {activeStatus ? (
-              <>
-                <span className={`absolute w-1.5 h-1.5 rounded-full ${activeStatus.dot}`} />
-                {activeStatus.pulse && (
-                  <span className={`absolute w-1.5 h-1.5 rounded-full ${activeStatus.dot} animate-ping opacity-50`} />
-                )}
-              </>
-            ) : hasUnreadCompletedNotification ? (
-              <span className="absolute w-1.5 h-1.5 rounded-full bg-accent-main-100" />
-            ) : null}
-          </span>
-        )}
+        <span className="relative shrink-0 flex items-center justify-center size-5" title={statusIndicatorTitle}>
+          {activeStatus ? (
+            <>
+              <span className={`absolute w-1.5 h-1.5 rounded-full ${activeStatus.dot}`} />
+              {activeStatus.pulse && (
+                <span className={`absolute w-1.5 h-1.5 rounded-full ${activeStatus.dot} animate-ping opacity-50`} />
+              )}
+            </>
+          ) : hasUnreadCompletedNotification ? (
+            <span className="absolute w-1.5 h-1.5 rounded-full bg-accent-main-100" />
+          ) : null}
+        </span>
 
-        {isEditMode ? (
+        <button
+          type="button"
+          onPointerDown={isDraggable ? handleSessionPointerDown : undefined}
+          onMouseDown={handleSelectionMouseDown}
+          onClick={e => {
+            e.stopPropagation()
+            handleClick(e)
+          }}
+          className="peer flex min-w-0 flex-1 items-center gap-1.5 bg-transparent border-none p-0 text-left select-none"
+        >
           <div
             className={`flex min-w-0 flex-1 items-center gap-1.5 transition-[padding] duration-200 ${
-              showActions ? 'pr-12' : 'pr-0 group-hover:pr-12'
+              showActions ? 'pr-20' : 'pr-0 group-hover:pr-20'
             }`}
           >
-            {/* 标题 */}
             <span
               className="min-w-0 flex-1 truncate text-[length:var(--fs-sm)]"
               title={session.title || t('sessions.untitledChat')}
@@ -626,8 +656,12 @@ export function SessionListItem({
               >
                 {hasSummaryStats && session.summary && (
                   <span className="flex shrink-0 items-center gap-1 font-mono">
-                    {session.summary.additions > 0 && <span className="text-success-100">+{session.summary.additions}</span>}
-                    {session.summary.deletions > 0 && <span className="text-danger-100">-{session.summary.deletions}</span>}
+                    {session.summary.additions > 0 && (
+                      <span className="text-success-100">+{session.summary.additions}</span>
+                    )}
+                    {session.summary.deletions > 0 && (
+                      <span className="text-danger-100">-{session.summary.deletions}</span>
+                    )}
                     {session.summary.files > 0 && <span>{session.summary.files}f</span>}
                   </span>
                 )}
@@ -636,54 +670,9 @@ export function SessionListItem({
               </div>
             )}
           </div>
-        ) : (
-          <button
-            type="button"
-            onPointerDown={isDraggable ? handleSessionPointerDown : undefined}
-            onClick={e => {
-              e.stopPropagation()
-              handleClick()
-            }}
-            className="peer flex min-w-0 flex-1 items-center gap-1.5 bg-transparent border-none p-0 text-left select-none"
-          >
-            <div
-              className={`flex min-w-0 flex-1 items-center gap-1.5 transition-[padding] duration-200 ${
-                showActions ? 'pr-20' : 'pr-0 group-hover:pr-20'
-              }`}
-            >
-              {/* 标题 */}
-              <span
-                className="min-w-0 flex-1 truncate text-[length:var(--fs-sm)]"
-                title={session.title || t('sessions.untitledChat')}
-              >
-                {session.title || t('sessions.untitledChat')}
-              </span>
+        </button>
 
-              {((hasSummaryStats && session.summary) || session.time?.updated) && (
-                <div
-                  className={`${actionsVisible ? 'hidden' : 'flex group-hover:hidden'} shrink-0 items-center gap-1.5 text-[length:var(--fs-xxs)] text-text-500`}
-                >
-                  {hasSummaryStats && session.summary && (
-                    <span className="flex shrink-0 items-center gap-1 font-mono">
-                      {session.summary.additions > 0 && (
-                        <span className="text-success-100">+{session.summary.additions}</span>
-                      )}
-                      {session.summary.deletions > 0 && (
-                        <span className="text-danger-100">-{session.summary.deletions}</span>
-                      )}
-                      {session.summary.files > 0 && <span>{session.summary.files}f</span>}
-                    </span>
-                  )}
-
-                  {/* 时间 — 操作按钮出现时隐藏，并为按钮预留空间 */}
-                  {session.time?.updated && <span className="shrink-0">{formatRelativeTime(session.time.updated)}</span>}
-                </div>
-              )}
-            </div>
-          </button>
-        )}
-
-        {/* 操作按钮 — 编辑模式下隐藏 */}
+        {/* 操作按钮 — 管理模式下隐藏，避免和点选冲突 */}
         {!isEditMode && (
           <div
             className={`absolute right-2 z-10 shrink-0 flex items-center gap-0.5 transition-opacity duration-150 ${
@@ -735,39 +724,46 @@ export function SessionListItem({
   return (
     <div
       ref={itemRef}
-      onClick={!isEditMode ? handleClick : undefined}
+      {...selectionAttrs}
+      onClick={handleClick}
+      onMouseDown={handleSelectionMouseDown}
       onTouchStart={!isEditMode ? handleTouchStart : undefined}
       onTouchMove={!isEditMode ? handleTouchMove : undefined}
       onTouchEnd={!isEditMode ? handleTouchEnd : undefined}
-      className={`group relative flex items-start ${itemPaddingClass} rounded-lg cursor-default transition-all duration-200 border border-transparent select-none ${
-        isSelected && !isEditMode ? 'bg-bg-000 shadow-sm ring-1 ring-border-200/50' : 'hover:bg-bg-200/50'
+      className={`group relative flex items-start ${itemPaddingClass} cursor-default transition-all duration-200 border border-transparent select-none ${getSelectionRoundClass(
+        isEditMode && isChecked,
+        checkedPrev,
+        checkedNext,
+        'lg',
+      )} ${
+        isEditMode
+          ? isChecked
+            ? 'bg-bg-200/80'
+            : 'hover:bg-bg-200/50'
+          : isSelected
+            ? 'bg-bg-000 shadow-sm ring-1 ring-border-200/50'
+            : 'hover:bg-bg-200/50'
       } ${showActions && !isEditMode ? 'bg-bg-200/50' : ''}`}
     >
-      {/* 选中左侧色条 */}
-      {isEditMode && isChecked && (
-        <span className="absolute left-0 top-2 bottom-2 w-[2px] rounded-full bg-accent-main-100" />
-      )}
-      {/* 编辑模式 checkbox */}
-      {isEditMode && (
-        <button
-          type="button"
-          aria-pressed={isChecked}
-          data-compact
-          data-selection-kind="session"
-          data-selection-id={session.id}
-          onMouseDown={handleCheckMouseDown}
-          onClick={handleCheckClick}
-          className={`shrink-0 flex items-center justify-center w-4 h-4 mt-0.5 mr-2 rounded-full cursor-pointer transition-colors ${
-            isChecked ? 'bg-accent-main-100' : 'border border-text-500/50 hover:border-text-400'
-          }`}
+      <button
+        type="button"
+        onPointerDown={isDraggable ? handleSessionPointerDown : undefined}
+        onMouseDown={handleSelectionMouseDown}
+        onClick={e => {
+          e.stopPropagation()
+          handleClick(e)
+        }}
+        className="peer flex min-w-0 flex-1 items-start bg-transparent border-none p-0 text-left select-none"
+      >
+        <div
+          className={`flex-1 min-w-0 transition-[padding] duration-200 ${showActions ? 'pr-[88px]' : 'pr-1 group-hover:pr-[88px]'}`}
         >
-          {isChecked && <CheckIcon size={11} className="text-white" />}
-        </button>
-      )}
-      {isEditMode ? (
-        <div className="flex-1 min-w-0 pr-1">
           <p
-            className={`${isCompact ? 'text-[length:var(--fs-md)]' : 'text-[length:var(--fs-base)]'} truncate font-medium text-text-200`}
+            className={`${isCompact ? 'text-[length:var(--fs-md)]' : 'text-[length:var(--fs-base)]'} truncate font-medium ${
+              (isEditMode ? isChecked : isSelected)
+                ? 'text-text-100'
+                : 'text-text-200 group-hover:text-text-100'
+            }`}
             title={session.title || t('sessions.untitledChat')}
           >
             {session.title || t('sessions.untitledChat')}
@@ -788,18 +784,25 @@ export function SessionListItem({
               </>
             ) : hasUnreadCompletedNotification ? (
               <>
-                <span className="relative shrink-0 flex items-center justify-center w-3 h-3" title={t('chat:notification.completed')}>
+                <span
+                  className="relative shrink-0 flex items-center justify-center w-3 h-3"
+                  title={t('chat:notification.completed')}
+                >
                   <span className="absolute w-1.5 h-1.5 rounded-full bg-accent-main-100" />
                 </span>
                 <span className="opacity-30 shrink-0">·</span>
               </>
             ) : null}
-            {session.time?.updated && <span className="shrink-0 opacity-60">{formatRelativeTime(session.time.updated)}</span>}
+            {session.time?.updated && (
+              <span className="shrink-0 opacity-60">{formatRelativeTime(session.time.updated)}</span>
+            )}
             {showStats && session.summary && (
               <>
                 <span className="opacity-30">·</span>
                 <span className="flex items-center gap-1.5 font-mono shrink-0">
-                  {session.summary.additions > 0 && <span className="text-success-100">+{session.summary.additions}</span>}
+                  {session.summary.additions > 0 && (
+                    <span className="text-success-100">+{session.summary.additions}</span>
+                  )}
                   {session.summary.deletions > 0 && <span className="text-danger-100">-{session.summary.deletions}</span>}
                   {session.summary.files > 0 && <span>{session.summary.files}f</span>}
                 </span>
@@ -815,85 +818,9 @@ export function SessionListItem({
             )}
           </div>
         </div>
-      ) : (
-        <button
-          type="button"
-          onPointerDown={isDraggable ? handleSessionPointerDown : undefined}
-          onClick={e => {
-            e.stopPropagation()
-            handleClick()
-          }}
-          className="peer flex min-w-0 flex-1 items-start bg-transparent border-none p-0 text-left select-none"
-        >
-          <div
-            className={`flex-1 min-w-0 transition-[padding] duration-200 ${showActions ? 'pr-[88px]' : 'pr-1 group-hover:pr-[88px]'}`}
-          >
-            {/* Row 1: Title */}
-            <p
-              className={`${isCompact ? 'text-[length:var(--fs-md)]' : 'text-[length:var(--fs-base)]'} truncate font-medium ${isSelected ? 'text-text-100' : 'text-text-200 group-hover:text-text-100'}`}
-              title={session.title || t('sessions.untitledChat')}
-            >
-              {session.title || t('sessions.untitledChat')}
-            </p>
+      </button>
 
-            {/* Row 2: Meta line — 始终存在，保持高度一致 */}
-            <div
-              className={`flex items-center ${isCompact ? 'mt-1' : 'mt-1.5'} h-4 text-[length:var(--fs-xxs)] text-text-400 gap-1 overflow-hidden`}
-            >
-              {/* 活跃状态标记 / 已完成未读圆点 */}
-              {activeStatus ? (
-                <>
-                  <span className="relative shrink-0 flex items-center justify-center w-3 h-3">
-                    <span className={`absolute w-1.5 h-1.5 rounded-full ${activeStatus.dot}`} />
-                    {activeStatus.pulse && (
-                      <span className={`absolute w-1.5 h-1.5 rounded-full ${activeStatus.dot} animate-ping opacity-50`} />
-                    )}
-                  </span>
-                  <span className="opacity-30 shrink-0">·</span>
-                </>
-              ) : hasUnreadCompletedNotification ? (
-                <>
-                  <span
-                    className="relative shrink-0 flex items-center justify-center w-3 h-3"
-                    title={t('chat:notification.completed')}
-                  >
-                    <span className="absolute w-1.5 h-1.5 rounded-full bg-accent-main-100" />
-                  </span>
-                  <span className="opacity-30 shrink-0">·</span>
-                </>
-              ) : null}
-              {/* 时间 */}
-              {session.time?.updated && (
-                <span className="shrink-0 opacity-60">{formatRelativeTime(session.time.updated)}</span>
-              )}
-              {/* Stats */}
-              {showStats && session.summary && (
-                <>
-                  <span className="opacity-30">·</span>
-                  <span className="flex items-center gap-1.5 font-mono shrink-0">
-                    {session.summary.additions > 0 && (
-                      <span className="text-success-100">+{session.summary.additions}</span>
-                    )}
-                    {session.summary.deletions > 0 && <span className="text-danger-100">-{session.summary.deletions}</span>}
-                    {session.summary.files > 0 && <span>{session.summary.files}f</span>}
-                  </span>
-                </>
-              )}
-              {/* Directory (Global mode) */}
-              {showDirectory && session.directory && (
-                <>
-                  <span className="opacity-30 shrink-0">·</span>
-                  <span className="truncate opacity-50" title={session.directory}>
-                    {session.directory.replace(/\\/g, '/').split('/').filter(Boolean).pop()}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-        </button>
-      )}
-
-      {/* Actions: hover on desktop, long-press on mobile — 编辑模式下隐藏 */}
+      {/* Actions: hover on desktop, long-press on mobile — 管理模式下隐藏 */}
       {!isEditMode && (
         <div
           className={`absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 transition-all duration-200 z-10 ${

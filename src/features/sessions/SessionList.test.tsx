@@ -113,4 +113,26 @@ describe('SessionListItem', () => {
     expect(pinnedSessionsStore.isPinned('session-1')).toBe(false)
   })
 
+  it('toggles selection when the row is clicked in edit mode', () => {
+    const onToggleCheck = vi.fn()
+
+    render(
+      <SessionListItem
+        session={session}
+        isSelected={false}
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+        onRename={vi.fn()}
+        preferTouchUi={false}
+        isEditMode
+        isChecked={false}
+        onToggleCheck={onToggleCheck}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('Session One'))
+
+    expect(onToggleCheck).toHaveBeenCalledTimes(1)
+  })
+
 })

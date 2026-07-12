@@ -8,7 +8,6 @@ import {
   GripVerticalIcon,
   PinIcon,
   SpinnerIcon,
-  CheckIcon,
   ChevronDownIcon,
 } from '../../../components/Icons'
 import { ExpandableSection } from '../../../components/ui'
@@ -22,6 +21,7 @@ import { useBusySessions } from '../../../store/activeSessionStore'
 import { useNotifications } from '../../../store/notificationStore'
 import { pinnedSessionsStore, type PinnedSessionEntry } from '../../../store/pinnedSessionsStore'
 import { SessionListItem } from '../../sessions'
+import { getSelectionRoundClass } from '../../sessions/selectionRound'
 import { SessionChildrenSlot } from './SessionChildrenSlot'
 
 const DIRECTORY_PAGE_SIZE = 5
@@ -544,14 +544,34 @@ export function FolderRecentList({
                 onToggleSessionSelection={onToggleSessionSelection}
               />
             )}
-            {displayOrder.map(projectId => {
+            {displayOrder.map((projectId, index) => {
               const project = projectById.get(projectId)
               if (!project) return null
+              const isExpanded = !isDragging && expandedProjectIds.includes(project.id)
+              const isProjectChecked = selectedProjectIds?.has(project.id) ?? false
+              const prevId = index > 0 ? displayOrder[index - 1] : null
+              const nextId = index < displayOrder.length - 1 ? displayOrder[index + 1] : null
+              const nextProjectChecked = !!nextId && (selectedProjectIds?.has(nextId) ?? false)
+              // 折叠时：和相邻文件夹拼接；展开时：和首条 session 的拼接在 section 内部处理
+              const prevExpanded =
+                !!prevId && !isDragging && expandedProjectIds.includes(prevId)
+              const projectCheckedPrev =
+                isEditMode &&
+                isProjectChecked &&
+                !!prevId &&
+                !prevExpanded &&
+                (selectedProjectIds?.has(prevId) ?? false)
+              const projectCheckedNext =
+                isEditMode &&
+                isProjectChecked &&
+                !!nextId &&
+                !isExpanded &&
+                nextProjectChecked
               return (
                 <FolderRecentSection
                   key={project.id}
                   project={project}
-                  isExpanded={!isDragging && expandedProjectIds.includes(project.id)}
+                  isExpanded={isExpanded}
                   folderStatus={folderStatusByProjectId.get(project.id) ?? null}
                   preferTouchUi={preferTouchUi}
                   showSessionDiffStats={sidebarFolderRecentsShowDiff}
@@ -579,7 +599,10 @@ export function FolderRecentList({
                   registerRef={el => registerRef(project.id, el)}
                   // 编辑模式
                   isEditMode={isEditMode}
-                  isProjectChecked={selectedProjectIds?.has(project.id)}
+                  isProjectChecked={isProjectChecked}
+                  projectCheckedPrev={projectCheckedPrev}
+                  projectCheckedNext={projectCheckedNext}
+                  nextProjectChecked={isEditMode && nextProjectChecked}
                   onToggleProjectCheck={
                     onToggleProjectSelection ? options => onToggleProjectSelection(project.id, options) : undefined
                   }
@@ -670,7 +693,15 @@ function PinnedFolderSection({
 
       <ExpandableSection show={isExpanded}>
         <div onTouchStart={e => e.stopPropagation()}>
-          {sessions.map(session => (
+          {sessions.map((session, index) => {
+            const isChecked = selectedSessionIds?.has(session.id) ?? false
+            const prevChecked =
+              isEditMode && index > 0 && (selectedSessionIds?.has(sessions[index - 1].id) ?? false)
+            const nextChecked =
+              isEditMode &&
+              index < sessions.length - 1 &&
+              (selectedSessionIds?.has(sessions[index + 1].id) ?? false)
+            return (
             <div key={session.id}>
               <SessionListItem
                 session={session}
@@ -683,7 +714,9 @@ function PinnedFolderSection({
                 showStats={showSessionDiffStats}
                 showDirectory={false}
                 isEditMode={isEditMode}
-                isChecked={selectedSessionIds?.has(session.id)}
+                isChecked={isChecked}
+                checkedPrev={prevChecked}
+                checkedNext={nextChecked}
                 onToggleCheck={
                   onToggleSessionSelection ? options => onToggleSessionSelection(session.id, options) : undefined
                 }
@@ -702,7 +735,8 @@ function PinnedFolderSection({
                   />
                 )}
             </div>
-          ))}
+            )
+          })}
           {unavailableEntries.map(entry => (
             <UnavailablePinnedSessionItem key={entry.sessionId} entry={entry} />
           ))}
@@ -767,8 +801,13 @@ interface FolderRecentSectionProps {
   registerRef: (el: HTMLDivElement | null) => void
   // ---- 编辑模式 ----
   isEditMode?: boolean
-  showProjectCheckbox?: boolean
   isProjectChecked?: boolean
+  /** 上一项也选中时，去掉上圆角 */
+  projectCheckedPrev?: boolean
+  /** 下一项也选中时，去掉下圆角（折叠时连下一个文件夹） */
+  projectCheckedNext?: boolean
+  /** 下一个文件夹已选中：展开时最后一条 session 可与其拼接 */
+  nextProjectChecked?: boolean
   onToggleProjectCheck?: (options?: { shiftKey?: boolean }) => void
   selectedSessionIds?: Set<string>
   onToggleSessionSelection?: (sessionId: string, options?: { shiftKey?: boolean }) => void
@@ -802,8 +841,10 @@ function FolderRecentSection({
   onTouchDragStart,
   registerRef,
   isEditMode = false,
-  showProjectCheckbox = isEditMode,
   isProjectChecked = false,
+  projectCheckedPrev = false,
+  projectCheckedNext = false,
+  nextProjectChecked = false,
   onToggleProjectCheck,
   selectedSessionIds,
   onToggleSessionSelection,
@@ -860,16 +901,20 @@ function FolderRecentSection({
     [sessions, onRequestDeleteSession, removeLocalSession],
   )
 
-  const handleProjectCheckClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    onToggleProjectCheck?.({ shiftKey: e.shiftKey })
-  }
-
   const projectName =
     sectionKind === 'workspace'
       ? (vcsInfo?.branch ?? (isBranchLoading ? '...' : workspaceFallbackName))
       : project.name || workspaceFallbackName
   const FolderDisplayIcon = sectionKind === 'workspace' ? GitBranchIcon : isExpanded ? FolderOpenIcon : FolderIcon
+
+  // 展开时：文件夹与首条 session 可拼成连续选中块
+  const firstVisibleSessionChecked =
+    isEditMode &&
+    isExpanded &&
+    !hasWorkspaceTree &&
+    visibleSessions.length > 0 &&
+    (selectedSessionIds?.has(visibleSessions[0].id) ?? false)
+  const folderCheckedNext = projectCheckedNext || firstVisibleSessionChecked
 
   return (
     <div ref={inViewRef}>
@@ -882,44 +927,53 @@ function FolderRecentSection({
             : ''
         }`}
       >
-        {/* 文件夹行 */}
-        <div className="relative flex w-full items-center rounded-md hover:bg-bg-200/40 transition-colors duration-150 select-none">
-          {/* 选中左侧色条 */}
-          {showProjectCheckbox && isProjectChecked && (
-            <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-accent-main-100" />
-          )}
-          {/* 编辑模式：项目 checkbox */}
-          {showProjectCheckbox && (
-            <button
-              type="button"
-              aria-pressed={isProjectChecked}
-              data-compact
-              data-selection-kind="project"
-              data-selection-id={project.id}
-              onMouseDown={e => {
-                e.preventDefault()
-                e.stopPropagation()
-              }}
-              onClick={handleProjectCheckClick}
-              className={`shrink-0 flex items-center justify-center w-3.5 h-3.5 ml-2 rounded-full cursor-pointer transition-colors ${
-                isProjectChecked ? 'bg-accent-main-100' : 'border border-text-500/50 hover:border-text-400'
-              }`}
-            >
-              {isProjectChecked && <CheckIcon size={9} className="text-white" />}
-            </button>
-          )}
+        {/* 文件夹行 — 选中用圆角底，连续选中拼成一条 */}
+        <div
+          className={`relative flex w-full items-center transition-colors duration-150 select-none ${getSelectionRoundClass(
+            isEditMode && isProjectChecked,
+            projectCheckedPrev,
+            folderCheckedNext,
+            'md',
+          )} ${
+            isEditMode && isProjectChecked
+              ? 'bg-bg-200/80'
+              : 'hover:bg-bg-200/40'
+          }`}
+          {...(isEditMode
+            ? {
+                'data-selection-kind': 'project' as const,
+                'data-selection-id': project.id,
+                'aria-selected': isProjectChecked,
+              }
+            : {})}
+        >
           <button
-            onClick={() => {
-              if (!isEditMode) onSelectProject()
+            type="button"
+            onMouseDown={e => {
+              if (!isEditMode) return
+              e.preventDefault()
+              window.getSelection()?.removeAllRanges()
+            }}
+            onClick={e => {
+              if (isEditMode) {
+                // 管理模式：点文件夹 = 选中；Shift 点可范围选
+                onToggleProjectCheck?.({ shiftKey: e.shiftKey })
+                return
+              }
+              onSelectProject()
               onToggle()
             }}
-            className={`flex flex-1 min-w-0 items-center gap-2 ${showProjectCheckbox ? 'pl-1.5' : 'pl-2'} pr-2 py-1.5 text-left cursor-default select-none`}
+            className="flex flex-1 min-w-0 items-center gap-2 pl-2 pr-2 py-1.5 text-left cursor-default select-none"
             title={project.worktree}
           >
             <span className="size-5 shrink-0 flex items-center justify-center">
               <FolderDisplayIcon size={15} className="text-text-400" />
             </span>
-            <span className="min-w-0 flex-1 truncate text-[length:var(--fs-sm)] font-medium text-text-300">
+            <span
+              className={`min-w-0 flex-1 truncate text-[length:var(--fs-sm)] font-medium ${
+                isEditMode && isProjectChecked ? 'text-text-100' : 'text-text-300'
+              }`}
+            >
               {projectName}
             </span>
             {folderStatus && (
@@ -934,9 +988,28 @@ function FolderRecentSection({
               </span>
             )}
           </button>
+          {/* 管理模式下保留展开/收起，否则选不了内部会话 */}
+          {isEditMode && (
+            <button
+              type="button"
+              onClick={e => {
+                e.stopPropagation()
+                onToggle()
+              }}
+              className="shrink-0 flex items-center justify-center w-6 h-6 mr-1 rounded-md text-text-500 hover:text-text-200 hover:bg-bg-300/50 transition-colors"
+              title={isExpanded ? t('common:collapse', { defaultValue: 'Collapse' }) : t('common:expand', { defaultValue: 'Expand' })}
+              aria-expanded={isExpanded}
+            >
+              <ChevronDownIcon
+                size={12}
+                className={`transition-transform duration-150 ${isExpanded ? '' : '-rotate-90'}`}
+              />
+            </button>
+          )}
           {/* 拖拽把手 — 默认 w-0 隐藏，hover 时 w-5 展开挤压圆点 */}
           {canDrag && (
             <span
+              data-drag-handle
               onPointerDown={onDragStart}
               className="shrink-0 flex items-center justify-center w-0 group-hover/folder:w-5 overflow-hidden cursor-grab active:cursor-grabbing text-text-500 opacity-0 group-hover/folder:opacity-60 hover:!opacity-100 transition-all duration-150 touch-none"
               title={t('sidebar.dragToReorder', { defaultValue: 'Drag to reorder' })}
@@ -981,7 +1054,21 @@ function FolderRecentSection({
                 </div>
               ) : (
                 <>
-                  {visibleSessions.map(session => (
+                  {visibleSessions.map((session, index) => {
+                    const isChecked = selectedSessionIds?.has(session.id) ?? false
+                    // 上：前一条 session，或（首条时）父文件夹已选中
+                    const prevChecked =
+                      isEditMode &&
+                      (index > 0
+                        ? (selectedSessionIds?.has(visibleSessions[index - 1].id) ?? false)
+                        : isProjectChecked)
+                    // 下：下一条 session，或（末条时）下一个文件夹已选中
+                    const nextChecked =
+                      isEditMode &&
+                      (index < visibleSessions.length - 1
+                        ? (selectedSessionIds?.has(visibleSessions[index + 1].id) ?? false)
+                        : nextProjectChecked)
+                    return (
                     <div key={session.id}>
                       <SessionListItem
                         session={session}
@@ -994,7 +1081,9 @@ function FolderRecentSection({
                         showStats={showSessionDiffStats}
                         showDirectory={false}
                         isEditMode={isEditMode}
-                        isChecked={selectedSessionIds?.has(session.id)}
+                        isChecked={isChecked}
+                        checkedPrev={prevChecked}
+                        checkedNext={nextChecked}
                         onToggleCheck={
                           onToggleSessionSelection
                             ? options => onToggleSessionSelection(session.id, options)
@@ -1015,7 +1104,8 @@ function FolderRecentSection({
                           />
                         )}
                     </div>
-                  ))}
+                    )
+                  })}
 
                   {hasMore && (
                     <button
@@ -1188,7 +1278,6 @@ function WorkspaceFolderList({
             onTouchDragStart={event => handleTouchStart(workspaceProject.id, event)}
             registerRef={element => registerRef(workspaceProject.id, element)}
             isEditMode={isEditMode}
-            showProjectCheckbox={false}
             selectedSessionIds={selectedSessionIds}
             onToggleSessionSelection={onToggleSessionSelection}
           />

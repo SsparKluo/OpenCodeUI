@@ -35,6 +35,7 @@ import {
   File,
   Folder,
   FolderOpen,
+  FolderMinus,
   Search,
   Pencil,
   Trash2,
@@ -74,6 +75,7 @@ import {
   Waypoints,
   GitCompare,
   ListTodo,
+  ListFilter,
   Layers,
   Minus,
   Paperclip,
@@ -141,6 +143,7 @@ export const TerminalIcon = wrap(Terminal)
 export const FileIcon = wrap(File)
 export const FolderIcon = wrap(Folder)
 export const FolderOpenIcon = wrap(FolderOpen)
+export const FolderMinusIcon = wrap(FolderMinus)
 export const SearchIcon = wrap(Search)
 export const PencilIcon = wrap(Pencil)
 export const TrashIcon = wrap(Trash2)
@@ -201,6 +204,7 @@ export const PatchIcon = wrap(FileDiff)
 export const GitWorktreeIcon = wrap(Waypoints)
 export const GitDiffIcon = wrap(GitCompare)
 export const PermissionListIcon = wrap(ListTodo)
+export const ListFilterIcon = wrap(ListFilter)
 export const LayersIcon = wrap(Layers)
 export const MinusIcon = wrap(Minus)
 export const PaperclipIcon = wrap(Paperclip)
