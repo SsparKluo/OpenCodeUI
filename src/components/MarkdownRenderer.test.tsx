@@ -716,6 +716,75 @@ $$`
     expect(screen.getByTestId('code-block')).toHaveTextContent("dataset.ready = 'true'")
   })
 
+  it('previews and reveals the complete source of a styled SVG wrapper', () => {
+    const artifact = `<div style="font-family:sans-serif;">
+<style>:root { --surface: #fff; }</style>
+
+<svg width="100%" viewBox="0 0 680 460">
+  <!-- title -->
+  <text x="40" y="30">微服务架构</text>
+</svg>
+</div>`
+    render(<MarkdownRenderer content={`${artifact}\n\n再来个交付时间线`} />)
+
+    const frame = screen.getByTitle('HTML preview')
+    const srcDoc = frame.getAttribute('srcdoc') ?? ''
+    expect(srcDoc).toContain(':root { --surface: #fff; }')
+    expect(srcDoc).toContain('<svg width="100%" viewBox="0 0 680 460">')
+    expect(srcDoc).toContain('微服务架构')
+    expect(screen.getByText('再来个交付时间线')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'View HTML source' }))
+    const source = screen.getByTestId('code-block')
+    expect(source).toHaveTextContent(':root { --surface: #fff; }')
+    expect(source).toHaveTextContent('微服务架构')
+    expect(source).toHaveTextContent('</svg>')
+    expect(source).toHaveTextContent('</div>')
+    expect(source).not.toHaveTextContent('再来个交付时间线')
+  })
+
+  it('previews adjacent style, bare SVG, and script as one artifact', () => {
+    const content = `<style>.diagram { color: red; }</style>
+
+<svg class="diagram"><text>diagram</text></svg>
+
+<script>document.querySelector('.diagram').dataset.ready = 'true'</script>`
+    render(<MarkdownRenderer content={content} />)
+
+    const srcDoc = screen.getByTitle('HTML preview').getAttribute('srcdoc') ?? ''
+    expect(srcDoc).toContain('.diagram { color: red; }')
+    expect(srcDoc).toContain('<svg class="diagram">')
+    expect(srcDoc).toContain("dataset.ready = 'true'")
+  })
+
+  it('previews a style and SVG artifact after a leading HTML comment', () => {
+    const content = `<!-- diagram -->
+<style>.diagram { color: red; }</style>
+
+<svg class="diagram"><text>diagram</text></svg>`
+    render(<MarkdownRenderer content={content} />)
+
+    const srcDoc = screen.getByTitle('HTML preview').getAttribute('srcdoc') ?? ''
+    expect(srcDoc).toContain('.diagram { color: red; }')
+    expect(srcDoc).toContain('<svg class="diagram">')
+
+    fireEvent.click(screen.getByRole('button', { name: 'View HTML source' }))
+    expect(screen.getByTestId('code-block')).toHaveTextContent('<!-- diagram -->')
+  })
+
+  it('renders a bare SVG through the sanitized DOM path without enabling scripts', () => {
+    const { container } = render(
+      <MarkdownRenderer
+        content={'<svg viewBox="0 0 100 100" onclick="alert(1)"><text>Bare SVG</text><script>window.bad=1</script></svg>'}
+      />,
+    )
+
+    expect(screen.queryByTitle('HTML preview')).not.toBeInTheDocument()
+    expect(container.querySelector('svg')).toBeInTheDocument()
+    expect(container.querySelector('svg')).not.toHaveAttribute('onclick')
+    expect(container.querySelector('script')).not.toBeInTheDocument()
+  })
+
   it('runs complete HTML code fences only inside an isolated sandbox preview', () => {
     render(<MarkdownRenderer content={'```html\n<button onclick="document.body.dataset.clicked=1">Run</button><script>document.title="artifact"</script>\n```'} />)
 
