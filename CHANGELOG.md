@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.6.29] - 2026-07-12
+
+- fix: stop HTML preview width feedback (75c7b38)
+- feat: preview fenced markup languages (d008faa)
+- fix: preserve bare HTML artifact assets (eae9b46)
+
 ## [v0.6.28] - 2026-07-12
 
 - fix: use accent color for HTML source control icon (7eb3c26)
