@@ -739,6 +739,21 @@ $$`
     expect(screen.getByTitle('HTML preview')).toBeInTheDocument()
   })
 
+  it.each([
+    ['svg', '<svg xmlns="http://www.w3.org/2000/svg"><text>SVG preview</text></svg>', 'SVG preview'],
+    ['xml', '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"><text>XML preview</text></svg>', 'XML preview'],
+    ['xhtml', '<html xmlns="http://www.w3.org/1999/xhtml"><body>XHTML preview</body></html>', 'XHTML preview'],
+  ])('previews fenced %s markup in the HTML sandbox', (language, source, expectedContent) => {
+    render(<MarkdownRenderer content={`\`\`\`${language}\n${source}\n\`\`\``} />)
+
+    const frame = screen.getByTitle('HTML preview')
+    expect(frame).toHaveAttribute('sandbox', 'allow-scripts')
+    expect(frame.getAttribute('srcdoc')).toContain(expectedContent)
+
+    fireEvent.click(screen.getByRole('button', { name: 'View HTML source' }))
+    expect(screen.getByTestId('code-block')).toHaveTextContent(`${language}:${source}`)
+  })
+
   it('sizes the HTML iframe to content width so the parent container can scroll horizontally', async () => {
     render(<MarkdownRenderer content={'```html\n<div style="width:1200px">wide preview</div>\n```'} />)
 

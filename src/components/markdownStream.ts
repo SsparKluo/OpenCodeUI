@@ -15,6 +15,12 @@ export type MarkdownStreamProjection = {
   blocks: MarkdownStreamBlock[]
 }
 
+const MARKUP_PREVIEW_LANGUAGES = new Set(['html', 'htm', 'xhtml', 'xml', 'svg'])
+
+export function isMarkupPreviewLanguage(language?: string): boolean {
+  return !!language && MARKUP_PREVIEW_LANGUAGES.has(language.toLowerCase())
+}
+
 function hashString(value: string) {
   let hash = 0
   for (let index = 0; index < value.length; index += 1) {
@@ -232,7 +238,7 @@ export function splitMarkdownStream(markdown: string, isStreaming: boolean): Mar
       if (block.token?.type === 'code') {
         const language = getLanguage((block.token as Tokens.Code).lang)
         return {
-          key: language && ['html', 'htm'].includes(language.toLowerCase())
+          key: isMarkupPreviewLanguage(language)
             ? `html-code:${block.start}`
             : `code:${block.start}:${hashString(block.raw)}`,
           raw: block.raw,
@@ -273,7 +279,7 @@ export function splitMarkdownStream(markdown: string, isStreaming: boolean): Mar
       const complete = fenceStart == null || block.start < fenceStart
       const language = getLanguage((block.token as Tokens.Code).lang)
       return {
-        key: language && ['html', 'htm'].includes(language.toLowerCase())
+        key: isMarkupPreviewLanguage(language)
           ? `html-code:${block.start}`
           : `code:${block.start}:${complete ? hashString(block.raw) : ''}`,
         raw: block.raw,

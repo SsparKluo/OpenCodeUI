@@ -20,7 +20,7 @@ import { detectLanguage } from '../utils/languageUtils'
 import { isTauri } from '../utils/tauri'
 import { marked } from 'marked'
 import type { Tokens } from 'marked'
-import { projectMarkdownStream, type MarkdownStreamProjection } from './markdownStream'
+import { isMarkupPreviewLanguage, projectMarkdownStream, type MarkdownStreamProjection } from './markdownStream'
 import { renderMarkdownToHtml } from './markdownHtmlRenderer'
 import {
   buildHtmlSandboxThemeCss,
@@ -991,10 +991,12 @@ function MarkdownHtmlArtifact({
   code,
   isReasoning,
   isIncomplete,
+  language = 'html',
 }: {
   code: string
   isReasoning: boolean
   isIncomplete?: boolean
+  language?: string
 }) {
   const [view, setView] = useState<'preview' | 'code'>('preview')
   const [contentHeight, setContentHeight] = useState(120)
@@ -1100,7 +1102,7 @@ function MarkdownHtmlArtifact({
     return (
       <CodeBlock
         code={code}
-        language="html"
+        language={language}
         variant={isReasoning ? 'reasoning' : 'default'}
         wordwrap={isReasoning}
         className="my-4 first:mt-0 last:mb-0"
@@ -1407,11 +1409,16 @@ const MarkdownStreamBlock = memo(function MarkdownStreamBlock({
         </div>
       )
     }
-    if (language && ['html', 'htm'].includes(language.toLowerCase()) && !isReasoning) {
+    if (isMarkupPreviewLanguage(language) && !isReasoning) {
       return (
         <div className={`markdown-stream-block ${isFirst ? 'markdown-stream-block-first' : 'markdown-stream-block-not-first'} ${isLast ? 'markdown-stream-block-last' : 'markdown-stream-block-not-last'}`}>
           <div className={MARKDOWN_BLOCK_CONTENT_CLASS}>
-            <MarkdownHtmlArtifact code={src} isReasoning={isReasoning} isIncomplete={isStreaming && !complete} />
+            <MarkdownHtmlArtifact
+              code={src}
+              language={language}
+              isReasoning={isReasoning}
+              isIncomplete={isStreaming && !complete}
+            />
           </div>
         </div>
       )

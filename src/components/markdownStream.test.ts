@@ -184,6 +184,15 @@ $$`)
     expect(complete[0].key).toBe(settled[0].key)
   })
 
+  it.each(['svg', 'xml', 'xhtml'])('keeps a %s preview key stable when the stream closes', language => {
+    const open = splitMarkdownStream(`\`\`\`${language}\n<svg><text>live</text></svg>`, true)
+    const complete = splitMarkdownStream(`\`\`\`${language}\n<svg><text>live</text></svg>\n\`\`\``, true)
+    const settled = splitMarkdownStream(`\`\`\`${language}\n<svg><text>live</text></svg>\n\`\`\``, false)
+
+    expect(open[0].key).toBe(complete[0].key)
+    expect(complete[0].key).toBe(settled[0].key)
+  })
+
   it('projects appended open code fences without rebuilding stable blocks', () => {
     const first = projectMarkdownStream(undefined, 'before\n\n```ts\nconst x = 1', true)
     const next = projectMarkdownStream(first, 'before\n\n```ts\nconst x = 12', true)
