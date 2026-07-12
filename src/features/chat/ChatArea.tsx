@@ -40,6 +40,7 @@ import {
   buildPageRenderSegments,
   computeAnchorRestoreScrollDelta,
   buildTurnDurationMap,
+  buildTurnLatestAssistantIdSet,
   computeExpandedPageRange,
   expandSelectionWithPageKeys,
   PAGE_ADJACENT_OVERSCAN,
@@ -123,6 +124,8 @@ interface ChatAreaProps {
   visibleMessages?: Message[]
   forkTargetIdMap?: Map<string, string | undefined>
   turnDurationMap?: Map<string, number>
+  /** 每个用户回合最后一条可见 assistant 的 id；用于仅在最新 step 显示完成信息 */
+  turnLatestAssistantIds?: Set<string>
   sessionId?: string | null
   isStreaming?: boolean
   allowStreamingLayoutAnimation?: boolean
@@ -159,6 +162,7 @@ export const ChatArea = memo(
         visibleMessages: visibleMessagesProp,
         forkTargetIdMap: forkTargetIdMapProp,
         turnDurationMap: turnDurationMapProp,
+        turnLatestAssistantIds: turnLatestAssistantIdsProp,
         sessionId,
         isStreaming: _isStreaming = false,
         allowStreamingLayoutAnimation = true,
@@ -245,6 +249,10 @@ export const ChatArea = memo(
       const localTurnDurationMap = useMemo(
         () => turnDurationMapProp ?? buildTurnDurationMap(messages, visibleMessages),
         [messages, turnDurationMapProp, visibleMessages],
+      )
+      const localTurnLatestAssistantIds = useMemo(
+        () => turnLatestAssistantIdsProp ?? buildTurnLatestAssistantIdSet(visibleMessages),
+        [turnLatestAssistantIdsProp, visibleMessages],
       )
 
       const activePages = pageRecords ?? pages
@@ -945,6 +953,7 @@ export const ChatArea = memo(
                   onFork={onFork}
                   canUndo={canUndo}
                   turnDurationMap={localTurnDurationMap}
+                  turnLatestAssistantIds={localTurnLatestAssistantIds}
                   forkTargetIdMap={localForkTargetIdMap}
                   allowStreamingLayoutAnimation={allowStreamingLayoutAnimation}
                   onMeasuredHeightChange={updateMeasuredPageHeight}
@@ -981,6 +990,7 @@ interface PageBlockProps {
   onFork?: (message: Message, forkMessageId?: string) => void | Promise<void>
   canUndo?: boolean
   turnDurationMap: Map<string, number>
+  turnLatestAssistantIds: Set<string>
   forkTargetIdMap: Map<string, string | undefined>
   allowStreamingLayoutAnimation: boolean
   onMeasuredHeightChange: (pageKey: string, nextHeight: number) => void
@@ -989,6 +999,7 @@ interface PageBlockProps {
 interface PageDerivedValueProps {
   page: ChatPage
   turnDurationMap: Map<string, number>
+  turnLatestAssistantIds: Set<string>
   forkTargetIdMap: Map<string, string | undefined>
 }
 
@@ -996,6 +1007,7 @@ function pageMessageDerivedValuesEqual(previous: PageDerivedValueProps, next: Pa
   return previous.page.messageIds.every(messageId => {
     return (
       previous.turnDurationMap.get(messageId) === next.turnDurationMap.get(messageId) &&
+      previous.turnLatestAssistantIds.has(messageId) === next.turnLatestAssistantIds.has(messageId) &&
       previous.forkTargetIdMap.get(messageId) === next.forkTargetIdMap.get(messageId)
     )
   })
@@ -1056,6 +1068,7 @@ const PageBlock = memo(function PageBlock({
   onFork,
   canUndo,
   turnDurationMap,
+  turnLatestAssistantIds,
   forkTargetIdMap,
   allowStreamingLayoutAnimation,
   onMeasuredHeightChange,
@@ -1091,6 +1104,11 @@ const PageBlock = memo(function PageBlock({
                       message={message}
                       allowStreamingLayoutAnimation={message.isStreaming ? allowStreamingLayoutAnimation : false}
                       turnDuration={turnDurationMap.get(message.info.id)}
+                      isTurnLatestAssistant={
+                        message.info.role === 'assistant'
+                          ? turnLatestAssistantIds.has(message.info.id)
+                          : undefined
+                      }
                       onUndo={message.info.role === 'user' ? onUndo : undefined}
                       onFork={onFork}
                       forkMessageId={forkTargetIdMap.get(message.info.id)}

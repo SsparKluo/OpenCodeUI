@@ -112,6 +112,8 @@
     "italic": "Italic",
     "markdown": "Markdown",
     "stepFinishInfo": "Step Finish Info",
+    "latestOnly": "Latest Step Only",
+    "showLatestOnly": "Show finish info only on the latest step of a turn; hide intermediate assistants and steps",
     "agent": "Agent",
     "showAgent": "Show agent name",
     "model": "Model",

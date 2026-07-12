@@ -64,6 +64,8 @@ export interface CustomCSSSnippet {
 
 /** step-finish 信息栏各项显示开关 */
 export interface StepFinishDisplay {
+  /** 仅在用户回合末尾的最新 step 显示完成信息；中间 assistant / step 不显示 */
+  latestOnly: boolean
   tokens: boolean
   cache: boolean
   cost: boolean
@@ -96,6 +98,7 @@ function clampFontScale(n: number): number {
 export type DiffStyle = 'markers' | 'changeBars'
 
 const DEFAULT_STEP_FINISH_DISPLAY: StepFinishDisplay = {
+  latestOnly: true,
   tokens: true,
   cache: true,
   cost: true,

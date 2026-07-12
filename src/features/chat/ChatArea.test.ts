@@ -4,6 +4,7 @@ import {
   buildExpandedPageSelection,
   buildPageRenderSegments,
   buildTurnDurationMap,
+  buildTurnLatestAssistantIdSet,
   computeAnchorRestoreScrollDelta,
   computeExpandedPageRange,
   estimateMessageRenderWeight,
@@ -120,6 +121,7 @@ function createPageBlockProps(page = createPage([createAssistantMessage('assista
     onFork: () => undefined,
     canUndo: true,
     turnDurationMap: new Map<string, number>(),
+    turnLatestAssistantIds: new Set<string>(),
     forkTargetIdMap: new Map<string, string | undefined>(),
     allowStreamingLayoutAnimation: false,
     onMeasuredHeightChange: () => undefined,
@@ -487,6 +489,24 @@ describe('buildTurnDurationMap', () => {
     expect(durationMap.get('assistant-2')).toBe(500)
     expect(durationMap.get('assistant-3')).toBe(600)
     expect(durationMap.has('assistant-1')).toBe(false)
+  })
+})
+
+describe('buildTurnLatestAssistantIdSet', () => {
+  it('keeps only the latest visible assistant id per user turn', () => {
+    const messages = [
+      createUserMessage('user-1', 1000),
+      createAssistantMessage('assistant-1', [], 1001, 1200),
+      createAssistantMessage('assistant-2', [], 1201, 1500),
+      createUserMessage('user-2', 2000),
+      createAssistantMessage('assistant-3', [], 2001, 2600),
+    ]
+    // 需要包含 user 消息才能划分回合边界
+    const latest = buildTurnLatestAssistantIdSet(messages)
+
+    expect(latest.has('assistant-1')).toBe(false)
+    expect(latest.has('assistant-2')).toBe(true)
+    expect(latest.has('assistant-3')).toBe(true)
   })
 })
 

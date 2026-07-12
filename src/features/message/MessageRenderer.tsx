@@ -46,6 +46,12 @@ interface MessageRendererProps {
   allowStreamingLayoutAnimation?: boolean
   /** 回合总时长（毫秒），仅在回合最后一条 assistant 消息上有值 */
   turnDuration?: number
+  /**
+   * 是否为该用户回合的最后一条可见 assistant。
+   * latestOnly 开启时，中间 assistant 不显示 step 完成信息。
+   * 未传入时按 true 处理（单条消息场景）。
+   */
+  isTurnLatestAssistant?: boolean
   onUndo?: (userMessageId: string) => void
   onFork?: (message: Message, forkMessageId?: string) => Promise<void> | void
   forkMessageId?: string
@@ -57,6 +63,7 @@ export const MessageRenderer = memo(function MessageRenderer({
   message,
   allowStreamingLayoutAnimation = true,
   turnDuration,
+  isTurnLatestAssistant = true,
   onUndo,
   onFork,
   forkMessageId,
@@ -83,6 +90,7 @@ export const MessageRenderer = memo(function MessageRenderer({
       message={message}
       allowStreamingLayoutAnimation={allowStreamingLayoutAnimation}
       turnDuration={turnDuration}
+      isTurnLatestAssistant={isTurnLatestAssistant}
       onFork={onFork}
       forkMessageId={forkMessageId}
       onEnsureParts={onEnsureParts}
@@ -379,6 +387,7 @@ const AssistantMessageView = memo(function AssistantMessageView({
   message,
   allowStreamingLayoutAnimation = true,
   turnDuration,
+  isTurnLatestAssistant = true,
   onFork,
   forkMessageId,
   onEnsureParts,
@@ -386,6 +395,7 @@ const AssistantMessageView = memo(function AssistantMessageView({
   message: Message
   allowStreamingLayoutAnimation?: boolean
   turnDuration?: number
+  isTurnLatestAssistant?: boolean
   onFork?: (message: Message, forkMessageId?: string) => Promise<void> | void
   forkMessageId?: string
   onEnsureParts?: (messageId: string) => void
@@ -393,6 +403,8 @@ const AssistantMessageView = memo(function AssistantMessageView({
   const { t } = useTranslation('message')
   const { parts, isStreaming, info } = message
   const { stepFinishDisplay, completedAtFormat } = useTheme()
+  // 整轮最新 assistant 才允许显示 step 完成信息（latestOnly 时中间 assistant 全隐藏）
+  const allowStepFinishOnMessage = !stepFinishDisplay.latestOnly || isTurnLatestAssistant
 
   const wrapperRef = useEntryGrowAnimation(info.time.created)
 
@@ -445,8 +457,18 @@ const AssistantMessageView = memo(function AssistantMessageView({
 
   const hasStepFinishPart = parts.some(part => part.type === 'step-finish')
   const showTurnDurationFooter =
-    !isStreaming && !hasStepFinishPart && stepFinishDisplay.turnDuration && turnDuration != null && turnDuration > 0
-  const showCompletedAtFooter = !isStreaming && !hasStepFinishPart && stepFinishDisplay.completedAt && completed != null
+    allowStepFinishOnMessage &&
+    !isStreaming &&
+    !hasStepFinishPart &&
+    stepFinishDisplay.turnDuration &&
+    turnDuration != null &&
+    turnDuration > 0
+  const showCompletedAtFooter =
+    allowStepFinishOnMessage &&
+    !isStreaming &&
+    !hasStepFinishPart &&
+    stepFinishDisplay.completedAt &&
+    completed != null
 
   if (!isStreaming && parts.length === 0) {
     // 有错误时直接显示错误信息
@@ -468,25 +490,31 @@ const AssistantMessageView = memo(function AssistantMessageView({
       <SmoothHeight isActive={!!isStreaming && allowStreamingLayoutAnimation}>
         <div className="flex flex-col gap-2">
           {renderItems.map((item: RenderItem, idx: number) => {
-            // 耗时只在最后一个含 stepFinish 的 item 上显示
+            // 本消息内最后一个含 stepFinish 的 item（耗时/完成时刻只挂这里）
             const isLastStepFinish =
               idx ===
               renderItems.findLastIndex(it =>
                 it.type === 'tool-group' ? !!it.stepFinish : it.part.type === 'step-finish',
               )
+            // latestOnly 开：整轮最后一条 assistant 的最后一个 step 才显示
+            // latestOnly 关：本消息所有 step-finish 都显示（旧行为）
+            const showStepFinish =
+              allowStepFinishOnMessage && (!stepFinishDisplay.latestOnly || isLastStepFinish)
+            // duration / turnDuration / completedAt 始终只挂在本消息最后一个 step
+            const showTiming = showStepFinish && isLastStepFinish
 
             if (item.type === 'tool-group') {
               return (
                 <ToolGroup
                   key={item.parts[0].id}
                   parts={item.parts}
-                  stepFinish={item.stepFinish}
-                  duration={isLastStepFinish ? duration : undefined}
-                  turnDuration={isLastStepFinish ? turnDuration : undefined}
+                  stepFinish={showStepFinish ? item.stepFinish : undefined}
+                  duration={showTiming ? duration : undefined}
+                  turnDuration={showTiming ? turnDuration : undefined}
                   isStreaming={isStreaming}
-                  agent={agent}
-                  modelLabel={modelLabel}
-                  completedAt={isLastStepFinish ? completed : undefined}
+                  agent={showStepFinish ? agent : undefined}
+                  modelLabel={showStepFinish ? modelLabel : undefined}
+                  completedAt={showTiming ? completed : undefined}
                 />
               )
             }
@@ -506,15 +534,16 @@ const AssistantMessageView = memo(function AssistantMessageView({
                 )
               }
               case 'step-finish':
+                if (!showStepFinish) return null
                 return (
                   <StepFinishPartView
                     key={part.id}
                     part={part}
-                    duration={isLastStepFinish ? duration : undefined}
-                    turnDuration={isLastStepFinish ? turnDuration : undefined}
+                    duration={showTiming ? duration : undefined}
+                    turnDuration={showTiming ? turnDuration : undefined}
                     agent={agent}
                     modelLabel={modelLabel}
-                    completedAt={isLastStepFinish ? completed : undefined}
+                    completedAt={showTiming ? completed : undefined}
                   />
                 )
               case 'subtask':

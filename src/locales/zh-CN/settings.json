@@ -112,6 +112,8 @@
     "italic": "Italic",
     "markdown": "Markdown",
     "stepFinishInfo": "Step 完成信息",
+    "latestOnly": "仅最新 Step",
+    "showLatestOnly": "只在一轮对话末尾的最新 step 显示完成信息，中间 assistant 与 step 不显示",
     "agent": "Agent",
     "showAgent": "显示 Agent 名称",
     "model": "Model",

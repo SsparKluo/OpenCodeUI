@@ -797,6 +797,7 @@ export const ChatPane = memo(function ChatPane({
               visibleMessages={chatPageViewModel.visibleMessages}
               forkTargetIdMap={chatPageViewModel.forkTargetIdMap}
               turnDurationMap={chatPageViewModel.turnDurationMap}
+              turnLatestAssistantIds={chatPageViewModel.turnLatestAssistantIds}
               sessionId={routeSessionId}
               isStreaming={isStreaming}
               allowStreamingLayoutAnimation={isAtBottom}

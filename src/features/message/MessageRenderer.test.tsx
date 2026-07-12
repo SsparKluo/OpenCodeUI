@@ -19,7 +19,7 @@ vi.mock('../../hooks/useTheme', () => ({
   useTheme: () => ({
     collapseUserMessages: mockCollapseUserMessages,
     renderUserMarkdown: mockRenderUserMarkdown,
-    stepFinishDisplay: { turnDuration: false },
+    stepFinishDisplay: { latestOnly: true, turnDuration: false, tokens: true, cache: true, cost: true, duration: true, agent: false, model: false, completedAt: false },
     descriptiveToolSteps: false,
     inlineToolRequests: false,
     immersiveMode: false,

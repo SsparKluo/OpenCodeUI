@@ -688,3 +688,30 @@ export function buildTurnDurationMap(messages: Message[], visibleMessages: Messa
 
   return map
 }
+
+/**
+ * 每个用户回合里，最后一条可见 assistant 消息的 id 集合。
+ * 用于「仅最新 Step」：中间 assistant 消息不显示 step 完成信息。
+ */
+export function buildTurnLatestAssistantIdSet(visibleMessages: Message[]): Set<string> {
+  const latestIds = new Set<string>()
+  let currentLatestAssistantId: string | null = null
+
+  const commitTurn = () => {
+    if (currentLatestAssistantId) latestIds.add(currentLatestAssistantId)
+  }
+
+  for (const message of visibleMessages) {
+    if (message.info.role === 'user') {
+      commitTurn()
+      currentLatestAssistantId = null
+      continue
+    }
+    if (message.info.role === 'assistant') {
+      currentLatestAssistantId = message.info.id
+    }
+  }
+
+  commitTurn()
+  return latestIds
+}

@@ -127,6 +127,7 @@ export function ChatSettings() {
       <SettingsSection title={t('chat.stepFinishInfo')}>
         {(
           [
+            { key: 'latestOnly', label: t('chat.latestOnly'), desc: t('chat.showLatestOnly') },
             { key: 'agent', label: t('chat.agent'), desc: t('chat.showAgent') },
             { key: 'model', label: t('chat.model'), desc: t('chat.showModel') },
             { key: 'tokens', label: t('chat.tokens'), desc: t('chat.showTokenUsage') },

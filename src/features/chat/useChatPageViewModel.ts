@@ -8,6 +8,7 @@ import {
 } from './chatAreaVisibility'
 import {
   buildTurnDurationMap,
+  buildTurnLatestAssistantIdSet,
   reconcileStableChatPages,
   type MessageGroupRow,
   type StableChatPage,
@@ -21,6 +22,7 @@ export interface ChatPageViewModel {
   outlineOwnerByMessageId: Map<string, string>
   forkTargetIdMap: Map<string, string | undefined>
   turnDurationMap: Map<string, number>
+  turnLatestAssistantIds: Set<string>
 }
 
 interface StableOutlineModel {
@@ -167,6 +169,14 @@ function reuseMap<K, V>(previous: Map<K, V> | undefined, next: Map<K, V>) {
   return previous
 }
 
+function reuseSet<T>(previous: Set<T> | undefined, next: Set<T>) {
+  if (!previous || previous.size !== next.size) return next
+  for (const value of next) {
+    if (!previous.has(value)) return next
+  }
+  return previous
+}
+
 export function buildChatPageViewModel(messages: Message[], previous?: ChatPageViewModel): ChatPageViewModel {
   const visibleMessageEntries = reuseVisibleMessageEntries(
     previous?.visibleMessageEntries,
@@ -184,6 +194,10 @@ export function buildChatPageViewModel(messages: Message[], previous?: ChatPageV
   const forkTargetIdMap = reuseMap(previous?.forkTargetIdMap, buildForkTargetIdMap(visibleMessageEntries))
   const outlineModel = getStableOutlineModel(visibleMessages)
   const turnDurationMap = reuseMap(previous?.turnDurationMap, buildTurnDurationMap(messages, visibleMessages))
+  const turnLatestAssistantIds = reuseSet(
+    previous?.turnLatestAssistantIds,
+    buildTurnLatestAssistantIdSet(visibleMessages),
+  )
 
   return {
     visibleMessageEntries,
@@ -193,6 +207,7 @@ export function buildChatPageViewModel(messages: Message[], previous?: ChatPageV
     outlineOwnerByMessageId: outlineModel.ownerByMessageId,
     forkTargetIdMap,
     turnDurationMap,
+    turnLatestAssistantIds,
   }
 }
 
