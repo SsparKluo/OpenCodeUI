@@ -2,6 +2,13 @@ export type HtmlColorScheme = 'light' | 'dark'
 
 export const HTML_SANDBOX_SECURITY_HEAD = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; img-src https: http: data: blob:; media-src https: http: data: blob:; font-src https: http: data:; style-src 'unsafe-inline' https: http:; script-src 'unsafe-inline' 'unsafe-eval' https: http: blob:; connect-src https: http:">`
 export const HTML_SANDBOX_VIEWPORT_HEAD = '<meta name="viewport" content="width=device-width, initial-scale=1">'
+export const HTML_SANDBOX_EDGE_OVERFLOW_TOLERANCE = 2
+
+export function normalizeHtmlSandboxContentWidth(measuredWidth: number, viewportWidth: number): number {
+  const measured = Math.max(1, Math.ceil(measuredWidth))
+  const viewport = Math.max(1, Math.ceil(viewportWidth))
+  return measured <= viewport + HTML_SANDBOX_EDGE_OVERFLOW_TOLERANCE ? viewport : measured
+}
 
 function scrollbarCss(theme: HtmlColorScheme): string {
   const thumb = theme === 'dark' ? 'rgba(210,210,210,.35)' : 'rgba(100,100,100,.35)'
@@ -26,7 +33,7 @@ export function buildHtmlSandboxThemeCss(theme: HtmlColorScheme, overflow: 'auto
  * auto-sized hosts can shrink after the iframe has already grown.
  */
 export function createHtmlSandboxMeasureScript(resizeId: string): string {
-  return `<script>(()=>{const id=${JSON.stringify(resizeId)};const send=()=>{const body=document.body;if(!body)return;const root=body.getBoundingClientRect();let bottom=0;let right=0;const nodes=body.querySelectorAll('*');for(let i=0;i<nodes.length;i+=1){const el=nodes[i];const tag=el.tagName;if(tag==='SCRIPT'||tag==='STYLE'||tag==='LINK'||tag==='META')continue;const style=getComputedStyle(el);if(style.display==='none'||style.visibility==='hidden'||style.position==='fixed')continue;const rect=el.getBoundingClientRect();bottom=Math.max(bottom,rect.bottom-root.top);right=Math.max(right,rect.right-root.left)}const height=Math.max(120,Math.ceil(bottom||body.scrollHeight));const width=Math.max(1,Math.ceil(right||body.scrollWidth));parent.postMessage({type:'opencode-html-resize',id,height,width},'*')};addEventListener('pointerdown',()=>parent.postMessage({type:'opencode-html-interaction',id},'*'),true);addEventListener('opencode-html-measure',send);addEventListener('load',send);if(typeof ResizeObserver!=='undefined')new ResizeObserver(send).observe(document.body);requestAnimationFrame(send)})()</script>`
+  return `<script>(()=>{const id=${JSON.stringify(resizeId)};const send=()=>{const body=document.body;if(!body)return;const root=body.getBoundingClientRect();let bottom=0;let right=0;const nodes=body.querySelectorAll('*');for(let i=0;i<nodes.length;i+=1){const el=nodes[i];const tag=el.tagName;if(tag==='SCRIPT'||tag==='STYLE'||tag==='LINK'||tag==='META')continue;const style=getComputedStyle(el);if(style.display==='none'||style.visibility==='hidden'||style.position==='fixed')continue;const rect=el.getBoundingClientRect();bottom=Math.max(bottom,rect.bottom-root.top);right=Math.max(right,rect.right-root.left)}const height=Math.max(120,Math.ceil(bottom||body.scrollHeight));const viewportWidth=Math.max(1,Math.ceil(root.width));const measuredWidth=Math.max(1,Math.ceil(right||body.scrollWidth));const width=measuredWidth<=viewportWidth+${HTML_SANDBOX_EDGE_OVERFLOW_TOLERANCE}?viewportWidth:measuredWidth;parent.postMessage({type:'opencode-html-resize',id,height,width},'*')};addEventListener('pointerdown',()=>parent.postMessage({type:'opencode-html-interaction',id},'*'),true);addEventListener('opencode-html-measure',send);addEventListener('load',send);if(typeof ResizeObserver!=='undefined')new ResizeObserver(send).observe(document.body);requestAnimationFrame(send)})()</script>`
 }
 
 function createThemeApplyScript(overflow: 'auto' | 'hidden'): string {
