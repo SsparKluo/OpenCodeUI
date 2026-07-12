@@ -20,7 +20,7 @@ import { detectLanguage } from '../utils/languageUtils'
 import { isTauri } from '../utils/tauri'
 import { marked } from 'marked'
 import type { Tokens } from 'marked'
-import { isMarkupPreviewLanguage, projectMarkdownStream, type MarkdownStreamProjection } from './markdownStream'
+import { isMarkupPreviewLanguage, projectMarkdownStream, stripLeadingHtmlComments, type MarkdownStreamProjection } from './markdownStream'
 import { renderMarkdownToHtml } from './markdownHtmlRenderer'
 import {
   buildHtmlSandboxThemeCss,
@@ -64,10 +64,10 @@ const HTML_CACHE_MAX = 64
 const MARKDOWN_BLOCK_CONTENT_CLASS = 'space-y-4 whitespace-normal [&>*:first-child]:mt-0 [&>*:last-child]:mb-0'
 const MARKDOWN_USER_STATE_ATTRIBUTE = 'data-markdown-user-state'
 const HTML_SOURCE_BUTTON_CLASS = 'absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md bg-bg-300/70 p-2 text-accent-main-100 opacity-0 shadow-sm backdrop-blur-md transition-all hover:bg-bg-300/90 hover:text-accent-main-100 group-hover/html-preview:opacity-100 group-focus-within/html-preview:opacity-100'
-const BLOCK_HTML_SOURCE_PATTERN = /^\s*<(?:address|article|aside|blockquote|center|details|dialog|div|dl|fieldset|figure|footer|form|header|html|main|nav|ol|section|table|ul)\b/i
-const PREFIXED_BLOCK_HTML_SOURCE_PATTERN = /^\s*<(?:style|script)\b[\s\S]*<(?:address|article|aside|blockquote|center|details|dialog|div|dl|fieldset|figure|footer|form|header|html|main|nav|ol|section|table|ul)\b/i
+const BLOCK_HTML_SOURCE_PATTERN = /^\s*<(?:address|article|aside|blockquote|center|details|dialog|div|dl|fieldset|figure|footer|form|header|html|main|nav|ol|section|svg|table|ul)\b/i
+const PREFIXED_BLOCK_HTML_SOURCE_PATTERN = /^\s*<(?:style|script)\b[\s\S]*<(?:address|article|aside|blockquote|center|details|dialog|div|dl|fieldset|figure|footer|form|header|html|main|nav|ol|section|svg|table|ul)\b/i
 const ARTIFACT_HTML_SOURCE_PATTERN = /(?:<!doctype\s+html\b|<html\b|<style\b|<script\b|<canvas\b|\son[a-z]+\s*=|(?:href|src)\s*=\s*["']?\s*javascript:)/i
-const STREAMING_HTML_CONTENT_PATTERN = /(?:```(?:html|htm)\b|<(?:address|article|aside|blockquote|center|details|dialog|div|dl|fieldset|figure|footer|form|header|html|main|nav|ol|section|style|table|ul)\b)/i
+const STREAMING_HTML_CONTENT_PATTERN = /(?:```(?:html|htm|xhtml|xml|svg)\b|<(?:address|article|aside|blockquote|canvas|center|details|dialog|div|dl|fieldset|figure|footer|form|header|html|main|nav|ol|section|style|svg|table|ul)\b)/i
 
 function getCachedHtml(src: string, isReasoning: boolean): string {
   const key = `${isReasoning ? 'r' : 'd'}:${src}`
@@ -1441,10 +1441,12 @@ const MarkdownStreamBlock = memo(function MarkdownStreamBlock({
     )
   }
 
-  const isHtmlDocument = /^\s*(?:<!doctype\s+html\b|<html\b)/i.test(src)
+  const htmlSourceStart = stripLeadingHtmlComments(src)
+  const isHtmlDocument = /^(?:<!doctype\s+html\b|<html\b)/i.test(htmlSourceStart)
+  const isBareSvg = /^<svg\b/i.test(htmlSourceStart)
   const isHtmlArtifact =
-    ARTIFACT_HTML_SOURCE_PATTERN.test(src) &&
-    (BLOCK_HTML_SOURCE_PATTERN.test(src) || PREFIXED_BLOCK_HTML_SOURCE_PATTERN.test(src))
+    !isBareSvg && ARTIFACT_HTML_SOURCE_PATTERN.test(src) &&
+    (BLOCK_HTML_SOURCE_PATTERN.test(htmlSourceStart) || PREFIXED_BLOCK_HTML_SOURCE_PATTERN.test(htmlSourceStart))
   if (!isReasoning && (isHtmlDocument || isHtmlArtifact)) {
     return (
       <div className={`markdown-stream-block ${isFirst ? 'markdown-stream-block-first' : 'markdown-stream-block-not-first'} ${isLast ? 'markdown-stream-block-last' : 'markdown-stream-block-not-last'}`}>
@@ -1455,7 +1457,7 @@ const MarkdownStreamBlock = memo(function MarkdownStreamBlock({
     )
   }
 
-  if (!isReasoning && BLOCK_HTML_SOURCE_PATTERN.test(src)) {
+  if (!isReasoning && BLOCK_HTML_SOURCE_PATTERN.test(htmlSourceStart)) {
     return (
       <div className={`markdown-stream-block ${isFirst ? 'markdown-stream-block-first' : 'markdown-stream-block-not-first'} ${isLast ? 'markdown-stream-block-last' : 'markdown-stream-block-not-last'}`}>
         <MarkdownHtmlIsland src={src} isReasoning={false} isLive={mode === 'live'} />

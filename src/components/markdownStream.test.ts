@@ -175,6 +175,127 @@ $$`)
     }
   })
 
+  it('keeps a prefixed style, bare SVG, and trailing script in one artifact block', () => {
+    const markdown = `<style>.diagram { color: red; }</style>
+
+<svg class="diagram"><text>diagram</text></svg>
+
+<script>document.querySelector('.diagram').dataset.ready = 'true'</script>`
+
+    for (const isStreaming of [true, false]) {
+      const blocks = splitMarkdownStream(markdown, isStreaming)
+      expect(blocks).toHaveLength(1)
+      expect(blocks[0].src).toBe(markdown)
+    }
+  })
+
+  it('stops a prefixed artifact before independent HTML after its trailing script', () => {
+    const artifact = `<style>.diagram { color: red; }</style>
+
+<svg class="diagram"><text>diagram</text></svg>
+
+<script>document.querySelector('.diagram').dataset.ready = 'true'</script>`
+    const blocks = splitMarkdownStream(`${artifact}\n\n<section>independent</section>`, false)
+
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].src.trimEnd()).toBe(artifact)
+    expect(blocks[1].src).toBe('<section>independent</section>')
+  })
+
+  it('recognizes a prefixed artifact after a leading HTML comment', () => {
+    const markdown = `<!-- diagram -->
+<style>.diagram { color: red; }</style>
+
+<svg class="diagram"><text>diagram</text></svg>
+
+<script>document.querySelector('.diagram').dataset.ready = 'true'</script>`
+
+    expect(splitMarkdownStream(markdown, false)).toEqual([
+      expect.objectContaining({ src: markdown, mode: 'full' }),
+    ])
+  })
+
+  it('keeps a styled SVG wrapper intact and stops before following Markdown', () => {
+    const artifact = `<div style="font-family:sans-serif;">
+<style>
+:root { --surface: #fff; }
+</style>
+
+<svg width="100%" viewBox="0 0 680 460">
+  <!-- diagram title -->
+  <text x="40" y="30">微服务架构</text>
+</svg>
+</div>`
+    const markdown = `${artifact}\n\n再来个交付时间线`
+
+    for (const isStreaming of [true, false]) {
+      const blocks = splitMarkdownStream(markdown, isStreaming)
+      expect(blocks).toHaveLength(2)
+      expect(blocks[0].src.trimEnd()).toBe(artifact)
+      expect(blocks[1].src).toBe('再来个交付时间线')
+    }
+  })
+
+  it('ignores apparent container tags inside scripts when finding the artifact boundary', () => {
+    const artifact = `<div><script>const template = '<section>not markup</section>'</script><canvas></canvas></div>`
+    const blocks = splitMarkdownStream(`${artifact}\n\nafter`, false)
+
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].src.trimEnd()).toBe(artifact)
+    expect(blocks[1].src).toBe('after')
+  })
+
+  it('does not treat similar raw-text closing names as script or style boundaries', () => {
+    const artifact = `<div><script>const template = '</scripture><section>'</script><style>.x::after{content:'</stylesheet><div>'}</style></div>`
+    const blocks = splitMarkdownStream(`${artifact}\n\nafter`, false)
+
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].src.trimEnd()).toBe(artifact)
+    expect(blocks[1].src).toBe('after')
+  })
+
+  it('ignores container-like text inside textarea and title elements', () => {
+    const artifact = `<div><textarea>literal </div></textarea><title>also </section></title><svg></svg></div>`
+    const blocks = splitMarkdownStream(`${artifact}\n\nafter`, false)
+
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].src.trimEnd()).toBe(artifact)
+    expect(blocks[1].src).toBe('after')
+  })
+
+  it('ignores container-like markup inside comments split across Markdown blocks', () => {
+    const artifact = `<div>
+<!--
+
+</div>
+
+inside comment
+-->
+<svg><text>diagram</text></svg>
+</div>`
+    const blocks = splitMarkdownStream(`${artifact}\n\nafter`, false)
+
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].src.trimEnd()).toBe(artifact)
+    expect(blocks[1].src).toBe('after')
+  })
+
+  it('stops an artifact at its root closing tag within the same Markdown token', () => {
+    const blocks = splitMarkdownStream('<div><svg></svg></div>\n# after', false)
+
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].src).toBe('<div><svg></svg></div>')
+    expect(blocks[1].src).toBe('\n# after')
+  })
+
+  it('recognizes a bare SVG as one HTML artifact', () => {
+    const svg = '<svg viewBox="0 0 100 100"><text>diagram</text></svg>'
+
+    expect(splitMarkdownStream(svg, false)).toEqual([
+      expect.objectContaining({ src: svg, mode: 'full' }),
+    ])
+  })
+
   it('keeps an HTML fence key stable when the stream closes', () => {
     const open = splitMarkdownStream('```html\n<div>live</div>', true)
     const complete = splitMarkdownStream('```html\n<div>live</div>\n```', true)

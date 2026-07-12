@@ -79,6 +79,16 @@ function appendReferenceDefinitions(src: string, referenceDefinitions: string) {
   return `${src.replace(/\s+$/, '')}\n\n${referenceDefinitions}`
 }
 
+export function stripLeadingHtmlComments(source: string): string {
+  let rest = source.trimStart()
+  while (rest.startsWith('<!--')) {
+    const commentEnd = rest.indexOf('-->', 4)
+    if (commentEnd === -1) return rest
+    rest = rest.slice(commentEnd + 3).trimStart()
+  }
+  return rest
+}
+
 type MarkdownSourceBlock = { start: number; raw: string; src: string; token?: Tokens.Generic }
 
 const BLOCK_HTML_CONTAINERS = new Set([
@@ -101,23 +111,105 @@ const BLOCK_HTML_CONTAINERS = new Set([
   'nav',
   'ol',
   'section',
+  'svg',
   'table',
   'ul',
 ])
+const HTML_RAW_TEXT_ELEMENTS = new Set([
+  'iframe',
+  'noembed',
+  'noframes',
+  'plaintext',
+  'script',
+  'style',
+  'textarea',
+  'title',
+  'xmp',
+])
 
-function updateHtmlContainerStack(raw: string, stack: string[]) {
-  const markup = raw.replace(/<!--[\s\S]*?-->/g, '')
-  for (const match of markup.matchAll(/<\s*(\/?)\s*([a-z][a-z0-9-]*)\b[^>]*>/gi)) {
-    const tag = match[2]?.toLowerCase()
-    if (!tag || !BLOCK_HTML_CONTAINERS.has(tag) || /\/\s*>$/.test(match[0])) continue
-    if (!match[1]) {
-      stack.push(tag)
+type HtmlContainerState = {
+  stack: string[]
+  rawTextTag: string | null
+  inComment: boolean
+  sawContainer: boolean
+}
+
+function updateHtmlContainerStack(raw: string, state: HtmlContainerState): number | null {
+  const lower = raw.toLowerCase()
+  let index = 0
+
+  while (index < raw.length) {
+    if (state.inComment) {
+      const commentEnd = raw.indexOf('-->', index)
+      if (commentEnd === -1) return null
+      state.inComment = false
+      index = commentEnd + 3
       continue
     }
-    const openingIndex = stack.lastIndexOf(tag)
-    if (openingIndex !== -1) stack.splice(openingIndex)
+
+    if (state.rawTextTag) {
+      const closingPattern = new RegExp(`</${state.rawTextTag}(?=[\\s/>])`, 'g')
+      closingPattern.lastIndex = index
+      const closingMatch = closingPattern.exec(lower)
+      if (!closingMatch) return null
+      const closingIndex = closingMatch.index
+      index = closingIndex
+      state.rawTextTag = null
+    }
+
+    const openingIndex = raw.indexOf('<', index)
+    if (openingIndex === -1) return null
+    if (raw.startsWith('<!--', openingIndex)) {
+      const commentEnd = raw.indexOf('-->', openingIndex + 4)
+      if (commentEnd === -1) {
+        state.inComment = true
+        return null
+      }
+      index = commentEnd + 3
+      continue
+    }
+
+    const tagMatch = /^<\s*(\/?)\s*([a-z][a-z0-9-]*)\b/i.exec(raw.slice(openingIndex))
+    if (!tagMatch) {
+      index = openingIndex + 1
+      continue
+    }
+
+    let tagEnd = openingIndex + tagMatch[0].length
+    let quote = ''
+    while (tagEnd < raw.length) {
+      const character = raw[tagEnd]
+      if (quote) {
+        if (character === quote) quote = ''
+      } else if (character === '"' || character === "'") quote = character
+      else if (character === '>') break
+      tagEnd += 1
+    }
+    if (tagEnd >= raw.length) return null
+
+    const tag = tagMatch[2].toLowerCase()
+    const isClosing = !!tagMatch[1]
+    const isSelfClosing = /\/\s*>$/.test(raw.slice(openingIndex, tagEnd + 1))
+    if (BLOCK_HTML_CONTAINERS.has(tag) && !isSelfClosing) {
+      state.sawContainer = true
+      if (!isClosing) state.stack.push(tag)
+      else {
+        const stackIndex = state.stack.lastIndexOf(tag)
+        if (stackIndex !== -1) state.stack.splice(stackIndex)
+        if (state.sawContainer && !state.stack.length) return tagEnd + 1
+      }
+    }
+
+    index = tagEnd + 1
+    if (!isClosing && !isSelfClosing && HTML_RAW_TEXT_ELEMENTS.has(tag)) {
+      state.rawTextTag = tag
+    }
   }
+
+  return null
 }
+
+const HTML_ARTIFACT_ROOT_PATTERN = /^\s*(?:<!--[\s\S]*?-->\s*)*<(?:address|article|aside|blockquote|center|details|dialog|div|dl|fieldset|figure|footer|form|header|html|main|nav|ol|section|svg|table|ul)\b/i
 
 function mergeHtmlArtifactBlocks(blocks: MarkdownSourceBlock[]): MarkdownSourceBlock[] {
   const merged: MarkdownSourceBlock[] = []
@@ -130,9 +222,23 @@ function mergeHtmlArtifactBlocks(blocks: MarkdownSourceBlock[]): MarkdownSourceB
     }
 
     const run = [block]
-    while (blocks[index + 1]?.token?.type === 'html') {
-      run.push(blocks[index + 1])
+    const firstMarkup = stripLeadingHtmlComments(block.raw)
+    let hasMarkupPrefix = /^<(?:style|script)\b/i.test(firstMarkup)
+    let sawRoot = HTML_ARTIFACT_ROOT_PATTERN.test(block.raw)
+    let sawTrailingScript = sawRoot && /^<script\b/i.test(firstMarkup)
+    while (blocks[index + 1]) {
+      const next = blocks[index + 1]
+      const nextMarkup = stripLeadingHtmlComments(next.raw)
+      const startsRoot = HTML_ARTIFACT_ROOT_PATTERN.test(next.raw)
+      const startsActive = /^<(?:style|script)\b/i.test(nextMarkup)
+      const canJoin = next.token?.type === 'html' || (hasMarkupPrefix && startsRoot)
+      if (!canJoin || (sawTrailingScript && !startsActive)) break
+
+      run.push(next)
       index += 1
+      if (!sawRoot && startsActive) hasMarkupPrefix = true
+      sawRoot ||= startsRoot
+      if (sawRoot && /^<script\b/i.test(nextMarkup)) sawTrailingScript = true
     }
     const raw = run.map(item => item.raw).join('')
     if (run.length > 1 && /<(?:style|script)\b/i.test(raw)) {
@@ -147,34 +253,72 @@ function mergeHtmlArtifactBlocks(blocks: MarkdownSourceBlock[]): MarkdownSourceB
 
 function mergeMixedHtmlBlocks(blocks: MarkdownSourceBlock[]): MarkdownSourceBlock[] {
   const merged: MarkdownSourceBlock[] = []
-  const stack: string[] = []
+  let state: HtmlContainerState = { stack: [], rawTextTag: null, inComment: false, sawContainer: false }
   let pending: MarkdownSourceBlock | null = null
+
+  const resetState = () => {
+    state = { stack: [], rawTextTag: null, inComment: false, sawContainer: false }
+  }
+
+  const pushSuffix = (block: MarkdownSourceBlock, rootEnd: number) => {
+    const suffix = block.raw.slice(rootEnd)
+    if (!suffix) return
+    if (!suffix.trim()) {
+      const previous = merged[merged.length - 1]
+      if (previous) {
+        previous.raw += suffix
+        previous.src += suffix
+      }
+      return
+    }
+    merged.push({ start: block.start + rootEnd, raw: suffix, src: suffix })
+  }
 
   for (const block of blocks) {
     if (!pending) {
       if (/^\s*<!doctype\s+html\b/i.test(block.raw)) {
         pending = { ...block, src: block.raw, token: undefined }
+        const rootEnd = updateHtmlContainerStack(block.raw, state)
+        if (rootEnd != null) {
+          pending.raw = block.raw.slice(0, rootEnd)
+          pending.src = pending.raw
+          merged.push(pending)
+          pending = null
+          resetState()
+          pushSuffix(block, rootEnd)
+        }
         continue
       }
-      if (block.token?.type !== 'html') {
+      if (block.token?.type !== 'html' && !HTML_ARTIFACT_ROOT_PATTERN.test(block.raw)) {
         merged.push(block)
         continue
       }
-      updateHtmlContainerStack(block.raw, stack)
-      if (!stack.length) {
+      const rootEnd = updateHtmlContainerStack(block.raw, state)
+      if (rootEnd != null && rootEnd < block.raw.length) {
+        const artifact = block.raw.slice(0, rootEnd)
+        merged.push({ ...block, raw: artifact, src: artifact, token: undefined })
+        resetState()
+        pushSuffix(block, rootEnd)
+        continue
+      }
+      if (!state.stack.length) {
         merged.push(block)
+        resetState()
         continue
       }
       pending = { ...block, src: block.raw, token: undefined }
       continue
     }
 
-    pending.raw += block.raw
-    pending.src += block.raw
-    if (block.token?.type === 'html') updateHtmlContainerStack(block.raw, stack)
-    if (!stack.length) {
+    const rootEnd = block.token?.type === 'code' ? null : updateHtmlContainerStack(block.raw, state)
+    const artifactPart = rootEnd == null ? block.raw : block.raw.slice(0, rootEnd)
+    pending.raw += artifactPart
+    pending.src += artifactPart
+    if (rootEnd != null) {
       merged.push(pending)
       pending = null
+      resetState()
+      pushSuffix(block, rootEnd)
     }
   }
 
