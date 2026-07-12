@@ -6,6 +6,7 @@ import { ChevronDownIcon, ChevronRightIcon, SplitIcon, SpinnerIcon, UndoIcon } f
 import { CopyButton, SmoothHeight } from '../../components/ui'
 import { MarkdownRenderer } from '../../components/MarkdownRenderer'
 import { useDelayedRender } from '../../hooks'
+import { useInputCapabilities } from '../../hooks/useInputCapabilities'
 import { useTheme } from '../../hooks/useTheme'
 import {
   useInlineToolRequests,
@@ -259,6 +260,14 @@ interface UserMessageViewProps {
   canUndo?: boolean
 }
 
+/** PC 精细指针：默认隐藏，悬浮消息/聚焦时显示；触控优先设备始终显示 */
+function useMessageActionBarClass() {
+  const { preferTouchUi } = useInputCapabilities()
+  return preferTouchUi
+    ? 'flex items-center gap-1 transition-opacity'
+    : 'flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto focus-within:pointer-events-auto transition-opacity'
+}
+
 const UserMessageView = memo(function UserMessageView({
   message,
   onUndo,
@@ -274,6 +283,7 @@ const UserMessageView = memo(function UserMessageView({
   )
   const shouldRenderSystemContext = useDelayedRender(showSystemContext)
   const { collapseUserMessages, renderUserMarkdown } = useTheme()
+  const actionBarClass = useMessageActionBarClass()
 
   const wrapperRef = useEntryGrowAnimation(info.time.created)
 
@@ -358,8 +368,8 @@ const UserMessageView = memo(function UserMessageView({
           </div>
         )}
 
-        {/* Action buttons */}
-        <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 [@media(any-pointer:coarse)]:opacity-100 transition-opacity">
+        {/* Action buttons — PC 悬浮消息显示；触控设备始终显示 */}
+        <div className={actionBarClass}>
           {/* Undo button */}
           {canUndo && onUndo && (
             <button
@@ -407,6 +417,7 @@ const AssistantMessageView = memo(function AssistantMessageView({
   const allowStepFinishOnMessage = !stepFinishDisplay.latestOnly || isTurnLatestAssistant
   // 分叉/复制：默认只在回合末尾助手消息显示，避免连续多条打断阅读
   const showMessageActions = !actionsOnLatestAssistantOnly || isTurnLatestAssistant
+  const actionBarClass = useMessageActionBarClass()
 
   const wrapperRef = useEntryGrowAnimation(info.time.created)
 
@@ -576,7 +587,7 @@ const AssistantMessageView = memo(function AssistantMessageView({
       )}
 
       {showMessageActions && hasCopyableText && (
-        <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 [@media(any-pointer:coarse)]:opacity-100 transition-opacity">
+        <div className={actionBarClass}>
           <ForkActionButton message={message} onFork={onFork} forkMessageId={forkMessageId} />
           <CopyButton text={fullText} position="static" />
         </div>

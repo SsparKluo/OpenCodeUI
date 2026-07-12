@@ -15,6 +15,10 @@ vi.mock('../../hooks', () => ({
   useDelayedRender: (show: boolean) => show,
 }))
 
+vi.mock('../../hooks/useInputCapabilities', () => ({
+  useInputCapabilities: () => ({ preferTouchUi: false, canHover: true, hasCoarsePointer: false, hasTouch: false }),
+}))
+
 vi.mock('../../hooks/useTheme', () => ({
   useTheme: () => ({
     collapseUserMessages: mockCollapseUserMessages,
