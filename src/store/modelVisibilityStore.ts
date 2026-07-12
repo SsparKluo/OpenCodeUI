@@ -23,26 +23,27 @@ class ModelVisibilityStore {
     this.reload()
     serverStore.onServerChange(() => {
       this.reload()
-      this.notify()
+      this.emit()
     })
   }
 
-  private updateSnapshot() {
+  private syncSnapshot() {
     this.snapshot = Array.from(this.hiddenModelKeys).sort()
   }
 
-  private persist() {
+  private emit() {
+    this.listeners.forEach(listener => listener())
+  }
+
+  private commit() {
+    this.syncSnapshot()
     serverStorage.setJSON(STORAGE_KEY_HIDDEN_MODELS, this.snapshot)
+    this.emit()
   }
 
   private reload() {
     this.hiddenModelKeys = new Set(loadHiddenModelKeys())
-    this.updateSnapshot()
-  }
-
-  private notify() {
-    this.updateSnapshot()
-    this.listeners.forEach(listener => listener())
+    this.syncSnapshot()
   }
 
   subscribe = (listener: Listener): (() => void) => {
@@ -67,8 +68,7 @@ class ModelVisibilityStore {
       changed = true
     }
     if (!changed) return
-    this.persist()
-    this.notify()
+    this.commit()
   }
 
   setManyVisible(models: ModelInfo[], visible: boolean) {
@@ -83,8 +83,7 @@ class ModelVisibilityStore {
       }
     }
     if (!changed) return
-    this.persist()
-    this.notify()
+    this.commit()
   }
 }
 
