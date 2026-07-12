@@ -819,6 +819,7 @@ $$`
     const surface = sourceButton.parentElement
 
     expect(surface).toHaveAttribute('tabindex', '0')
+    expect(sourceButton.className).toContain('text-accent-main-100')
     expect(sourceButton.className).toContain('[@media(hover:none)]:opacity-0')
 
     const srcDoc = frame.getAttribute('srcdoc') ?? ''
