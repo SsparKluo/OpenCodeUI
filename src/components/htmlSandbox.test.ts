@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildHtmlSandboxThemeCss,
   createHtmlSandboxMeasureScript,
+  createHtmlSandboxStorageScript,
+  createSandboxedHtmlDocument,
   HTML_SANDBOX_EDGE_OVERFLOW_TOLERANCE,
   normalizeHtmlSandboxContentWidth,
 } from './htmlSandbox'
@@ -39,5 +41,52 @@ describe('HTML sandbox theme', () => {
     expect(css).toContain('--surface-1:#2a2a28')
     expect(css).toContain('--text-primary:#ffffff')
     expect(css).toContain('--border-strong:#52514e')
+  })
+})
+
+describe('HTML sandbox storage', () => {
+  function installFallbackStorage() {
+    const source = createHtmlSandboxStorageScript().replace(/^<script>|<\/script>$/g, '')
+    const sandboxWindow = {} as Window & typeof globalThis
+    Object.defineProperty(sandboxWindow, 'localStorage', {
+      configurable: true,
+      get: () => { throw new DOMException('opaque origin', 'SecurityError') },
+    })
+    Object.defineProperty(sandboxWindow, 'sessionStorage', {
+      configurable: true,
+      get: () => { throw new DOMException('opaque origin', 'SecurityError') },
+    })
+    Function('window', 'DOMException', source)(sandboxWindow, DOMException)
+    return sandboxWindow
+  }
+
+  it('installs isolated synchronous storage APIs when native access is denied', () => {
+    const first = installFallbackStorage()
+    const second = installFallbackStorage()
+
+    first.localStorage.setItem('score', 12 as unknown as string)
+    first.sessionStorage.setItem('screen', 'game')
+    expect(first.localStorage.getItem('score')).toBe('12')
+    expect(first.localStorage.key(0)).toBe('score')
+    expect(first.localStorage.length).toBe(1)
+    expect(first.sessionStorage.getItem('screen')).toBe('game')
+    expect(second.localStorage.getItem('score')).toBeNull()
+
+    expect(first.localStorage.removeItem('score')).toBeUndefined()
+    first.sessionStorage.clear()
+    expect(first.localStorage.length).toBe(0)
+    expect(first.sessionStorage.length).toBe(0)
+  })
+
+  it('injects the storage fallback before user head scripts', () => {
+    const document = createSandboxedHtmlDocument(
+      '<script>localStorage.setItem("ready", "true")</script><main>preview</main>',
+      'preview',
+      'light',
+    )
+
+    expect(document.indexOf("for(const name of['localStorage','sessionStorage'])")).toBeLessThan(
+      document.indexOf('localStorage.setItem("ready", "true")'),
+    )
   })
 })

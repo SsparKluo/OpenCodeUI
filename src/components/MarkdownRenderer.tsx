@@ -25,6 +25,7 @@ import { renderMarkdownToHtml } from './markdownHtmlRenderer'
 import {
   buildHtmlSandboxThemeCss,
   createHtmlSandboxMeasureScript,
+  createHtmlSandboxStorageScript,
   createSandboxedHtmlDocument,
   HTML_SANDBOX_SECURITY_HEAD,
   HTML_SANDBOX_VIEWPORT_HEAD,
@@ -783,10 +784,16 @@ function decodeLocalFileHrefInline(href?: string): string | null {
 
 function createStreamingHtmlDocument(resizeId: string, theme: 'light' | 'dark'): string {
   const themeHead = `<style id="opencode-html-theme">${buildHtmlSandboxThemeCss(theme, 'hidden')}</style>`
+  const themeCss = JSON.stringify({
+    light: buildHtmlSandboxThemeCss('light', 'hidden'),
+    dark: buildHtmlSandboxThemeCss('dark', 'hidden'),
+  })
+  const storageScript = createHtmlSandboxStorageScript()
   const measureScript = createHtmlSandboxMeasureScript(resizeId)
   const bridge = `<script>
   (() => {
     const id = ${JSON.stringify(resizeId)};
+    const themeCss = ${themeCss};
     const measure = () => dispatchEvent(new Event('opencode-html-measure'));
     let scheduledScripts = 0;
     let scriptQueue = Promise.resolve();
@@ -794,10 +801,7 @@ function createStreamingHtmlDocument(resizeId: string, theme: 'light' | 'dark'):
       document.documentElement.style.colorScheme = theme;
       document.documentElement.dataset.theme = theme;
       const style = document.getElementById('opencode-html-theme');
-      if (style) {
-        const textColor = theme === 'dark' ? '#d8d8d8' : '#2b2b2b';
-        style.textContent = ':root{color-scheme:' + theme + ';font-family:system-ui,sans-serif}html,body{margin:0;overflow:hidden;background:transparent;color:' + textColor + '}';
-      }
+      if (style) style.textContent = themeCss[theme] || themeCss.light;
       dispatchEvent(new CustomEvent('opencode-theme-change', { detail: { theme } }));
       dispatchEvent(new Event('resize'));
       measure();
@@ -934,7 +938,7 @@ function createStreamingHtmlDocument(resizeId: string, theme: 'light' | 'dark'):
     });
   })();
   </script>`
-  return `<!doctype html><html><head>${HTML_SANDBOX_SECURITY_HEAD}${HTML_SANDBOX_VIEWPORT_HEAD}${themeHead}</head><body>${measureScript}${bridge}</body></html>`
+  return `<!doctype html><html><head>${HTML_SANDBOX_SECURITY_HEAD}${HTML_SANDBOX_VIEWPORT_HEAD}${themeHead}${storageScript}</head><body>${measureScript}${bridge}</body></html>`
 }
 
 

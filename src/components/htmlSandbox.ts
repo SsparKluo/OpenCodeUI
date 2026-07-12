@@ -42,6 +42,10 @@ export function normalizeHtmlSandboxContentWidth(measuredWidth: number, viewport
   return measured <= viewport + HTML_SANDBOX_EDGE_OVERFLOW_TOLERANCE ? viewport : measured
 }
 
+export function createHtmlSandboxStorageScript(): string {
+  return `<script>(()=>{const create=()=>{const values=new Map();return{get length(){return values.size},key:index=>Array.from(values.keys())[Number(index)]??null,getItem:key=>values.get(String(key))??null,setItem:(key,value)=>{key=String(key);value=String(value);let size=key.length+value.length;for(const [storedKey,storedValue] of values){if(storedKey!==key)size+=storedKey.length+storedValue.length}if(size>1048576)throw new DOMException('Storage quota exceeded','QuotaExceededError');values.set(key,value)},removeItem:key=>{values.delete(String(key))},clear:()=>values.clear()}};for(const name of['localStorage','sessionStorage']){try{window[name].getItem('__opencode_probe__');continue}catch{}try{Object.defineProperty(window,name,{configurable:true,enumerable:true,value:create()})}catch{}}})()</script>`
+}
+
 function sandboxThemeVariablesCss(theme: HtmlColorScheme): string {
   return Object.entries(HTML_SANDBOX_THEME_VARIABLES[theme])
     .map(([name, value]) => `${name}:${value}`)
@@ -92,7 +96,7 @@ export function createSandboxedHtmlDocument(
   const parsed = new DOMParser().parseFromString(source, 'text/html')
   const viewportHead = parsed.head.querySelector('meta[name="viewport"]') ? '' : HTML_SANDBOX_VIEWPORT_HEAD
   const themeHead = `<style id="opencode-html-theme">${buildHtmlSandboxThemeCss(theme, overflow)}</style>`
-  parsed.head.insertAdjacentHTML('afterbegin', `${securityHead}${viewportHead}${themeHead}`)
+  parsed.head.insertAdjacentHTML('afterbegin', `${securityHead}${viewportHead}${themeHead}${createHtmlSandboxStorageScript()}`)
   parsed.body.insertAdjacentHTML(
     'afterbegin',
     `${createThemeApplyScript(overflow)}${createHtmlSandboxMeasureScript(resizeId)}`,
