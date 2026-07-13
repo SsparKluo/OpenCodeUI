@@ -725,10 +725,8 @@ const ToolGroup = memo(function ToolGroup({
   ])
 
   const effectiveExpanded = expanded || hasPendingInteraction
-  // 展开 steps：先画摘要/折叠条，再挂工具行；交互例外立刻挂
-  const shouldRenderBody = useDelayedRender(effectiveExpanded, 320, {
-    mountDelayMs: hasPendingInteraction ? 0 : 16,
-  })
+  // 展开即挂工具行：默认展开时 header 与 body 同帧
+  const shouldRenderBody = useDelayedRender(effectiveExpanded)
 
   // compact: 单工具时用紧凑布局（图标内联，无 timeline 连接线）
   // 不区分 streaming 状态 — 单工具始终 compact，第二个工具到来时再自然过渡到 timeline

@@ -127,12 +127,8 @@ export const ToolPartView = memo(function ToolPartView({
   const [isChildFullscreen, setIsChildFullscreen] = useState(false)
   const { rootRef, headerRef, withScrollLock } = useDisclosureScrollLock()
   const effectiveExpanded = expanded || hasPendingInteraction || permissionResolved || isChildFullscreen
-  // 权限/提问/全屏：body 立刻挂，不能挡操作
-  // 其它展开：先画 header 一行，约一帧后再挂 body，避免 header+body 同帧叠两层长高
-  const needsImmediateBody = hasPendingInteraction || permissionResolved || isChildFullscreen
-  const shouldRenderBody = useDelayedRender(effectiveExpanded, 320, {
-    mountDelayMs: needsImmediateBody ? 0 : 16,
-  })
+  // 展开即挂 body：默认展开的工具 header/body 同帧，不再先 header 后 body
+  const shouldRenderBody = useDelayedRender(effectiveExpanded)
   const toggleExpanded = useCallback(() => {
     withScrollLock(() => setExpanded(!expanded))
   }, [expanded, setExpanded, withScrollLock])
