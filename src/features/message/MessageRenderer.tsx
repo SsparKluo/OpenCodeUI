@@ -725,7 +725,10 @@ const ToolGroup = memo(function ToolGroup({
   ])
 
   const effectiveExpanded = expanded || hasPendingInteraction
-  const shouldRenderBody = useDelayedRender(effectiveExpanded)
+  // 展开 steps：先画摘要/折叠条，再挂工具行；交互例外立刻挂
+  const shouldRenderBody = useDelayedRender(effectiveExpanded, 320, {
+    mountDelayMs: hasPendingInteraction ? 0 : 16,
+  })
 
   // compact: 单工具时用紧凑布局（图标内联，无 timeline 连接线）
   // 不区分 streaming 状态 — 单工具始终 compact，第二个工具到来时再自然过渡到 timeline
@@ -735,9 +738,9 @@ const ToolGroup = memo(function ToolGroup({
 
   // 统一容器结构 — ToolPartView 始终在同一 React 树位置，
   // streaming→idle / 1→N 工具切换时不 remount，expanded 状态不丢失
+  // 高度动画交给消息级 SmoothHeight，组内不再嵌套一层
   return (
-    <SmoothHeight isActive={!!isStreaming}>
-      <div ref={stepsRootRef} className="flex flex-col">
+    <div ref={stepsRootRef} className="flex flex-col">
         {showStepsHeader &&
           (descriptiveToolSteps ? (
             <button
@@ -834,8 +837,7 @@ const ToolGroup = memo(function ToolGroup({
             />
           </div>
         )}
-      </div>
-    </SmoothHeight>
+    </div>
   )
 })
 

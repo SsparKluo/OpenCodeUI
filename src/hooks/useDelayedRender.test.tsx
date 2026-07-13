@@ -41,11 +41,32 @@ describe('useDelayedRender', () => {
     expect(result.current).toBe(false)
 
     rerender({ show: true })
+    expect(result.current).toBe(true)
+
+    vi.useRealTimers()
+  })
+
+  it('delays mount when mountDelayMs is set', () => {
+    vi.useFakeTimers()
+
+    const { result, rerender } = renderHook(
+      ({ show }) => useDelayedRender(show, 200, { mountDelayMs: 16 }),
+      { initialProps: { show: false } },
+    )
+
+    expect(result.current).toBe(false)
+
+    rerender({ show: true })
+    expect(result.current).toBe(false)
 
     act(() => {
-      vi.runAllTimers()
+      vi.advanceTimersByTime(15)
     })
+    expect(result.current).toBe(false)
 
+    act(() => {
+      vi.advanceTimersByTime(1)
+    })
     expect(result.current).toBe(true)
 
     vi.useRealTimers()
