@@ -216,6 +216,11 @@ export const ChatArea = memo(
       const topSentinelVisibleRef = useRef(false)
       const lastWheelInputAtRef = useRef(0)
       const tryLoadMoreRef = useRef<() => void>(NOOP)
+      // 给 rAF 里判断「展开页是否会变」用，避免在 setState updater 里做副作用
+      const scrollOffsetFromBottomRef = useRef(0)
+      const viewportHeightRef = useRef(0)
+      const measuredPageHeightsRef = useRef<Record<string, number>>({})
+      const activePagesRef = useRef<StableChatPage[]>([])
 
       useEffect(() => {
         loadMoreRef.current = onLoadMore
@@ -257,6 +262,10 @@ export const ChatArea = memo(
       )
 
       const activePages = pageRecords ?? pages
+      activePagesRef.current = activePages
+      scrollOffsetFromBottomRef.current = scrollOffsetFromBottom
+      viewportHeightRef.current = viewportHeight
+      measuredPageHeightsRef.current = measuredPageHeights
 
       useLayoutEffect(() => {
         const previous = previousActivePagesRef.current
@@ -419,15 +428,50 @@ export const ChatArea = memo(
         const root = scrollRef.current
         if (!root) return
 
-        const nextOffset = Math.abs(root.scrollTop)
         if (scrollSnapshotRafRef.current !== null) cancelAnimationFrame(scrollSnapshotRafRef.current)
         scrollSnapshotRafRef.current = requestAnimationFrame(() => {
           scrollSnapshotRafRef.current = null
-          setScrollOffsetFromBottom(prev => {
-            const delta = nextOffset - prev
-            if (Math.abs(delta) < 1) return prev
-            return nextOffset
-          })
+          const liveRoot = scrollRef.current
+          if (!liveRoot) return
+
+          const liveOffset = Math.abs(liveRoot.scrollTop)
+          const previousOffset = scrollOffsetFromBottomRef.current
+          if (Math.abs(liveOffset - previousOffset) < 1) return
+
+          // 只有展开页集合真会变时才钉锚点，避免每次滚动都 restore 和用户手感打架
+          if (!isAtBottomRef.current && !isScrollAnchorLocked()) {
+            const pages = activePagesRef.current
+            const heights = measuredPageHeightsRef.current
+            const viewport = viewportHeightRef.current
+            if (pages.length > 0 && viewport > 0) {
+              const previousRange = computeExpandedPageRange({
+                pages,
+                measuredPageHeights: heights,
+                scrollOffsetFromBottom: previousOffset,
+                viewportHeight: viewport,
+                adjacentPageCount: PAGE_ADJACENT_OVERSCAN,
+                adjacentPageMaxSourceHeight: viewport * ADJACENT_PAGE_PRELOAD_VIEWPORTS,
+              })
+              const nextRange = computeExpandedPageRange({
+                pages,
+                measuredPageHeights: heights,
+                scrollOffsetFromBottom: liveOffset,
+                viewportHeight: viewport,
+                adjacentPageCount: PAGE_ADJACENT_OVERSCAN,
+                adjacentPageMaxSourceHeight: viewport * ADJACENT_PAGE_PRELOAD_VIEWPORTS,
+              })
+              if (
+                previousRange.startIndex !== nextRange.startIndex ||
+                previousRange.endIndex !== nextRange.endIndex
+              ) {
+                const anchor = captureLoadMoreAnchor(liveRoot)
+                if (anchor) pendingLayoutAnchorRef.current = anchor
+              }
+            }
+          }
+
+          scrollOffsetFromBottomRef.current = liveOffset
+          setScrollOffsetFromBottom(liveOffset)
         })
       }, [])
 
@@ -747,9 +791,10 @@ export const ChatArea = memo(
         const root = scrollRef.current
         if (!anchor || !root) return
 
-        const target = root.querySelector<HTMLElement>(`[data-message-id="${anchor.messageId}"]`)
-        pendingLayoutAnchorRef.current = null
+        // 找不到目标就保留锚点，等下一次 layout（页刚展开时可能晚一帧）
+        const target = findLoadMoreAnchorTarget(root, anchor)
         if (!target) return
+        pendingLayoutAnchorRef.current = null
 
         const rootRect = root.getBoundingClientRect()
         const nextTopOffset = target.getBoundingClientRect().top - rootRect.top
@@ -822,21 +867,29 @@ export const ChatArea = memo(
 
       const updateMeasuredPageHeight = useCallback((pageKey: string, nextHeight: number) => {
         if (nextHeight <= 0) return
+        const current = measuredPageHeightsRef.current[pageKey] ?? null
+        if (current !== null && Math.abs(current - nextHeight) < 1) return
+
+        const root = scrollRef.current
+        // 仅“二次测高”时钉锚点（图片/iframe 异步长高）。
+        // 首次测高不钉：折叠→展开由 offset 变更前的锚点负责，避免盖掉预锚点。
+        if (
+          root &&
+          !isAtBottomRef.current &&
+          !isScrollAnchorLocked() &&
+          current !== null &&
+          Math.abs(current - nextHeight) >= 1 &&
+          pendingLayoutAnchorRef.current === null
+        ) {
+          const anchor = captureLoadMoreAnchor(root)
+          if (anchor) pendingLayoutAnchorRef.current = anchor
+        }
+
         setMeasuredPageHeights(previous => {
-          const current = previous[pageKey] ?? null
-          if (current !== null && Math.abs(current - nextHeight) < 1) return previous
-          const root = scrollRef.current
-          // 折叠 header 锁滚动时让路，避免两套 scrollTop 补偿互抢
-          if (
-            root &&
-            !isAtBottomRef.current &&
-            !isScrollAnchorLocked() &&
-            current !== null &&
-            Math.abs(current - nextHeight) >= 1
-          ) {
-            pendingLayoutAnchorRef.current = captureLoadMoreAnchor(root)
-          }
+          const prevHeight = previous[pageKey] ?? null
+          if (prevHeight !== null && Math.abs(prevHeight - nextHeight) < 1) return previous
           const next = { ...previous, [pageKey]: nextHeight }
+          measuredPageHeightsRef.current = next
           return next
         })
       }, [])
