@@ -19,6 +19,11 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('../../../hooks', () => ({
   useDelayedRender: (show: boolean) => show,
+  useDisclosureScrollLock: () => ({
+    rootRef: () => undefined,
+    headerRef: () => undefined,
+    withScrollLock: (action: () => void) => action(),
+  }),
 }))
 
 vi.mock('../../../hooks/useTheme', () => ({

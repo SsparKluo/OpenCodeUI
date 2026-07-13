@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { ChevronDownIcon, CheckIcon, ClockIcon, CloseIcon, CircleIcon } from '../../../../components/Icons'
 import type { ToolRendererProps } from '../types'
-import { useDelayedRender } from '../../../../hooks'
+import { useDelayedRender, useDisclosureScrollLock } from '../../../../hooks'
 import { extractTodos } from './todoUtils'
 import { useUiDisclosureState } from '../../../../utils/uiDisclosureState'
 
@@ -38,15 +38,17 @@ function TodoList({ todos, stateKey }: { todos: TodoItem[]; stateKey: string }) 
   const { t } = useTranslation('message')
   const [collapsed, setCollapsed] = useUiDisclosureState(stateKey, false)
   const shouldRenderBody = useDelayedRender(!collapsed)
+  const { rootRef, headerRef, withScrollLock } = useDisclosureScrollLock()
   const completed = todos.filter(t => t.status === 'completed').length
   const total = todos.length
 
   return (
-    <div className="border border-border-200/50 rounded-md overflow-hidden bg-bg-100 text-[length:var(--fs-sm)]">
+    <div ref={rootRef} className="border border-border-200/50 rounded-md overflow-hidden bg-bg-100 text-[length:var(--fs-sm)]">
       {/* Header */}
       <div
+        ref={headerRef}
         className="flex items-center justify-between px-3 h-8 bg-bg-200/50 hover:bg-bg-200 cursor-pointer select-none transition-colors"
-        onClick={() => setCollapsed(!collapsed)}
+        onClick={() => withScrollLock(() => setCollapsed(!collapsed))}
       >
         <div className="flex items-center gap-2">
           <span className={`text-text-400 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`}>

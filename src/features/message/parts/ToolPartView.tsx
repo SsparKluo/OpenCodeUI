@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { diffLines } from 'diff'
 import { ChevronDownIcon, ChevronRightIcon } from '../../../components/Icons'
 import type { ToolPart } from '../../../types/message'
-import { useDelayedRender } from '../../../hooks'
+import { useDelayedRender, useDisclosureScrollLock } from '../../../hooks'
 import { useNow } from '../../../hooks/useNow'
 import { serverStore } from '../../../store/serverStore'
 import { useTheme } from '../../../hooks/useTheme'
@@ -125,8 +125,12 @@ export const ToolPartView = memo(function ToolPartView({
   const [expanded, setExpanded] = useUiDisclosureState(`message:${part.messageID}:tool:${part.id}`, shouldStartExpanded)
   const hasAutoExpandedReadableRef = useRef(shouldStartExpanded && immersiveMode && descriptive && isReadable)
   const [isChildFullscreen, setIsChildFullscreen] = useState(false)
+  const { rootRef, headerRef, withScrollLock } = useDisclosureScrollLock()
   const effectiveExpanded = expanded || hasPendingInteraction || permissionResolved || isChildFullscreen
   const shouldRenderBody = useDelayedRender(effectiveExpanded)
+  const toggleExpanded = useCallback(() => {
+    withScrollLock(() => setExpanded(!expanded))
+  }, [expanded, setExpanded, withScrollLock])
 
   useEffect(() => {
     let frameId: number | null = null
@@ -222,11 +226,12 @@ export const ToolPartView = memo(function ToolPartView({
     const diffStats = toolData.diffStats || computeDiffStatsFromData(toolData)
 
     return (
-      <div className="group py-0.5">
+      <div ref={rootRef} className="group py-0.5">
         <button
           type="button"
+          ref={headerRef}
           className="flex w-full items-center gap-3 rounded-md px-0 py-1 text-left hover:bg-bg-200/30 transition-colors group/header"
-          onClick={() => setExpanded(!expanded)}
+          onClick={toggleExpanded}
         >
           <div className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden">
             <span
@@ -286,7 +291,7 @@ export const ToolPartView = memo(function ToolPartView({
   // Grid: [14px icon] [gap 6px] [content] — mirrors ReasoningPartView alignment
   if (compact) {
     return (
-      <div className="group relative grid grid-cols-[14px_minmax(0,1fr)] gap-x-1.5 items-start py-1">
+      <div ref={rootRef} className="group relative grid grid-cols-[14px_minmax(0,1fr)] gap-x-1.5 items-start py-1">
         {/* Icon column — fixed, outside of interactive area */}
         <span className="inline-flex h-9 w-[14px] items-center justify-center shrink-0">{toolIcon}</span>
 
@@ -294,8 +299,9 @@ export const ToolPartView = memo(function ToolPartView({
         <div className="min-w-0">
           <button
             type="button"
+            ref={headerRef}
             className="flex items-center gap-2 w-full h-9 text-left pl-2 pr-0 hover:bg-bg-200/40 rounded-sm transition-colors group/header"
-            onClick={() => setExpanded(!expanded)}
+            onClick={toggleExpanded}
           >
             <div className="flex items-baseline gap-2 overflow-hidden flex-1 min-w-0">
               <span
@@ -366,7 +372,7 @@ export const ToolPartView = memo(function ToolPartView({
 
   // ── Timeline layout (multi-tool groups) ──
   return (
-    <div className="group relative flex min-w-0">
+    <div ref={rootRef} className="group relative flex min-w-0">
       {/* Timeline Column */}
       <div className="w-8 shrink-0 relative">
         {/* Top connector — 留 4px gap 到 icon */}
@@ -384,8 +390,9 @@ export const ToolPartView = memo(function ToolPartView({
         {/* Header - h-9 和 timeline 图标行等高 */}
         <button
           type="button"
+          ref={headerRef}
           className="flex items-center gap-2.5 w-full h-9 text-left pl-2 pr-0 hover:bg-bg-200/40 rounded-sm transition-colors group/header"
-          onClick={() => setExpanded(!expanded)}
+          onClick={toggleExpanded}
         >
           <div className="flex items-baseline gap-2 overflow-hidden flex-1 min-w-0">
             <span

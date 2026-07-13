@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { MessageError } from '../../../types/message'
 import { AlertCircleIcon, ChevronDownIcon } from '../../../components/Icons'
 import { useDelayedRender } from '../../../hooks/useDelayedRender'
+import { useDisclosureScrollLock } from '../../../hooks'
 import { CodeBlock } from '../../../components/CodeBlock'
 import { useUiDisclosureState } from '../../../utils/uiDisclosureState'
 
@@ -21,6 +22,7 @@ export const MessageErrorView = memo(function MessageErrorView({ error, stateKey
   const hasDetails = !!(details || description)
   const [expanded, setExpanded] = useUiDisclosureState(stateKey ?? `message-error:${title}`, false)
   const shouldRenderBody = useDelayedRender(expanded)
+  const { rootRef, headerRef, withScrollLock } = useDisclosureScrollLock()
 
   const colorClass = severity === 'error' ? 'text-danger-100' : 'text-warning-100'
   const borderClass = severity === 'error' ? 'border-danger-100/20' : 'border-warning-100/20'
@@ -47,10 +49,11 @@ export const MessageErrorView = memo(function MessageErrorView({ error, stateKey
   }, [details])
 
   return (
-    <div className={`px-3 py-2 rounded-md border ${borderClass} bg-bg-100/50`}>
+    <div ref={rootRef} className={`px-3 py-2 rounded-md border ${borderClass} bg-bg-100/50`}>
       <div
+        ref={headerRef}
         className={`flex items-center gap-2 ${hasDetails ? 'cursor-pointer' : ''}`}
-        onClick={() => hasDetails && setExpanded(!expanded)}
+        onClick={() => hasDetails && withScrollLock(() => setExpanded(!expanded))}
       >
         <AlertCircleIcon className={`w-4 h-4 ${colorClass} flex-shrink-0`} />
         <span className={`text-[length:var(--fs-base)] ${colorClass} flex-1 min-w-0 truncate`}>{title}</span>

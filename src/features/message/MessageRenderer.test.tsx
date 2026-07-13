@@ -13,6 +13,11 @@ vi.mock('motion/mini', () => ({
 
 vi.mock('../../hooks', () => ({
   useDelayedRender: (show: boolean) => show,
+  useDisclosureScrollLock: () => ({
+    rootRef: () => undefined,
+    headerRef: () => undefined,
+    withScrollLock: (action: () => void) => action(),
+  }),
 }))
 
 vi.mock('../../hooks/useInputCapabilities', () => ({

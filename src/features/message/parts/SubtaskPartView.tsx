@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { SubtaskPart } from '../../../types/message'
 import { useChildSessions, type ChildSessionInfo } from '../../../store'
 import { useSessionNavigation } from '../../../contexts/SessionNavigationContext'
-import { useDelayedRender } from '../../../hooks'
+import { useDelayedRender, useDisclosureScrollLock } from '../../../hooks'
 import { UsersIcon, ChevronDownIcon, LayersIcon, TerminalIcon, ReturnIcon } from '../../../components/Icons'
 import { useUiDisclosureState } from '../../../utils/uiDisclosureState'
 
@@ -22,6 +22,7 @@ export const SubtaskPartView = memo(function SubtaskPartView({ part }: SubtaskPa
   const { t } = useTranslation('message')
   const [expanded, setExpanded] = useUiDisclosureState(`message:${part.messageID}:subtask:${part.id}`, false)
   const shouldRenderBody = useDelayedRender(expanded)
+  const { rootRef, headerRef, withScrollLock } = useDisclosureScrollLock()
   const { navigateToSession } = useSessionNavigation()
 
   // 获取子 session 信息（如果已创建）
@@ -44,11 +45,12 @@ export const SubtaskPartView = memo(function SubtaskPartView({ part }: SubtaskPa
   }
 
   return (
-    <div className="rounded-md border border-border-200/60 bg-bg-100/50 overflow-hidden">
+    <div ref={rootRef} className="rounded-md border border-border-200/60 bg-bg-100/50 overflow-hidden">
       {/* Header */}
       <div
+        ref={headerRef}
         className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-bg-200/30 transition-colors"
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => withScrollLock(() => setExpanded(!expanded))}
       >
         {/* Status indicator */}
         <div

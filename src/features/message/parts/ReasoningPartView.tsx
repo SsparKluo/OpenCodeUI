@@ -2,7 +2,7 @@ import { memo, useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDownIcon, LightbulbIcon, SpinnerIcon } from '../../../components/Icons'
 import { ScrollArea } from '../../../components/ui'
-import { useDelayedRender } from '../../../hooks'
+import { useDelayedRender, useDisclosureScrollLock } from '../../../hooks'
 import { useTheme } from '../../../hooks/useTheme'
 import { MarkdownRenderer } from '../../../components/MarkdownRenderer'
 import type { ReasoningPart } from '../../../types/message'
@@ -27,10 +27,14 @@ export const ReasoningPartView = memo(function ReasoningPartView({ part, isStrea
   const displayText = rawText
   const [expanded, setExpanded] = useUiDisclosureState(`message:${part.messageID}:reasoning:${part.id}`, false)
   const shouldRenderBody = useDelayedRender(expanded)
+  const { rootRef, headerRef, withScrollLock } = useDisclosureScrollLock()
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const summaryContainerRef = useRef<HTMLDivElement>(null)
   const summaryMeasureRef = useRef<HTMLSpanElement>(null)
   const [summaryOverflow, setSummaryOverflow] = useState(false)
+  const toggleExpanded = useCallback(() => {
+    withScrollLock(() => setExpanded(!expanded))
+  }, [expanded, setExpanded, withScrollLock])
 
   const collapsedPreview = useMemo(() => (displayText || '').replace(/\s+/g, ' ').trim(), [displayText])
   const thoughtDurationLabel = useMemo(() => {
@@ -123,7 +127,8 @@ export const ReasoningPartView = memo(function ReasoningPartView({ part, isStrea
       <>
         <button
           type="button"
-          onClick={() => setExpanded(!expanded)}
+          ref={headerRef}
+          onClick={toggleExpanded}
           aria-expanded={expanded}
           className="group/reasoning flex w-full min-w-0 items-start gap-2 m-0 border-0 bg-transparent p-0 text-left cursor-pointer text-text-400 hover:text-text-200"
         >
@@ -193,7 +198,7 @@ export const ReasoningPartView = memo(function ReasoningPartView({ part, isStrea
     )
 
     return (
-      <div className="py-1">
+      <div ref={rootRef} className="py-1">
         {ITALIC_SHOW_LEADING_GLYPH ? (
           <div className="grid grid-cols-[14px_minmax(0,1fr)] gap-x-1.5 items-start">
             <span className="inline-flex h-5 w-[14px] items-start justify-center pt-[2px] text-text-500">
@@ -214,12 +219,15 @@ export const ReasoningPartView = memo(function ReasoningPartView({ part, isStrea
 
   return (
     <div
+      ref={rootRef}
       className={`ring-1 ring-inset ring-border-300/20 rounded-lg overflow-hidden transition-all duration-300 ease-out ${
         expanded ? 'w-full' : 'w-[260px]'
       }`}
     >
       <button
-        onClick={() => setExpanded(!expanded)}
+        type="button"
+        ref={headerRef}
+        onClick={toggleExpanded}
         disabled={!hasContent && !isPartStreaming}
         className={`w-full grid grid-cols-[auto_minmax(0,1fr)_12px] items-center gap-x-1.5 px-2 py-2 text-text-400 hover:bg-bg-200/50 transition-colors ${
           !hasContent ? 'cursor-default' : ''

@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RetryIcon, PatchIcon, ChevronDownIcon, FileIcon } from '../../../components/Icons'
 import { useDelayedRender } from '../../../hooks/useDelayedRender'
+import { useDisclosureScrollLock } from '../../../hooks'
 import type { RetryPart, CompactionPart, PatchPart } from '../../../types/message'
 import { useUiDisclosureState } from '../../../utils/uiDisclosureState'
 
@@ -17,16 +18,18 @@ export const RetryPartView = memo(function RetryPartView({ part }: RetryPartView
   const { t } = useTranslation('message')
   const [expanded, setExpanded] = useUiDisclosureState(`message:${part.messageID}:retry:${part.id}`, false)
   const shouldRenderBody = useDelayedRender(expanded)
+  const { rootRef, headerRef, withScrollLock } = useDisclosureScrollLock()
   const { attempt, error, time } = part
 
   const timeStr = new Date(time.created).toLocaleTimeString()
   const isRetryable = error.data.isRetryable
 
   return (
-    <div className="px-3 py-2 rounded-md bg-warning-100/10 border border-warning-100/20">
+    <div ref={rootRef} className="px-3 py-2 rounded-md bg-warning-100/10 border border-warning-100/20">
       <button
         type="button"
-        onClick={() => setExpanded(!expanded)}
+        ref={headerRef}
+        onClick={() => withScrollLock(() => setExpanded(!expanded))}
         aria-expanded={expanded}
         className="flex w-full items-center gap-2 bg-transparent border-none p-0 text-left"
       >
@@ -102,14 +105,16 @@ export const PatchPartView = memo(function PatchPartView({ part }: PatchPartView
   const { t } = useTranslation('message')
   const [expanded, setExpanded] = useUiDisclosureState(`message:${part.messageID}:patch:${part.id}`, false)
   const shouldRenderBody = useDelayedRender(expanded)
+  const { rootRef, headerRef, withScrollLock } = useDisclosureScrollLock()
   const { hash, files } = part
   const fileCount = files.length
 
   return (
-    <div className="rounded-md border border-border-200/60 bg-bg-100/50 overflow-hidden">
+    <div ref={rootRef} className="rounded-md border border-border-200/60 bg-bg-100/50 overflow-hidden">
       <button
         type="button"
-        onClick={() => setExpanded(!expanded)}
+        ref={headerRef}
+        onClick={() => withScrollLock(() => setExpanded(!expanded))}
         aria-expanded={expanded}
         className="flex h-8 w-full items-center gap-2 px-3 text-left bg-transparent border-none hover:bg-bg-200/30 transition-colors"
       >

@@ -1,8 +1,8 @@
-import { memo, useState, useCallback, useRef, useEffect } from 'react'
+import { memo, useState, useCallback, useRef, useEffect, type RefCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ContentBlock } from '../../../../components'
 import { ChevronRightIcon, ExternalLinkIcon, StopIcon } from '../../../../components/Icons'
-import { useDelayedRender, useResponsiveMaxHeight } from '../../../../hooks'
+import { useDelayedRender, useDisclosureScrollLock, useResponsiveMaxHeight } from '../../../../hooks'
 import { useSessionState, messageStore, childSessionStore } from '../../../../store'
 import { useSessionNavigation } from '../../../../contexts/SessionNavigationContext'
 import { abortSession, getSessionMessages } from '../../../../api'
@@ -34,6 +34,7 @@ export const TaskRenderer = memo(function TaskRenderer({ part, onFullscreenChang
     state.status === 'running' || state.status === 'pending',
   )
   const [isContentFullscreen, setIsContentFullscreen] = useState(false)
+  const { rootRef, headerRef, withScrollLock } = useDisclosureScrollLock()
   const effectiveExpanded = expanded || isContentFullscreen
   const shouldRenderBody = useDelayedRender(effectiveExpanded)
 
@@ -91,7 +92,7 @@ export const TaskRenderer = memo(function TaskRenderer({ part, onFullscreenChang
   }, [isRunning, setExpanded])
 
   return (
-    <div className="min-w-0">
+    <div ref={rootRef} className="min-w-0">
       <div>
         {/* Header */}
         <TaskHeader
@@ -99,7 +100,8 @@ export const TaskRenderer = memo(function TaskRenderer({ part, onFullscreenChang
           description={description}
           status={state.status}
           expanded={expanded}
-          onToggle={() => setExpanded(!expanded)}
+          headerRef={headerRef}
+          onToggle={() => withScrollLock(() => setExpanded(!expanded))}
           sessionId={targetSessionId}
           onStop={isRunning ? handleStop : undefined}
         />
@@ -170,6 +172,7 @@ interface TaskHeaderProps {
   status: string
   expanded: boolean
   onToggle: () => void
+  headerRef?: RefCallback<HTMLElement>
   sessionId?: string
   onStop?: (e: React.MouseEvent) => void
 }
@@ -180,6 +183,7 @@ export const TaskHeader = memo(function TaskHeader({
   status,
   expanded,
   onToggle,
+  headerRef,
   sessionId,
   onStop,
 }: TaskHeaderProps) {
@@ -215,7 +219,7 @@ export const TaskHeader = memo(function TaskHeader({
   }`
 
   return (
-    <div className="flex items-center gap-2 py-1 group">
+    <div ref={headerRef} className="flex items-center gap-2 py-1 group">
       <button
         type="button"
         onClick={onToggle}
