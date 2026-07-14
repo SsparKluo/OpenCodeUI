@@ -305,8 +305,18 @@ export const ChatPane = memo(function ChatPane({
   const renderedMessages = renderedMessagesView.sessionId === routeSessionId ? renderedMessagesView.messages : []
   const isRenderingDeferredMessages = renderedMessages !== messages
   const renderedLoadState = loadState === 'loaded' && isRenderingDeferredMessages ? 'loading' : loadState
+  // 对齐 oc：session 消息 ready 后再 mount ChatArea，避免空 virtualizer 先建再跳
+  const messagesReady = !routeSessionId || loadState === 'loaded' || loadState === 'error'
+  const chatAreaMountKey = messagesReady ? (routeSessionId ?? 'home') : null
   const inputDisabled = !!routeSessionId && loadState === 'error' && messages.length === 0
   const chatPageViewModel = useChatPageViewModel(renderedMessages)
+
+  // 切 session remount 时默认视为贴底，避免回底按钮闪一下
+  useEffect(() => {
+    if (chatAreaMountKey == null) return
+    setIsAtBottom(true)
+    setVisibleMessageIdsStable([])
+  }, [chatAreaMountKey, setVisibleMessageIdsStable])
 
   const connectionError = useMemo<MessageError | undefined>(() => {
     if (!activeServer) {
@@ -790,32 +800,41 @@ export const ChatPane = memo(function ChatPane({
       <div className="absolute inset-0">
         <InlineToolRequestContext.Provider value={inlineToolRequestCtx}>
           <ErrorBoundary onOpenSettings={onOpenSettings}>
-            <ChatArea
-              ref={chatAreaRef}
-              messages={renderedMessages}
-              pageRecords={chatPageViewModel.pageRecords}
-              visibleMessages={chatPageViewModel.visibleMessages}
-              forkTargetIdMap={chatPageViewModel.forkTargetIdMap}
-              turnDurationMap={chatPageViewModel.turnDurationMap}
-              turnLatestAssistantIds={chatPageViewModel.turnLatestAssistantIds}
-              sessionId={routeSessionId}
-              isStreaming={isStreaming}
-              allowStreamingLayoutAnimation={isAtBottom}
-              loadState={renderedLoadState}
-              loadError={loadError}
-              connectionError={connectionError}
-              onOpenSettings={onOpenSettings}
-              hasMoreHistory={hasMoreHistory}
-              onLoadMore={loadMoreHistory}
-              onUndo={handleUndoWithAnimation}
-              onFork={handleForkMessage}
-              canUndo={canUndo}
-              registerMessage={registerMessage}
-              retryStatus={retryStatus}
-              bottomPadding={inputBoxHeight}
-              onVisibleMessageIdsChange={handleVisibleIdsChange}
-              onAtBottomChange={setIsAtBottom}
-            />
+            {chatAreaMountKey == null ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3 text-text-400 session-loading-indicator">
+                  <span className="w-5 h-5 border-2 border-text-400/30 border-t-text-400 rounded-full animate-spin" />
+                </div>
+              </div>
+            ) : (
+              <ChatArea
+                key={chatAreaMountKey}
+                ref={chatAreaRef}
+                messages={renderedMessages}
+                pageRecords={chatPageViewModel.pageRecords}
+                visibleMessages={chatPageViewModel.visibleMessages}
+                forkTargetIdMap={chatPageViewModel.forkTargetIdMap}
+                turnDurationMap={chatPageViewModel.turnDurationMap}
+                turnLatestAssistantIds={chatPageViewModel.turnLatestAssistantIds}
+                sessionId={routeSessionId}
+                isStreaming={isStreaming}
+                allowStreamingLayoutAnimation={isAtBottom}
+                loadState={renderedLoadState}
+                loadError={loadError}
+                connectionError={connectionError}
+                onOpenSettings={onOpenSettings}
+                hasMoreHistory={hasMoreHistory}
+                onLoadMore={loadMoreHistory}
+                onUndo={handleUndoWithAnimation}
+                onFork={handleForkMessage}
+                canUndo={canUndo}
+                registerMessage={registerMessage}
+                retryStatus={retryStatus}
+                bottomPadding={inputBoxHeight}
+                onVisibleMessageIdsChange={handleVisibleIdsChange}
+                onAtBottomChange={setIsAtBottom}
+              />
+            )}
           </ErrorBoundary>
         </InlineToolRequestContext.Provider>
       </div>
