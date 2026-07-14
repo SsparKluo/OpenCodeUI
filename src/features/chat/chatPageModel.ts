@@ -787,15 +787,15 @@ function resolveTurnDurationMs(
 
 /**
  * 过程折叠时间线：按用户消息分组。
- * - user 单独一行
- * - 该 user 到下一 user 前的全部 assistant 进过程壳
- * - 进行中：壳展开，全部 assistant 在壳内
- * - 结束后：壳内过程 + 壳外最后一条 assistant 的 final 正文
- * - 异步多发：每个 user 各有自己的 Working 壳
  *
- * isUserEntryReady(userId)：用户消息入场生长是否已完成。
- * 空 Working 壳等这个信号再挂，避免和 user 生长同帧抢高度。
- * 有 assistant 内容时立即挂壳，不受此限制。
+ * 异步多发：
+ * - 同一时刻只一个 Working，挂在最早仍 pending 的 user 回合
+ * - 更晚空回合先只显示 user
+ * - 后面回合 SSE live 一到，前面一律 Worked（不必等 completed / idle）
+ * - 本轮 assistant 全 completed 且无 live → 永远 Worked，不因 session busy 重开
+ *   （否则发送瞬间 streaming 先到、新 user 未入列，会把已 Worked 闪回 Working）
+ *
+ * isUserEntryReady：空壳等用户入场生长完成后再挂。
  */
 export function buildProcessTimeline(
   visibleMessages: Message[],
@@ -841,11 +841,50 @@ export function buildProcessTimeline(
   }
   if (current) turns.push(current)
 
-  // 最新有 user 的回合 id（用于 session busy 只挂在最新一轮）
-  let latestUserId: string | null = null
-  for (let i = turns.length - 1; i >= 0; i--) {
-    if (turns[i].user) {
-      latestUserId = turns[i].user!.info.id
+  // 只关心带 user 的回合（过程壳的锚点）
+  const userTurns = turns.filter((t): t is TurnBag & { user: Message } => t.user != null)
+
+  const laterHasAssistant = (fromIndex: number) => {
+    for (let j = fromIndex + 1; j < userTurns.length; j++) {
+      if (userTurns[j].assistants.length > 0) return true
+    }
+    return false
+  }
+
+  /** 更晚回合是否已有 live 助手——SSE 挂 Working 的绝对条件 */
+  const laterHasLive = (fromIndex: number) => {
+    for (let j = fromIndex + 1; j < userTurns.length; j++) {
+      if (userTurns[j].assistants.some(assistantHasLiveWork)) return true
+    }
+    return false
+  }
+
+  const isTurnSettled = (turn: TurnBag & { user: Message }, index: number): boolean => {
+    const assistants = turn.assistants
+    // 后面 SSE live → 前面 Worked（须最先判断；前轮 completed 常晚到）
+    if (laterHasLive(index)) return true
+    if (assistants.some(assistantHasLiveWork)) return false
+    if (assistants.length === 0) {
+      // 空回合：idle 结束；或后面已有 assistant（被跳过）
+      return !sessionIsStreaming || laterHasAssistant(index)
+    }
+    // 全 completed 且无 live → 锁定 Worked。
+    // 不要再用 sessionIsStreaming 重开：发送时 busy 常早于新 user 入列，会闪一下。
+    // 工具循环间隙若下一助手还没到，会短暂 Worked；下一助手 live 后自然回到 Working。
+    return assistants.every(m => m.info.time.completed != null && !m.isStreaming)
+  }
+
+  const isTurnPending = (turn: TurnBag & { user: Message }, index: number): boolean => {
+    if (isTurnSettled(turn, index)) return false
+    if (turn.assistants.length > 0) return true
+    return sessionIsStreaming && isUserEntryReady(turn.user.info.id)
+  }
+
+  // 唯一 Working：最早 pending 的用户回合
+  let activeUserId: string | null = null
+  for (let i = 0; i < userTurns.length; i++) {
+    if (isTurnPending(userTurns[i], i)) {
+      activeUserId = userTurns[i].user.info.id
       break
     }
   }
@@ -858,7 +897,7 @@ export function buildProcessTimeline(
     const assistants = turn.assistants
     if (!turn.user && assistants.length === 0) continue
 
-    // 无 user 的续段：已在上面平铺；这里只处理有 user 的袋
+    // 无 user 的续段：平铺
     if (!turn.user) {
       for (const m of assistants) {
         items.push({ kind: 'message', key: m.info.id, message: m })
@@ -867,28 +906,7 @@ export function buildProcessTimeline(
     }
 
     const userId = turn.user.info.id
-    const isLatestUserTurn = userId === latestUserId
-    const hasLive = assistants.some(assistantHasLiveWork)
-    // 全部 assistant 已 completed 且无 live tool → 本轮已收工
-    // 发送时 setStreaming 往往早于新 user 入列，若仍用 sessionIsStreaming 重开最新已收工回合，
-    // 会出现「旧 Working 壳展开又立刻收起」的闪一下。
-    const fullySettled =
-      assistants.length > 0 &&
-      !hasLive &&
-      assistants.every(m => m.info.time.completed != null && !m.isStreaming)
-    // 空回合（中断后无 assistant）：不能只凭 sessionIsStreaming + latest 重开。
-    // 典型竞态：abort 后 emptyShellReady 仍在 → 再发时 streaming 先 true、新 user 未入列
-    // → 旧空壳瞬间 Working，新 user 到了又消失，延迟后再挂新壳。
-    // 空壳只在 entry-ready 闸门打开后才算 active（闸门在 idle 时清空）。
-    const emptyTurnArmed = assistants.length === 0 && isUserEntryReady(userId)
-    // 最新一轮：live 工作，或 session busy 且本轮尚未收工
-    // 空回合额外要求 entry-ready；有 assistant 的未收工回合仍可靠 streaming
-    const turnIsActive =
-      hasLive ||
-      (isLatestUserTurn &&
-        sessionIsStreaming &&
-        !fullySettled &&
-        (assistants.length > 0 || emptyTurnArmed))
+    const turnIsActive = activeUserId != null && userId === activeUserId
 
     const finalAssistant = assistants.length > 0 ? assistants[assistants.length - 1] : null
     const finalId = finalAssistant?.info.id ?? null
@@ -922,8 +940,8 @@ export function buildProcessTimeline(
       !turnIsActive && finalAssistant && messageHasFinal(finalAssistant) ? finalAssistant : undefined
 
     // 进行中或有过程内容 → 挂壳
-    // 空回合 active 已要求 entry-ready（emptyTurnArmed），无需再叠一层 allowEmptyShell
-    // 纯 final 正文、无过程 → 直接平铺，不挂空壳
+    // 更晚的空 pending 回合：turnIsActive=false 且无 children → 不挂壳（只显示 user）
+    // 纯 final 正文、无过程 → 直接平铺
     if (children.length > 0 || turnIsActive) {
       items.push({
         kind: 'process-shell',
@@ -942,7 +960,6 @@ export function buildProcessTimeline(
         message: finalOutside,
       })
     } else {
-      // 已结束但无可见内容：中间 assistant 全丢进壳也没过程时，仍平铺
       for (const m of assistants) {
         items.push({ kind: 'message', key: m.info.id, message: m })
       }
