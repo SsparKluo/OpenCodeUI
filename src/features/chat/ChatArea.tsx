@@ -264,7 +264,7 @@ export const ChatArea = memo(
       const initialCacheRef = useRef(sessionId ? sessionCache.get(sessionId)?.measurements : undefined)
       const coldBottomMount = !initialCacheRef.current?.length
       const [renderOverscan, setRenderOverscan] = useState(
-        initialCacheRef.current?.length || coldBottomMount ? 6 : 20,
+        initialCacheRef.current?.length || coldBottomMount ? 6 : 15,
       )
       const resizePinnedRef = useRef<number[]>([])
       const resizePinFrame = useRef<number | undefined>(undefined)
@@ -499,7 +499,7 @@ export const ChatArea = memo(
           if (shouldAnchorBottom()) pinToBottom()
           inner = requestAnimationFrame(() => {
             if (cancelled) return
-            if (renderOverscan < 20) setRenderOverscan(20)
+            if (renderOverscan < 15) setRenderOverscan(15)
             if (shouldAnchorBottom()) pinToBottom()
           })
         })
