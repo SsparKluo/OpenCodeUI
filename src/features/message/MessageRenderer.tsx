@@ -957,7 +957,7 @@ const ToolGroup = memo(function ToolGroup({
   completedAt,
 }: ToolGroupProps) {
   const { t } = useTranslation('message')
-  const { descriptiveToolSteps, inlineToolRequests, immersiveMode } = useTheme()
+  const { descriptiveToolSteps, inlineToolRequests, immersiveMode, processCollapseEnabled } = useTheme()
   const { pendingPermissions, pendingQuestions } = useInlineToolRequests()
   const hasPendingInteraction =
     inlineToolRequests &&
@@ -994,28 +994,41 @@ const ToolGroup = memo(function ToolGroup({
 
   // 沉浸模式下：判断工具组是否包含需要用户阅读的工具
   const hasReadableTools = immersiveMode && parts.some(p => isReadableTool(p.tool))
-  const shouldStartExpanded =
-    !descriptiveToolSteps ||
-    hasActiveTools ||
-    hasPendingInteraction ||
-    (immersiveMode && !!isStreaming && hasReadableTools)
+  // 过程折叠：steps 默认收起，只有权限/提问才自动展开
+  // 其它模式：活跃/流式/可读工具时展开
+  const shouldStartExpanded = processCollapseEnabled
+    ? !!hasPendingInteraction
+    : !descriptiveToolSteps ||
+      hasActiveTools ||
+      hasPendingInteraction ||
+      (immersiveMode && !!isStreaming && hasReadableTools)
 
-  // descriptive 模式默认收起，运行时展开，完成后保持展开
-  // 沉浸模式下：没有可读工具则完成后自动收起
   const groupStateKey = `message:${parts[0]?.messageID || 'unknown'}:tool-group:${parts[0]?.id || 'empty'}`
   const [expanded, setExpanded] = useUiDisclosureState(groupStateKey, shouldStartExpanded)
-  const hasAutoExpandedReadableRef = useRef(shouldStartExpanded && immersiveMode && hasReadableTools)
+  const hasAutoExpandedReadableRef = useRef(
+    !processCollapseEnabled && shouldStartExpanded && immersiveMode && hasReadableTools,
+  )
   const { rootRef: stepsRootRef, headerRef: stepsHeaderRef, withScrollLock: withStepsScrollLock } =
     useDisclosureScrollLock()
 
   useEffect(() => {
     if (!descriptiveToolSteps) return
-    // 沉浸模式下没有可读工具：始终收起，不展开
+
+    // 权限/提问：必须展开让用户操作
+    if (hasPendingInteraction) {
+      setExpanded(true, { touched: false, respectUser: true })
+      return
+    }
+
+    // 过程折叠：不因 active/streaming 自动展开 steps
+    if (processCollapseEnabled) return
+
+    // 沉浸模式下没有可读工具：始终收起
     if (immersiveMode && !hasReadableTools) {
       setExpanded(false, { touched: false, respectUser: true })
       return
     }
-    if (hasActiveTools || hasPendingInteraction) {
+    if (hasActiveTools) {
       if (immersiveMode && hasReadableTools) {
         hasAutoExpandedReadableRef.current = true
       }
@@ -1029,6 +1042,7 @@ const ToolGroup = memo(function ToolGroup({
     }
   }, [
     descriptiveToolSteps,
+    processCollapseEnabled,
     hasActiveTools,
     hasPendingInteraction,
     immersiveMode,
