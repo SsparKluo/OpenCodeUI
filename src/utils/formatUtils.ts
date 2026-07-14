@@ -28,6 +28,26 @@ export function formatDuration(ms: number): string {
   return [`${m}m`, remS > 0 ? `${remS}s` : ''].filter(Boolean).join(' ')
 }
 
+/** Working/Worked 计时：整单位无小数；ms / s / m / h / d / y */
+export function formatProcessDuration(ms: number): string {
+  const normalizedMs = Math.max(0, Math.floor(ms))
+  if (normalizedMs < 1000) return `${normalizedMs}ms`
+
+  const totalSeconds = Math.floor(normalizedMs / 1000)
+  if (totalSeconds < 60) return `${totalSeconds}s`
+
+  const y = Math.floor(totalSeconds / (60 * 60 * 24 * 365))
+  const d = Math.floor((totalSeconds % (60 * 60 * 24 * 365)) / (60 * 60 * 24))
+  const h = Math.floor((totalSeconds % (60 * 60 * 24)) / (60 * 60))
+  const m = Math.floor((totalSeconds % (60 * 60)) / 60)
+  const remS = totalSeconds % 60
+
+  if (y > 0) return [`${y}y`, d > 0 ? `${d}d` : '', h > 0 ? `${h}h` : ''].filter(Boolean).join(' ')
+  if (d > 0) return [`${d}d`, h > 0 ? `${h}h` : '', m > 0 ? `${m}m` : ''].filter(Boolean).join(' ')
+  if (h > 0) return [`${h}h`, m > 0 ? `${m}m` : '', remS > 0 ? `${remS}s` : ''].filter(Boolean).join(' ')
+  return [`${m}m`, remS > 0 ? `${remS}s` : ''].filter(Boolean).join(' ')
+}
+
 /** Format a cost in dollars */
 export function formatCost(cost: number): string {
   if (cost === 0) return '$0'

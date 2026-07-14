@@ -46,7 +46,12 @@ import {
   markEntryGrowComplete,
   shouldPlayEntryGrow,
 } from '../../utils/entryGrow'
-import { formatDuration, formatCompletedAt, formatDetailedDateTime } from '../../utils/formatUtils'
+import {
+  formatDuration,
+  formatProcessDuration,
+  formatCompletedAt,
+  formatDetailedDateTime,
+} from '../../utils/formatUtils'
 import { lockScrollAroundAnchor } from '../../utils/scrollUtils'
 import { useUiDisclosureState } from '../../utils/uiDisclosureState'
 
@@ -79,9 +84,8 @@ const ProcessCollapseHeader = memo(function ProcessCollapseHeader({
       : durationMs != null && durationMs > 0
         ? durationMs
         : lastLiveMsRef.current
-  // Working/Worked 只用整秒，不要 1.2s 这种小数
-  const wholeSeconds = Math.max(0, Math.floor(displayMs / 1000))
-  const durationLabel = `${wholeSeconds}s`
+  // Working/Worked：整秒无小数；超过 1 分钟带 m（如 3m 12s）
+  const durationLabel = formatProcessDuration(displayMs)
   const label = isActive
     ? t('processingWithDuration', { duration: durationLabel })
     : t('processedFor', { duration: durationLabel })
