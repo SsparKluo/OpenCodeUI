@@ -261,26 +261,23 @@ export const ChatArea = memo(
       const hasGesture = useCallback(() => Date.now() - gestureRef.current < GESTURE_WINDOW_MS, [])
       const middleClickRef = useRef(false)
 
-      // ── 滚动状态（rAF 批处理） ──
-      const stateFrame = useRef<number | undefined>(undefined)
+      // ── 滚动状态（同步计算，不使用 rAF） ──
+      // 必须同步：directDomUpdates 的原生 scroll listener 比 React onScroll 先执行，
+      // rAF 会在 applyDirectStyles 修改 DOM 后才运行，读到被拉回的 scrollTop → bottom 永远 true。
       const prevState = useRef({ overflow: false, bottom: true, jump: false })
-      const scheduleScrollState = useCallback(() => {
-        if (stateFrame.current !== undefined) return
-        stateFrame.current = requestAnimationFrame(() => {
-          stateFrame.current = undefined
-          const el = scrollRef.current
-          if (!el) return
-          const max = el.scrollHeight - el.clientHeight
-          const dist = max - el.scrollTop
-          const overflow = max > 1
-          const bottom = !overflow || dist <= thresholdRef.current
-          const jump = overflow && dist > Math.max(400, el.clientHeight)
-          const p = prevState.current
-          if (p.overflow !== overflow || p.bottom !== bottom || p.jump !== jump) {
-            prevState.current = { overflow, bottom, jump }
-            onAtBottomRef.current?.(bottom)
-          }
-        })
+      const computeScrollState = useCallback(() => {
+        const el = scrollRef.current
+        if (!el) return
+        const max = el.scrollHeight - el.clientHeight
+        const dist = max - el.scrollTop
+        const overflow = max > 1
+        const bottom = !overflow || dist <= thresholdRef.current
+        const jump = overflow && dist > Math.max(400, el.clientHeight)
+        const p = prevState.current
+        if (p.overflow !== overflow || p.bottom !== bottom || p.jump !== jump) {
+          prevState.current = { overflow, bottom, jump }
+          onAtBottomRef.current?.(bottom)
+        }
       }, [])
 
       // ── Virtualizer ──
@@ -424,20 +421,20 @@ export const ChatArea = memo(
       const setScrollRoot = useCallback((el: HTMLDivElement | null) => {
         scrollRef.current = el
         autoSetScrollRef(el)
-        if (el) { scheduleScrollState(); fill() }
-      }, [autoSetScrollRef, scheduleScrollState, fill])
+        if (el) { computeScrollState(); fill() }
+      }, [autoSetScrollRef, computeScrollState, fill])
 
       const setVirtualContent = useCallback((el: HTMLDivElement | null) => {
         contentRef.current = el
         autoSetContentRef(el)
         virtualizer.containerRef(el)
-        if (el && scrollRef.current) scheduleScrollState()
-      }, [autoSetContentRef, virtualizer, scheduleScrollState])
+        if (el && scrollRef.current) computeScrollState()
+      }, [autoSetContentRef, virtualizer, computeScrollState])
 
       // ── 事件处理 ──
       const onScroll = useCallback(() => {
         if (prependLoading.current) { /* 更新锚点 */ }
-        scheduleScrollState()
+        computeScrollState()
         if (userScrolledRef.current && (scrollRef.current?.scrollTop ?? 0) < 200 && !loadingMoreRef.current && hasMoreRef.current) {
           void loadMore()
         }
@@ -445,7 +442,7 @@ export const ChatArea = memo(
         if (!hasGesture()) return
         autoHandleScroll()
         markGesture(scrollRef.current)
-      }, [scheduleScrollState, markGesture, hasGesture, autoHandleScroll, loadMore, userScrolledRef])
+      }, [computeScrollState, markGesture, hasGesture, autoHandleScroll, loadMore, userScrolledRef])
 
       const onWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
         if (!prependLoading.current) clearPrepend()
@@ -513,7 +510,6 @@ export const ChatArea = memo(
       // 缓存保存: session 切换或 unmount 时保存测量结果
       useLayoutEffect(() => {
         return () => {
-          if (stateFrame.current !== undefined) cancelAnimationFrame(stateFrame.current)
           if (fillFrame.current !== undefined) cancelAnimationFrame(fillFrame.current)
           if (resizePinFrame.current !== undefined) cancelAnimationFrame(resizePinFrame.current)
           clearPrepend()
@@ -604,7 +600,10 @@ export const ChatArea = memo(
             ref={setScrollRoot}
             data-chat-scroll-root="true"
             className="h-full overflow-y-auto overflow-x-hidden custom-scrollbar contain-content"
-            style={{ overflowAnchor: 'none' }}
+            style={{
+              overflowAnchor: 'none',
+              paddingTop: 'calc(5rem + var(--app-safe-top, 0px))',
+            }}
             onWheel={onWheel}
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
