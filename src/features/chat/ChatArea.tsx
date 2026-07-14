@@ -1,36 +1,17 @@
 /**
  * ChatArea — 基于 @tanstack/react-virtual 的消息流虚拟化
  *
- * 核心架构（学习 oc 的底层机制）：
- *
- * 1. directDomUpdates: 滚动时 virtualizer 直接写 transform 到 DOM，
- *    不触发 React 重渲染（只有 range 变化时才 rerender）。
- *    这是滚动丝滑的关键——oc 用 Solid 天然有此能力，React 需显式开启。
- *
- * 2. key={sessionId}: 切换 session 时整个组件 remount，
- *    virtualizer 用 initialOffset=MAX_SAFE_INTEGER 创建，
- *    _willUpdate 在 useLayoutEffect 中（paint 前）把 scrollTop 设到底部。
- *
- * 3. 行结构: 单个 absolute 元素（top:0 + transform 定位），
- *    不设 height/overflow:clip——否则 measureElement 读 offsetHeight
- *    会返回设定值而非内容高度，形成测量反馈循环。
- *
- * 4. scrollToFn override: 预写入 content height，避免浏览器 clamp
- *    scrollTop 导致初始滚动不到位。
- *
- * 5. shouldAdjustScrollPositionOnItemSizeChange: 只补偿视口上方的行，
- *    用 instance.getScrollOffset() 而非 DOM scrollTop（children 的
- *    useLayoutEffect 比 parent 的 _willUpdate 先执行，此时 scrollTop=0）。
- *
- * 6. resizeItem override: 大尺寸变化（懒加载 markdown/代码块）时
- *    锁定视口行索引，防止跳动。
- *
- * 7. 手势检测: onScroll handler 被 hasScrollGesture() gate，
- *    程序触发的 scroll 不误判为用户滚动。中键自动滚动单独追踪。
+ * 对齐 oc message-timeline 的关键点：
+ * 1. parent 在 messages ready 后 key={sessionId} remount
+ * 2. mount 时读 sessionCache → initialMeasurementsCache
+ * 3. 冷启动 initialOffset 估在底部 + scrollToFn 预写 total height
+ * 4. anchorTo/followOnAppend + 贴底时 size change 直接 scrollToEnd
+ * 5. unmount takeSnapshot 写回 cache
+ * 6. directDomUpdates 滚动写 transform，不触发 React 重渲染
  */
 import {
   useRef, useImperativeHandle, forwardRef, memo,
-  useCallback, useEffect, useLayoutEffect, useMemo,   useState,
+  useCallback, useEffect, useLayoutEffect, useMemo, useState,
 } from 'react'
 import {
   useVirtualizer, elementScroll, defaultRangeExtractor,
@@ -47,11 +28,14 @@ import { useChatViewport } from './chatViewport'
 import { buildTurnDurationMap, buildTurnLatestAssistantIdSet, type StableChatPage } from './chatPageModel'
 import { useTheme } from '../../hooks/useTheme'
 import { useAutoScroll } from './virtual/useAutoScroll'
-import { normalizeWheelDelta, markBoundaryGesture } from './virtual/messageGesture'
 
 const NOOP = () => {}
-const GESTURE_WINDOW_MS = 250
 const ROW_ESTIMATE = 60
+const DEFAULT_BOTTOM_SPACER = 256
+const SESSION_CACHE_LIMIT = 16
+
+const bottomSpacerHeight = (bottomPadding: number) =>
+  bottomPadding > 0 ? bottomPadding + 48 : DEFAULT_BOTTOM_SPACER
 
 // ─── 接口定义（保持不变） ───────────────────────────────────────
 
@@ -239,8 +223,10 @@ export const ChatArea = memo(
       const loadingMoreRef = useRef(false)
 
       // ── 自动滚动 ──
+      // userScrolled 判定用小阈值（10px），和 UI 回底按钮的 60/150 阈值分开。
+      // 否则上滚一点点仍在“底部区”里，userScrolled 会被立刻清掉，
+      // 再碰上最后一条 HTML 时钟每秒重测 → scrollToEnd，怎么滚都拉回底。
       const auto = useAutoScroll(10)
-      // 提取稳定方法，防止 ref 回调因 userScrolled 变化而重挂载
       const autoSetScrollRef = auto.setScrollRef
       const autoSetContentRef = auto.setContentRef
       const autoHandleScroll = auto.handleScroll
@@ -249,21 +235,14 @@ export const ChatArea = memo(
       const autoForceScroll = auto.forceScrollToBottom
       const autoScrollBottom = auto.scrollToBottom
       const autoPause = auto.pause
+      const autoMarkAuto = auto.markAuto
       const userScrolledRef = auto.userScrolledRef
-
-      // ── 滚动手势检测 ──
-      const gestureRef = useRef(0)
-      const markGesture = useCallback((target?: EventTarget | null) => {
-        const nested = (target instanceof Element ? target : undefined)?.closest('[data-scrollable]')
-        if (nested && nested !== scrollRef.current) return
-        gestureRef.current = Date.now()
-      }, [])
-      const hasGesture = useCallback(() => Date.now() - gestureRef.current < GESTURE_WINDOW_MS, [])
-      const middleClickRef = useRef(false)
+      const spacerHeight = bottomSpacerHeight(bottomPadding)
+      // 贴底判断必须读 ref：wheel→stop 后 state 还没 re-render，
+      // 若仍用 state，同一帧的 ResizeObserver 会误判仍可贴底。
+      const shouldAnchorBottom = () => !userScrolledRef.current
 
       // ── 滚动状态（同步计算，不使用 rAF） ──
-      // 必须同步：directDomUpdates 的原生 scroll listener 比 React onScroll 先执行，
-      // rAF 会在 applyDirectStyles 修改 DOM 后才运行，读到被拉回的 scrollTop → bottom 永远 true。
       const prevState = useRef({ overflow: false, bottom: true, jump: false })
       const computeScrollState = useCallback(() => {
         const el = scrollRef.current
@@ -281,53 +260,71 @@ export const ChatArea = memo(
       }, [])
 
       // ── Virtualizer ──
-      const cached = sessionId ? sessionCache.get(sessionId) : undefined
-      const hasCache = !!cached?.measurements?.length
-      const [renderOverscan, setRenderOverscan] = useState(hasCache ? 20 : 6)
+      // parent key={sessionId} remount 后，这里只在 mount 时读一次 cache
+      const initialCacheRef = useRef(sessionId ? sessionCache.get(sessionId)?.measurements : undefined)
+      const coldBottomMount = !initialCacheRef.current?.length
+      const [renderOverscan, setRenderOverscan] = useState(
+        initialCacheRef.current?.length || coldBottomMount ? 6 : 20,
+      )
       const resizePinnedRef = useRef<number[]>([])
       const resizePinFrame = useRef<number | undefined>(undefined)
+      const resizeAnchorScheduled = useRef(false)
+
+      // 冷启动估在底部：有 cache 用 cache 总高，否则 estimate*count + paddingEnd。
+      // 不用 MAX_SAFE_INTEGER（单列 range 不会向前扩，只会渲染最后一项）。
+      const estimatedBottomOffset = useMemo(() => {
+        const cached = initialCacheRef.current
+        if (cached?.length) {
+          const last = cached[cached.length - 1]
+          return Math.max(0, (last?.end ?? 0) + spacerHeight - 600)
+        }
+        return Math.max(0, visibleMessages.length * ROW_ESTIMATE + spacerHeight - 600)
+        // 只在 mount 用初始 count 估一次
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [])
 
       const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
         count: visibleMessages.length,
         getScrollElement: () => scrollRef.current,
-        // 不用 MAX_SAFE_INTEGER：单列模式下 calculateRangeImpl 不向前扩展，
-        // MAX_SAFE_INTEGER 会导致 startIndex=lastIndex，只有最后一条可见。
-        // 用 0，靠 scrollToEnd() 在 layout effect 中贴底（directDomUpdates 下 paint 前完成）。
-        initialOffset: 0,
-        initialMeasurementsCache: cached?.measurements,
+        initialOffset: estimatedBottomOffset,
+        initialMeasurementsCache: initialCacheRef.current,
         estimateSize: () => ROW_ESTIMATE,
         getItemKey: (i) => visibleMessages[i]?.info.id ?? `removed:${i}`,
-        // 预写入 content height，避免浏览器 clamp scrollTop
+        paddingEnd: spacerHeight,
+        scrollEndThreshold: 80,
+        // 预写 total height，避免浏览器把新 offset clamp 到旧高度（oc 同款）
         scrollToFn: (offset, options, instance) => {
           if (contentRef.current) contentRef.current.style.height = `${instance.getTotalSize()}px`
+          autoMarkAuto(scrollRef.current)
           elementScroll(offset, options, instance)
         },
         anchorTo: 'end',
         followOnAppend: true,
-        scrollEndThreshold: 80,
         overscan: 50,
-        // 滚动时直接写 transform 到 DOM，不触发 React 重渲染
         directDomUpdates: true,
         directDomUpdatesMode: 'transform',
         rangeExtractor: (range) => {
           const indexes = defaultRangeExtractor({ ...range, overscan: renderOverscan })
+          if (resizePinnedRef.current.length === 0) return indexes
           return [...new Set([...resizePinnedRef.current, ...indexes])].sort((a, b) => a - b)
         },
       })
 
-      // 一次性 overrides（resizeItem + shouldAdjust）
+      // 一次性 overrides（resizeItem + shouldAdjust）——对齐 oc
       const overridesApplied = useRef(false)
       if (!overridesApplied.current) {
         const origResize = virtualizer.resizeItem
         virtualizer.resizeItem = (index: number, size: number) => {
-          // 大尺寸变化时锁定视口行，防止跳动
           const item = (virtualizer as any).measurementsCache[index]
           const prev = item ? ((virtualizer as any).itemSizeCache.get(item.key) ?? item.size) : undefined
           const root = scrollRef.current
           if (root && prev !== undefined && Math.abs(size - prev) > root.clientHeight) {
             const view = root.getBoundingClientRect()
             resizePinnedRef.current = [...root.querySelectorAll<HTMLElement>('[data-index]')]
-              .filter(el => { const r = el.getBoundingClientRect(); return r.bottom > view.top && r.top < view.bottom })
+              .filter(el => {
+                const r = el.getBoundingClientRect()
+                return r.bottom > view.top && r.top < view.bottom
+              })
               .map(el => Number(el.dataset.index))
             if (resizePinFrame.current !== undefined) cancelAnimationFrame(resizePinFrame.current)
             resizePinFrame.current = requestAnimationFrame(() => {
@@ -338,11 +335,31 @@ export const ChatArea = memo(
             })
           }
           origResize(index, size)
+          // 仅在用户仍贴底时，对 size change 做 scrollToEnd。
+          // 用户已上滚（userScrolledRef）时绝不拉回——否则 HTML 时钟/字体加载
+          // 每秒重测会把视口拽回底部。
+          if (
+            root
+            && shouldAnchorBottom()
+            && !resizeAnchorScheduled.current
+            && (virtualizer as any).isAtEnd?.(80)
+          ) {
+            resizeAnchorScheduled.current = true
+            queueMicrotask(() => {
+              resizeAnchorScheduled.current = false
+              if (!shouldAnchorBottom()) return
+              if (!(virtualizer as any).isAtEnd?.(80)) return
+              autoMarkAuto(scrollRef.current)
+              virtualizer.scrollToEnd()
+            })
+          }
         }
-        // 只补偿视口上方的行（用 instance API 而非 DOM scrollTop，
-        // 因为 children 的 useLayoutEffect 比 parent 的 _willUpdate 先执行）
-        virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item: VirtualItem, _delta: number, instance: any) =>
-          item.end <= (instance.getScrollOffset?.() ?? 0) + (instance.scrollAdjustments ?? 0)
+        virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item: VirtualItem, _delta: number, instance: any) => {
+          // 用户已离底：只补偿视口上方行（默认行为）
+          // 用户贴底：关掉 adjust，交给上面的 isAtEnd + scrollToEnd
+          if (shouldAnchorBottom()) return false
+          return item.end <= (instance.getScrollOffset?.() ?? 0) + (instance.scrollAdjustments ?? 0)
+        }
         overridesApplied.current = true
       }
 
@@ -439,75 +456,84 @@ export const ChatArea = memo(
         if (el && scrollRef.current) computeScrollState()
       }, [autoSetContentRef, virtualizer, computeScrollState])
 
+      const pinToBottom = useCallback(() => {
+        if (visibleMessages.length === 0) return
+        autoMarkAuto(scrollRef.current)
+        virtualizer.scrollToEnd()
+      }, [autoMarkAuto, virtualizer, visibleMessages.length])
+
       // ── 事件处理 ──
       const onScroll = useCallback(() => {
         if (prependLoading.current) updatePrependAnchor()
         computeScrollState()
-        if (userScrolledRef.current && (scrollRef.current?.scrollTop ?? 0) < 200 && !loadingMoreRef.current && hasMoreRef.current) {
+        if (
+          userScrolledRef.current
+          && (scrollRef.current?.scrollTop ?? 0) < 200
+          && !loadingMoreRef.current
+          && hasMoreRef.current
+        ) {
           void loadMore()
         }
-        if (middleClickRef.current) markGesture(scrollRef.current)
-        if (!hasGesture()) return
+        // 始终走 handleScroll：滚动条/键盘也能离底；程序贴底靠 markAuto 过滤
         autoHandleScroll()
-        markGesture(scrollRef.current)
-      }, [updatePrependAnchor, computeScrollState, markGesture, hasGesture, autoHandleScroll, loadMore, userScrolledRef])
+      }, [updatePrependAnchor, computeScrollState, autoHandleScroll, loadMore, userScrolledRef])
 
       const onWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
         if (!prependLoading.current) clearPrepend()
         autoHandleWheel(e.nativeEvent)
-        const root = e.currentTarget
-        const delta = normalizeWheelDelta({ deltaY: e.deltaY, deltaMode: e.deltaMode, rootHeight: root.clientHeight })
-        if (delta) markBoundaryGesture({ root, target: e.target, delta, onMarkScrollGesture: markGesture })
-      }, [autoHandleWheel, clearPrepend, markGesture])
+      }, [autoHandleWheel, clearPrepend])
 
       const onTouchStart = useCallback(() => {
         if (!prependLoading.current) clearPrepend()
-        markGesture(scrollRef.current)
-      }, [clearPrepend, markGesture])
+      }, [clearPrepend])
 
-      const onTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-        markBoundaryGesture({ root: e.currentTarget, target: e.target, delta: 1, onMarkScrollGesture: markGesture })
-      }, [markGesture])
+      // ── Effects（parent key remount 后，这里只处理本实例生命周期） ──
 
-      const onMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-        if (e.button === 1) { middleClickRef.current = true; markGesture(e.currentTarget) }
-      }, [markGesture])
-
-      // ── Effects ──
-
-      // Session 切换: 重置 userScrolled + 重新测量 + 滚动到底部
-      // 没有 key={sessionId}，所以 virtualizer 不会重建，需要手动重置
-      const prevSessionRef = useRef<string | null | undefined>(sessionId)
-      useLayoutEffect(() => {
-        if (prevSessionRef.current === sessionId) return
-        prevSessionRef.current = sessionId
-        auto.resume()
-        virtualizer.measure()
-        if (visibleMessages.length > 0) virtualizer.scrollToEnd()
-      }, [sessionId, virtualizer, visibleMessages.length, auto])
-
-      // 冷启动: paint 前滚动到底部（首次加载 session 时消息到达）
-      useLayoutEffect(() => {
-        if (visibleMessages.length > 0) virtualizer.scrollToEnd()
-      }, [virtualizer, visibleMessages.length])
-
-      // rAF 后提升 overscan + 再次确认底部
+      // 冷启动 / 回流：双 rAF 贴底 + 抬 overscan（对齐 oc onMount）
       useEffect(() => {
-        const frame = requestAnimationFrame(() => {
-          setRenderOverscan(20)
-          if (!auto.userScrolledRef.current) virtualizer.scrollToEnd()
+        let cancelled = false
+        let outer = 0
+        let inner = 0
+        outer = requestAnimationFrame(() => {
+          if (cancelled) return
+          if (shouldAnchorBottom()) pinToBottom()
+          inner = requestAnimationFrame(() => {
+            if (cancelled) return
+            if (renderOverscan < 20) setRenderOverscan(20)
+            if (shouldAnchorBottom()) pinToBottom()
+          })
         })
-        return () => cancelAnimationFrame(frame)
-      }, [virtualizer, auto.userScrolledRef])
+        return () => {
+          cancelled = true
+          cancelAnimationFrame(outer)
+          cancelAnimationFrame(inner)
+        }
+        // mount-only
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [])
+
+      // rows 变化且应贴底时再确认一次（append / 首批消息）
+      // prepend 由 anchorTo + prepend 锚点处理，这里在 userScrolled 时不跟
+      useLayoutEffect(() => {
+        if (visibleMessages.length === 0) return
+        if (!shouldAnchorBottom() || prependLoading.current) return
+        pinToBottom()
+      }, [visibleMessages.length, pinToBottom])
 
       // 用户返回底部时重新贴底
       const userScrolledInit = useRef(false)
       useEffect(() => {
-        if (!userScrolledInit.current) { userScrolledInit.current = true; return }
+        if (!userScrolledInit.current) {
+          userScrolledInit.current = true
+          return
+        }
         if (auto.userScrolled) return
-        const frame = requestAnimationFrame(() => autoScrollBottom())
+        const frame = requestAnimationFrame(() => {
+          autoScrollBottom()
+          pinToBottom()
+        })
         return () => cancelAnimationFrame(frame)
-      }, [auto.userScrolled, autoScrollBottom])
+      }, [auto.userScrolled, autoScrollBottom, pinToBottom])
 
       // fill effect
       useEffect(() => {
@@ -515,42 +541,30 @@ export const ChatArea = memo(
         fill()
       }, [sessionId, loadState, isLoadingMore, auto.userScrolled, hasMoreHistory, fill])
 
-      // 缓存保存: session 切换或 unmount 时保存测量结果
+      // unmount：snapshot 写回 cache（对齐 oc onCleanup）
       useLayoutEffect(() => {
+        const sid = sessionId
         return () => {
           if (fillFrame.current !== undefined) cancelAnimationFrame(fillFrame.current)
           if (resizePinFrame.current !== undefined) cancelAnimationFrame(resizePinFrame.current)
           clearPrepend()
+          if (!sid) return
+          sessionCache.delete(sid)
+          sessionCache.set(sid, { measurements: virtualizer.takeSnapshot() })
+          while (sessionCache.size > SESSION_CACHE_LIMIT) {
+            sessionCache.delete(sessionCache.keys().next().value!)
+          }
         }
-      }, [clearPrepend])
+      }, [sessionId, virtualizer, clearPrepend])
 
-      // session 切换时保存旧 session 的缓存
-      const cacheSessionRef = useRef<string | null | undefined>(sessionId)
-      useEffect(() => {
-        if (cacheSessionRef.current === sessionId) return
-        const oldSid = cacheSessionRef.current
-        cacheSessionRef.current = sessionId
-        if (oldSid) {
-          sessionCache.delete(oldSid)
-          sessionCache.set(oldSid, { measurements: virtualizer.takeSnapshot() })
-          while (sessionCache.size > 16) sessionCache.delete(sessionCache.keys().next().value!)
-        }
-      }, [sessionId, virtualizer])
+      // ── 渲染数据 ──
+      const items = virtualizer.getVirtualItems()
+      const mountedMessageIdsKey = useMemo(
+        () => items.map(item => visibleMessages[item.index]?.info.id).filter(Boolean).join(','),
+        [items, visibleMessages],
+      )
 
-      // 中键清理
-      useEffect(() => {
-        const clear = (e: MouseEvent) => { if (e.button !== 1) middleClickRef.current = false }
-        const clearKey = () => { middleClickRef.current = false }
-        document.addEventListener('mousedown', clear)
-        document.addEventListener('keydown', clearKey)
-        return () => {
-          document.removeEventListener('mousedown', clear)
-          document.removeEventListener('keydown', clearKey)
-        }
-      }, [])
-
-      // IntersectionObserver for OutlineIndex
-      const msgIdsKey = useMemo(() => visibleMessages.map(m => m.info.id).join(','), [visibleMessages])
+      // Outline 可见消息：跟随虚拟行挂载变化
       useEffect(() => {
         const root = scrollRef.current
         if (!root) return
@@ -561,8 +575,15 @@ export const ChatArea = memo(
             for (const entry of entries) {
               const id = entry.target.getAttribute('data-message-id')
               if (!id) continue
-              if (entry.isIntersecting) { if (!visible.has(id)) { visible.add(id); changed = true } }
-              else if (visible.has(id)) { visible.delete(id); changed = true }
+              if (entry.isIntersecting) {
+                if (!visible.has(id)) {
+                  visible.add(id)
+                  changed = true
+                }
+              } else if (visible.has(id)) {
+                visible.delete(id)
+                changed = true
+              }
             }
             if (changed) onVisibleIdsRef.current?.(Array.from(visible))
           },
@@ -570,13 +591,24 @@ export const ChatArea = memo(
         )
         root.querySelectorAll<HTMLElement>('[data-message-id]').forEach(el => observer.observe(el))
         return () => observer.disconnect()
-      }, [msgIdsKey])
+      }, [mountedMessageIdsKey])
 
       // ── 命令式接口 ──
       useImperativeHandle(ref, () => ({
-        scrollToBottom: () => autoForceScroll(),
-        scrollToBottomIfAtBottom: () => { if (prevState.current.bottom) autoForceScroll() },
-        scrollToLastMessage: () => { if (visibleMessages.length > 0) virtualizer.scrollToIndex(visibleMessages.length - 1) },
+        scrollToBottom: () => {
+          autoForceScroll()
+          pinToBottom()
+        },
+        scrollToBottomIfAtBottom: () => {
+          if (!prevState.current.bottom) return
+          autoForceScroll()
+          pinToBottom()
+        },
+        scrollToLastMessage: () => {
+          if (visibleMessages.length === 0) return
+          autoMarkAuto(scrollRef.current)
+          virtualizer.scrollToIndex(visibleMessages.length - 1, { align: 'end' })
+        },
         scrollToMessageIndex: (index: number) => {
           if (index < 0 || index >= visibleMessages.length) return
           autoPause()
@@ -588,10 +620,7 @@ export const ChatArea = memo(
           autoPause()
           virtualizer.scrollToIndex(index, { align: 'center' })
         },
-      }), [autoForceScroll, autoPause, virtualizer, visibleMessages])
-
-      // ── 渲染 ──
-      const items = virtualizer.getVirtualItems()
+      }), [autoForceScroll, autoPause, autoMarkAuto, pinToBottom, virtualizer, visibleMessages])
 
       return (
         <div className="h-full overflow-hidden contain-strict relative">
@@ -614,9 +643,7 @@ export const ChatArea = memo(
             }}
             onWheel={onWheel}
             onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
             onScroll={onScroll}
-            onMouseDown={onMouseDown}
             onClick={autoHandleInteraction}
           >
             {visibleMessages.length > 0 && isLoadingMore && (
@@ -687,8 +714,6 @@ export const ChatArea = memo(
                 </div>
               </div>
             )}
-
-            <div style={{ height: bottomPadding > 0 ? `${bottomPadding + 48}px` : '256px' }} />
           </div>
         </div>
       )
