@@ -467,7 +467,18 @@ export const ChatArea = memo(
 
       // ── Effects ──
 
-      // 冷启动: paint 前滚动到底部
+      // Session 切换: 重置 userScrolled + 重新测量 + 滚动到底部
+      // 没有 key={sessionId}，所以 virtualizer 不会重建，需要手动重置
+      const prevSessionRef = useRef<string | null | undefined>(sessionId)
+      useLayoutEffect(() => {
+        if (prevSessionRef.current === sessionId) return
+        prevSessionRef.current = sessionId
+        auto.resume()
+        virtualizer.measure()
+        if (visibleMessages.length > 0) virtualizer.scrollToEnd()
+      }, [sessionId, virtualizer, visibleMessages.length, auto])
+
+      // 冷启动: paint 前滚动到底部（首次加载 session 时消息到达）
       useLayoutEffect(() => {
         if (visibleMessages.length > 0) virtualizer.scrollToEnd()
       }, [virtualizer, visibleMessages.length])
@@ -476,10 +487,10 @@ export const ChatArea = memo(
       useEffect(() => {
         const frame = requestAnimationFrame(() => {
           setRenderOverscan(20)
-          virtualizer.scrollToEnd()
+          if (!auto.userScrolledRef.current) virtualizer.scrollToEnd()
         })
         return () => cancelAnimationFrame(frame)
-      }, [virtualizer])
+      }, [virtualizer, auto.userScrolledRef])
 
       // 用户返回底部时重新贴底
       const userScrolledInit = useRef(false)
@@ -496,20 +507,28 @@ export const ChatArea = memo(
         fill()
       }, [sessionId, loadState, isLoadingMore, auto.userScrolled, hasMoreHistory, fill])
 
-      // 缓存保存（useLayoutEffect cleanup → remount 前可读取）
+      // 缓存保存: session 切换或 unmount 时保存测量结果
       useLayoutEffect(() => {
         return () => {
           if (stateFrame.current !== undefined) cancelAnimationFrame(stateFrame.current)
           if (fillFrame.current !== undefined) cancelAnimationFrame(fillFrame.current)
           if (resizePinFrame.current !== undefined) cancelAnimationFrame(resizePinFrame.current)
           clearPrepend()
-          const sid = sessionIdRef.current
-          if (!sid) return
-          sessionCache.delete(sid)
-          sessionCache.set(sid, { measurements: virtualizer.takeSnapshot() })
+        }
+      }, [clearPrepend])
+
+      // session 切换时保存旧 session 的缓存
+      const cacheSessionRef = useRef<string | null | undefined>(sessionId)
+      useEffect(() => {
+        if (cacheSessionRef.current === sessionId) return
+        const oldSid = cacheSessionRef.current
+        cacheSessionRef.current = sessionId
+        if (oldSid) {
+          sessionCache.delete(oldSid)
+          sessionCache.set(oldSid, { measurements: virtualizer.takeSnapshot() })
           while (sessionCache.size > 16) sessionCache.delete(sessionCache.keys().next().value!)
         }
-      }, [virtualizer, clearPrepend])
+      }, [sessionId, virtualizer])
 
       // 中键清理
       useEffect(() => {

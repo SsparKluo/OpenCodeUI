@@ -791,7 +791,6 @@ export const ChatPane = memo(function ChatPane({
         <InlineToolRequestContext.Provider value={inlineToolRequestCtx}>
           <ErrorBoundary onOpenSettings={onOpenSettings}>
             <ChatArea
-              key={routeSessionId}
               ref={chatAreaRef}
               messages={renderedMessages}
               pageRecords={chatPageViewModel.pageRecords}
