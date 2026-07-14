@@ -521,7 +521,8 @@ describe('buildProcessTimeline', () => {
     expect(timeline[0]).toMatchObject({ kind: 'message', key: 'user-1' })
   })
 
-  it('keeps all assistants inside active shell and supports async second Working shell', () => {
+  it('keeps only the earliest pending Working shell when a later user is queued', () => {
+    // 第一轮仍 live，第二轮 user 已发出 → 只挂 user-1 的 Working，user-2 暂不挂空壳
     const mid = createAssistantMessage('assistant-1', [createToolPart('tool-1', 'assistant-1')], 1001)
     mid.isStreaming = true
     const messages = [
@@ -534,15 +535,110 @@ describe('buildProcessTimeline', () => {
       sessionIsStreaming: true,
       messageHasProcess: hasProcess,
       messageHasFinal: hasFinal,
+      isUserEntryReady: id => id === 'user-2',
+    })
+
+    const shells = timeline.filter(item => item.kind === 'process-shell')
+    expect(shells).toHaveLength(1)
+    expect(shells[0]).toMatchObject({
+      kind: 'process-shell',
+      isActive: true,
+      userMessageId: 'user-1',
+    })
+    if (shells[0].kind === 'process-shell') {
+      expect(shells[0].children.map(c => c.message.info.id)).toEqual(['assistant-1'])
+    }
+    // user-2 只作为消息出现，不挂 Working
+    expect(timeline.some(i => i.kind === 'message' && i.key === 'user-2')).toBe(true)
+  })
+
+  it('only arms the earliest empty turn when multiple users are pending', () => {
+    // 快速连发：两轮都还没 assistant → 只在最早 user 下挂 Working
+    const messages = [
+      createUserMessage('user-1', 1000),
+      createUserMessage('user-2', 1500),
+    ]
+    const ready = new Set(['user-1', 'user-2'])
+    const timeline = buildProcessTimeline(messages, {
+      turnDurationMap: new Map(),
+      sessionIsStreaming: true,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
+      isUserEntryReady: id => ready.has(id),
+    })
+
+    const shells = timeline.filter(item => item.kind === 'process-shell')
+    expect(shells).toHaveLength(1)
+    expect(shells[0]).toMatchObject({
+      kind: 'process-shell',
+      isActive: true,
+      userMessageId: 'user-1',
+      children: [],
+    })
+    expect(timeline.filter(i => i.kind === 'message').map(i => i.key)).toEqual(['user-1', 'user-2'])
+  })
+
+  it('closes earlier turn when later turn gets SSE live, even if earlier still looks live', () => {
+    // 关键竞态：前轮 completed 常晚到；后轮 live 一到，前轮立刻 Worked
+    const earlierStillFlaggedLive = createAssistantMessage(
+      'assistant-1',
+      [createToolPart('tool-1', 'assistant-1')],
+      1001,
+    )
+    earlierStillFlaggedLive.isStreaming = true
+    const laterLive = createAssistantMessage(
+      'assistant-2',
+      [createToolPart('tool-2', 'assistant-2')],
+      2001,
+    )
+    laterLive.isStreaming = true
+    const messages = [
+      createUserMessage('user-1', 1000),
+      earlierStillFlaggedLive,
+      createUserMessage('user-2', 2000),
+      laterLive,
+    ]
+    const timeline = buildProcessTimeline(messages, {
+      turnDurationMap: new Map(),
+      sessionIsStreaming: true,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
     })
 
     const shells = timeline.filter(item => item.kind === 'process-shell')
     expect(shells).toHaveLength(2)
-    expect(shells[0]).toMatchObject({ kind: 'process-shell', isActive: true })
-    if (shells[0].kind === 'process-shell') {
-      expect(shells[0].children.map(c => c.message.info.id)).toEqual(['assistant-1'])
-    }
-    expect(shells[1]).toMatchObject({ kind: 'process-shell', isActive: true, children: [] })
+    expect(shells[0]).toMatchObject({ userMessageId: 'user-1', isActive: false })
+    expect(shells[1]).toMatchObject({ userMessageId: 'user-2', isActive: true })
+  })
+
+  it('does not reopen a completed turn when session becomes busy before the next user lands', () => {
+    // 发送瞬间：streaming 已 true，新 user 还没进列表 → 已 Worked 的回合不能闪回 Working
+    const settled = createAssistantMessage(
+      'assistant-1',
+      [
+        createToolPart('tool-1', 'assistant-1'),
+        {
+          id: 'text-1',
+          sessionID: 'session-1',
+          messageID: 'assistant-1',
+          type: 'text',
+          text: 'done',
+        },
+      ],
+      1001,
+      1500,
+    )
+    const messages = [createUserMessage('user-1', 1000), settled]
+    const timeline = buildProcessTimeline(messages, {
+      turnDurationMap: new Map([['assistant-1', 500]]),
+      sessionIsStreaming: true,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
+    })
+    expect(timeline.find(item => item.kind === 'process-shell')).toMatchObject({
+      kind: 'process-shell',
+      isActive: false,
+    })
   })
 
   it('settles shell with process inside and final answer outside', () => {
@@ -616,37 +712,6 @@ describe('buildProcessTimeline', () => {
     // 这里只断言：无 ready 时绝不挂
     expect(timeline.some(i => i.kind === 'process-shell')).toBe(false)
     expect(leaked.some(i => i.kind === 'process-shell')).toBe(true)
-  })
-
-  it('does not reopen a settled previous turn when session starts streaming before new user lands', () => {
-    const settled = createAssistantMessage(
-      'assistant-1',
-      [
-        createToolPart('tool-1', 'assistant-1'),
-        {
-          id: 'text-1',
-          sessionID: 'session-1',
-          messageID: 'assistant-1',
-          type: 'text',
-          text: 'done',
-        },
-      ],
-      1001,
-      1500,
-    )
-    // 发送瞬间：streaming 已 true，新 user 还没进列表，最新回合仍是旧的已收工回合
-    const messages = [createUserMessage('user-1', 1000), settled]
-    const timeline = buildProcessTimeline(messages, {
-      turnDurationMap: new Map([['assistant-1', 500]]),
-      sessionIsStreaming: true,
-      messageHasProcess: hasProcess,
-      messageHasFinal: hasFinal,
-    })
-    const shell = timeline.find(item => item.kind === 'process-shell')
-    expect(shell).toBeTruthy()
-    if (shell?.kind === 'process-shell') {
-      expect(shell.isActive).toBe(false)
-    }
   })
 
   it('does not wrap pure final answer turns in an empty process shell', () => {
