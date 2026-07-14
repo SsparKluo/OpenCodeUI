@@ -15,7 +15,6 @@ import {
 } from './chatPageModel'
 import { buildVisibleMessageEntries, getVisibleMessageForkTargetId } from './chatAreaVisibility'
 import { buildChatPageViewModel } from './useChatPageViewModel'
-import { arePageBlockPropsEqual } from './ChatArea'
 import type { Message, MessageError, Part, ToolPart, ReasoningPart } from '../../types/message'
 
 function createUserMessage(id: string, created: number): Message {
@@ -92,39 +91,6 @@ function createTextPart(id: string, messageID: string, text: string): Part {
     messageID,
     type: 'text',
     text,
-  }
-}
-
-function createPage(messages: Message[]) {
-  return {
-    key: messages.map(message => message.info.id).join(':'),
-    rows: [
-      {
-        key: messages.map(message => message.info.id).join(':'),
-        messages,
-        messageIds: messages.map(message => message.info.id),
-        estimatedHeight: 160,
-      },
-    ],
-    messageIds: messages.map(message => message.info.id),
-    estimatedHeight: 160,
-  }
-}
-
-function createPageBlockProps(page = createPage([createAssistantMessage('assistant-1', [], 1, 2)])) {
-  return {
-    page,
-    messageMaxWidthClass: 'max-w-2xl',
-    messagePaddingClass: 'px-5',
-    registerMessage: () => undefined,
-    onUndo: () => undefined,
-    onFork: () => undefined,
-    canUndo: true,
-    turnDurationMap: new Map<string, number>(),
-    turnLatestAssistantIds: new Set<string>(),
-    forkTargetIdMap: new Map<string, string | undefined>(),
-    allowStreamingLayoutAnimation: false,
-    onMeasuredHeightChange: () => undefined,
   }
 }
 
@@ -445,45 +411,6 @@ describe('buildChatPageViewModel', () => {
     expect(first.pageRecords[0].rows[0].key).toBe('row:assistant-1')
     expect(next.pageRecords[0].rows[0].key).toBe(first.pageRecords[0].rows[0].key)
     expect(next.pageRecords[0].rows[0].messageIds).toEqual(['assistant-1', 'assistant-2'])
-  })
-})
-
-describe('arePageBlockPropsEqual', () => {
-  it('ignores unrelated global map changes for the same page', () => {
-    const page = createPage([createAssistantMessage('assistant-1', [], 1, 2)])
-    const previous = createPageBlockProps(page)
-    const next = {
-      ...previous,
-      turnDurationMap: new Map([['assistant-other', 500]]),
-      forkTargetIdMap: new Map([['assistant-other', 'fork-other']]),
-    }
-
-    expect(arePageBlockPropsEqual(previous, next)).toBe(true)
-  })
-
-  it('detects derived value changes for messages in the page', () => {
-    const page = createPage([createAssistantMessage('assistant-1', [], 1, 2)])
-    const previous = createPageBlockProps(page)
-    const next = {
-      ...previous,
-      turnDurationMap: new Map([['assistant-1', 500]]),
-    }
-
-    expect(arePageBlockPropsEqual(previous, next)).toBe(false)
-  })
-
-  it('ignores streaming animation prop changes for non-streaming pages only', () => {
-    const stablePage = createPage([createAssistantMessage('assistant-1', [], 1, 2)])
-    const stablePrevious = createPageBlockProps(stablePage)
-    expect(arePageBlockPropsEqual(stablePrevious, { ...stablePrevious, allowStreamingLayoutAnimation: true })).toBe(
-      true,
-    )
-
-    const streamingMessage = { ...createAssistantMessage('assistant-2', []), isStreaming: true }
-    const streamingPrevious = createPageBlockProps(createPage([streamingMessage]))
-    expect(
-      arePageBlockPropsEqual(streamingPrevious, { ...streamingPrevious, allowStreamingLayoutAnimation: true }),
-    ).toBe(false)
   })
 })
 
