@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { formatCompletedAt, formatDateTime, formatDetailedDateTime, formatDuration, formatTime } from './formatUtils'
+import {
+  formatCompletedAt,
+  formatDateTime,
+  formatDetailedDateTime,
+  formatDuration,
+  formatProcessDuration,
+  formatTime,
+} from './formatUtils'
 
 describe('formatDuration', () => {
   it('formats milliseconds and seconds', () => {
@@ -20,6 +27,24 @@ describe('formatDuration', () => {
   it('formats day durations as days, hours, and minutes', () => {
     expect(formatDuration(((24 + 21) * 60 + 10) * 60 * 1000)).toBe('1d 21h 10m')
     expect(formatDuration(24 * 60 * 60 * 1000)).toBe('1d')
+  })
+})
+
+describe('formatProcessDuration', () => {
+  it('uses ms under one second, whole seconds under one minute', () => {
+    expect(formatProcessDuration(0)).toBe('0ms')
+    expect(formatProcessDuration(999)).toBe('999ms')
+    expect(formatProcessDuration(1500)).toBe('1s')
+    expect(formatProcessDuration(59_999)).toBe('59s')
+  })
+
+  it('uses minutes, hours, days, and years', () => {
+    expect(formatProcessDuration(60_000)).toBe('1m')
+    expect(formatProcessDuration((3 * 60 + 12) * 1000)).toBe('3m 12s')
+    expect(formatProcessDuration((1 * 60 * 60 + 21 * 60 + 12) * 1000)).toBe('1h 21m 12s')
+    expect(formatProcessDuration(((24 + 21) * 60 + 10) * 60 * 1000)).toBe('1d 21h 10m')
+    expect(formatProcessDuration(365 * 24 * 60 * 60 * 1000)).toBe('1y')
+    expect(formatProcessDuration((365 + 2) * 24 * 60 * 60 * 1000 + 3 * 60 * 60 * 1000)).toBe('1y 2d 3h')
   })
 })
 
