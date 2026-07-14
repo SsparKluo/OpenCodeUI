@@ -357,8 +357,7 @@ export const ChatArea = memo(
         if (prependFrame.current !== undefined) { cancelAnimationFrame(prependFrame.current); prependFrame.current = undefined }
       }, [])
 
-      const capturePrepend = useCallback(() => {
-        prependLoading.current = true
+      const updatePrependAnchor = useCallback(() => {
         const root = scrollRef.current
         if (!root) return
         const view = root.getBoundingClientRect()
@@ -371,7 +370,7 @@ export const ChatArea = memo(
         }
       }, [])
 
-      const restorePrepend = useCallback(() => {
+      const applyPrependAnchor = useCallback(() => {
         const root = scrollRef.current
         if (!root || !prependAnchor.current) return
         if (prependFrame.current !== undefined) cancelAnimationFrame(prependFrame.current)
@@ -390,15 +389,24 @@ export const ChatArea = memo(
         prependFrame.current = requestAnimationFrame(apply)
       }, [])
 
+      const capturePrepend = useCallback(() => {
+        prependLoading.current = true
+        updatePrependAnchor()
+      }, [updatePrependAnchor])
+
+      const restorePrepend = useCallback((done: boolean) => {
+        if (done) prependLoading.current = false
+        applyPrependAnchor()
+      }, [applyPrependAnchor])
+
       const loadMore = useCallback(() => {
         capturePrepend()
         setIsLoadingMore(true); loadingMoreRef.current = true
         Promise.resolve(onLoadMoreRef.current?.())
           .catch(() => {})
           .finally(() => {
-            prependLoading.current = false
-            restorePrepend()
             setIsLoadingMore(false); loadingMoreRef.current = false
+            restorePrepend(true)
           })
       }, [capturePrepend, restorePrepend])
 
@@ -433,7 +441,7 @@ export const ChatArea = memo(
 
       // ── 事件处理 ──
       const onScroll = useCallback(() => {
-        if (prependLoading.current) { /* 更新锚点 */ }
+        if (prependLoading.current) updatePrependAnchor()
         computeScrollState()
         if (userScrolledRef.current && (scrollRef.current?.scrollTop ?? 0) < 200 && !loadingMoreRef.current && hasMoreRef.current) {
           void loadMore()
@@ -442,7 +450,7 @@ export const ChatArea = memo(
         if (!hasGesture()) return
         autoHandleScroll()
         markGesture(scrollRef.current)
-      }, [computeScrollState, markGesture, hasGesture, autoHandleScroll, loadMore, userScrolledRef])
+      }, [updatePrependAnchor, computeScrollState, markGesture, hasGesture, autoHandleScroll, loadMore, userScrolledRef])
 
       const onWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
         if (!prependLoading.current) clearPrepend()
