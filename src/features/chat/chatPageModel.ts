@@ -727,3 +727,231 @@ export function buildTurnLatestAssistantIdSet(visibleMessages: Message[]): Set<s
   commitTurn()
   return latestIds
 }
+
+/** 过程折叠：虚拟时间线上的一行 */
+export type ProcessTimelineItem =
+  | {
+      kind: 'message'
+      key: string
+      message: Message
+      /** 过程壳内消息的内容范围 */
+      processContentScope?: 'process' | 'final' | 'inline'
+    }
+  | {
+      kind: 'process-shell'
+      key: string
+      userMessageId: string | null
+      startedAt?: number
+      durationMs?: number
+      isActive: boolean
+      /** 壳内消息（不含壳外 final） */
+      children: Array<{
+        message: Message
+        processContentScope: 'process' | 'inline'
+      }>
+      /** 壳外最终回答（结束后才有） */
+      finalMessage?: Message
+    }
+
+function assistantHasLiveWork(message: Message): boolean {
+  if (message.info.role !== 'assistant') return false
+  if (message.info.time.completed == null || message.isStreaming) return true
+  return message.parts.some(
+    p => p.type === 'tool' && (p.state.status === 'running' || p.state.status === 'pending'),
+  )
+}
+
+function resolveTurnDurationMs(
+  assistants: Message[],
+  userStart: number | undefined,
+  turnDurationMap: Map<string, number>,
+): number | undefined {
+  if (userStart == null) return undefined
+  for (const m of [...assistants].reverse()) {
+    const mapped = turnDurationMap.get(m.info.id)
+    if (mapped != null && mapped > 0) return mapped
+  }
+  let latestEnd: number | undefined
+  for (const m of assistants) {
+    const completed = m.info.time.completed
+    if (completed != null && (latestEnd == null || completed > latestEnd)) latestEnd = completed
+    for (const p of m.parts) {
+      if (p.type !== 'tool') continue
+      const toolEnd = p.state.time?.end
+      if (toolEnd != null && (latestEnd == null || toolEnd > latestEnd)) latestEnd = toolEnd
+    }
+  }
+  if (latestEnd != null && latestEnd > userStart) return latestEnd - userStart
+  return undefined
+}
+
+/**
+ * 过程折叠时间线：按用户消息分组。
+ * - user 单独一行
+ * - 该 user 到下一 user 前的全部 assistant 进过程壳
+ * - 进行中：壳展开，全部 assistant 在壳内
+ * - 结束后：壳内过程 + 壳外最后一条 assistant 的 final 正文
+ * - 异步多发：每个 user 各有自己的 Working 壳
+ *
+ * isUserEntryReady(userId)：用户消息入场生长是否已完成。
+ * 空 Working 壳等这个信号再挂，避免和 user 生长同帧抢高度。
+ * 有 assistant 内容时立即挂壳，不受此限制。
+ */
+export function buildProcessTimeline(
+  visibleMessages: Message[],
+  options: {
+    turnDurationMap: Map<string, number>
+    sessionIsStreaming: boolean
+    messageHasProcess: (message: Message) => boolean
+    messageHasFinal: (message: Message) => boolean
+    /** 用户消息入场生长是否完成；缺省视为已完成（历史消息 / 测试） */
+    isUserEntryReady?: (userMessageId: string) => boolean
+  },
+): ProcessTimelineItem[] {
+  const {
+    turnDurationMap,
+    sessionIsStreaming,
+    messageHasProcess,
+    messageHasFinal,
+    isUserEntryReady = () => true,
+  } = options
+  const items: ProcessTimelineItem[] = []
+
+  type TurnBag = {
+    user: Message | null
+    assistants: Message[]
+  }
+
+  const turns: TurnBag[] = []
+  let current: TurnBag | null = null
+
+  for (const message of visibleMessages) {
+    if (message.info.role === 'user') {
+      if (current) turns.push(current)
+      current = { user: message, assistants: [] }
+      continue
+    }
+    if (message.info.role !== 'assistant') continue
+    if (!current) {
+      // 历史续段 / 页首无 user：直接平铺，不挂壳
+      items.push({ kind: 'message', key: message.info.id, message })
+      continue
+    }
+    current.assistants.push(message)
+  }
+  if (current) turns.push(current)
+
+  // 最新有 user 的回合 id（用于 session busy 只挂在最新一轮）
+  let latestUserId: string | null = null
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (turns[i].user) {
+      latestUserId = turns[i].user!.info.id
+      break
+    }
+  }
+
+  for (const turn of turns) {
+    if (turn.user) {
+      items.push({ kind: 'message', key: turn.user.info.id, message: turn.user })
+    }
+
+    const assistants = turn.assistants
+    if (!turn.user && assistants.length === 0) continue
+
+    // 无 user 的续段：已在上面平铺；这里只处理有 user 的袋
+    if (!turn.user) {
+      for (const m of assistants) {
+        items.push({ kind: 'message', key: m.info.id, message: m })
+      }
+      continue
+    }
+
+    const userId = turn.user.info.id
+    const isLatestUserTurn = userId === latestUserId
+    const hasLive = assistants.some(assistantHasLiveWork)
+    // 全部 assistant 已 completed 且无 live tool → 本轮已收工
+    // 发送时 setStreaming 往往早于新 user 入列，若仍用 sessionIsStreaming 重开最新已收工回合，
+    // 会出现「旧 Working 壳展开又立刻收起」的闪一下。
+    const fullySettled =
+      assistants.length > 0 &&
+      !hasLive &&
+      assistants.every(m => m.info.time.completed != null && !m.isStreaming)
+    // 空回合（中断后无 assistant）：不能只凭 sessionIsStreaming + latest 重开。
+    // 典型竞态：abort 后 emptyShellReady 仍在 → 再发时 streaming 先 true、新 user 未入列
+    // → 旧空壳瞬间 Working，新 user 到了又消失，延迟后再挂新壳。
+    // 空壳只在 entry-ready 闸门打开后才算 active（闸门在 idle 时清空）。
+    const emptyTurnArmed = assistants.length === 0 && isUserEntryReady(userId)
+    // 最新一轮：live 工作，或 session busy 且本轮尚未收工
+    // 空回合额外要求 entry-ready；有 assistant 的未收工回合仍可靠 streaming
+    const turnIsActive =
+      hasLive ||
+      (isLatestUserTurn &&
+        sessionIsStreaming &&
+        !fullySettled &&
+        (assistants.length > 0 || emptyTurnArmed))
+
+    const finalAssistant = assistants.length > 0 ? assistants[assistants.length - 1] : null
+    const finalId = finalAssistant?.info.id ?? null
+    const startedAt = turn.user.info.time.created
+    const durationMs = turnIsActive
+      ? undefined
+      : resolveTurnDurationMs(assistants, startedAt, turnDurationMap)
+
+    // 进行中：全部进壳；结束：中间全进 + 末尾仅 process
+    const children: Array<{ message: Message; processContentScope: 'process' | 'inline' }> = []
+    if (turnIsActive) {
+      for (const m of assistants) {
+        children.push({
+          message: m,
+          processContentScope: m.info.id === finalId ? 'process' : 'inline',
+        })
+      }
+    } else {
+      for (const m of assistants) {
+        if (m.info.id === finalId) {
+          if (messageHasProcess(m)) {
+            children.push({ message: m, processContentScope: 'process' })
+          }
+        } else {
+          children.push({ message: m, processContentScope: 'inline' })
+        }
+      }
+    }
+
+    const finalOutside =
+      !turnIsActive && finalAssistant && messageHasFinal(finalAssistant) ? finalAssistant : undefined
+
+    // 空回合（无 assistant）：等 user 入场生长真正结束后再挂 Working
+    // 一旦有 assistant / 过程内容，立即挂壳，不再等
+    const isEmptyActiveShell = turnIsActive && children.length === 0
+    const allowEmptyShell = !isEmptyActiveShell || isUserEntryReady(userId)
+
+    // 进行中（含刚发送空回合）或有过程内容 → 挂壳
+    // 纯 final 正文、无过程 → 直接平铺，不挂空壳
+    if ((children.length > 0 || turnIsActive) && allowEmptyShell) {
+      items.push({
+        kind: 'process-shell',
+        key: `process-shell:${userId}`,
+        userMessageId: userId,
+        startedAt,
+        durationMs,
+        isActive: turnIsActive,
+        children,
+        finalMessage: finalOutside,
+      })
+    } else if (finalOutside) {
+      items.push({
+        kind: 'message',
+        key: finalOutside.info.id,
+        message: finalOutside,
+      })
+    } else {
+      // 已结束但无可见内容：中间 assistant 全丢进壳也没过程时，仍平铺
+      for (const m of assistants) {
+        items.push({ kind: 'message', key: m.info.id, message: m })
+      }
+    }
+  }
+
+  return items
+}

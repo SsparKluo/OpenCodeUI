@@ -18,24 +18,55 @@ import {
   type VirtualItem,
 } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
-import { MessageRenderer } from '../message'
+import {
+  MessageRenderer,
+  ProcessCollapseBlock,
+  messageHasFinalContent,
+  messageHasProcessContent,
+} from '../message'
 import { MessageErrorView } from '../message/parts'
 import type { Message, MessageError } from '../../types/message'
 import { RetryStatusInline, type RetryStatusInlineData } from './RetryStatusInline'
 import { buildVisibleMessageEntries, getVisibleMessageForkTargetId } from './chatAreaVisibility'
 import { AT_BOTTOM_THRESHOLD_PX } from '../../constants'
 import { useChatViewport } from './chatViewport'
-import { buildTurnDurationMap, buildTurnLatestAssistantIdSet, type StableChatPage } from './chatPageModel'
+import {
+  buildProcessTimeline,
+  buildTurnDurationMap,
+  buildTurnLatestAssistantIdSet,
+  type ProcessTimelineItem,
+  type StableChatPage,
+} from './chatPageModel'
 import { useTheme } from '../../hooks/useTheme'
 import { useAutoScroll } from './virtual/useAutoScroll'
 
 const NOOP = () => {}
 const ROW_ESTIMATE = 60
+/** 过程壳 header 行高（Working / Worked 一行） */
+const PROCESS_SHELL_HEADER = 36
+/** 用户入场生长结束后，空 Working 壳再等多久（有 assistant 则立刻挂，不等） */
+const EMPTY_WORKING_SHELL_EXTRA_DELAY_MS = 500
 const DEFAULT_BOTTOM_SPACER = 256
 const SESSION_CACHE_LIMIT = 16
 
 const bottomSpacerHeight = (bottomPadding: number) =>
   bottomPadding > 0 ? bottomPadding + 48 : DEFAULT_BOTTOM_SPACER
+
+function estimateTimelineItemSize(item: ProcessTimelineItem | undefined): number {
+  if (!item) return ROW_ESTIMATE
+  if (item.kind === 'message') return ROW_ESTIMATE
+  // 进行中默认展开：header + 壳内消息（空回合至少占 header）
+  if (item.isActive) {
+    const body = Math.max(item.children.length, 1) * ROW_ESTIMATE
+    return PROCESS_SHELL_HEADER + body
+  }
+  // 结束后默认折叠：只估 header + 壳外 final，避免刷新时 120→36 的假高度再回弹
+  return PROCESS_SHELL_HEADER + (item.finalMessage ? ROW_ESTIMATE : 0)
+}
+
+function sessionCacheKey(sessionId: string, processCollapseEnabled: boolean): string {
+  return `${sessionId}:${processCollapseEnabled ? 'process' : 'flat'}`
+}
 
 // ─── 接口定义（保持不变） ───────────────────────────────────────
 
@@ -75,11 +106,8 @@ export type ChatAreaHandle = {
 
 // ─── 虚拟行 ──────────────────────────────────────────────────
 
-interface RowProps {
-  virtualItem: VirtualItem
+interface MessageBodyProps {
   message: Message
-  maxWidthClass: string
-  paddingClass: string
   registerMessage?: (id: string, element: HTMLElement | null) => void
   onUndo?: (userMessageId: string) => void
   onFork?: (message: Message, forkMessageId?: string) => void | Promise<void>
@@ -88,58 +116,164 @@ interface RowProps {
   turnDuration?: number
   isTurnLatestAssistant?: boolean
   allowStreamingLayoutAnimation: boolean
+  processContentScope?: 'all' | 'process' | 'final' | 'inline'
+  onEntryGrowComplete?: (messageId: string) => void
+}
+
+const MessageBody = memo(function MessageBody({
+  message,
+  registerMessage,
+  onUndo,
+  onFork,
+  canUndo,
+  forkMessageId,
+  turnDuration,
+  isTurnLatestAssistant,
+  allowStreamingLayoutAnimation,
+  processContentScope = 'all',
+  onEntryGrowComplete,
+}: MessageBodyProps) {
+  const messageId = message.info.id
+  const isUser = message.info.role === 'user'
+  return (
+    <div
+      ref={node => registerMessage?.(messageId, node as HTMLDivElement | null)}
+      data-message-id={messageId}
+      data-anchor-source-id={forkMessageId ?? messageId}
+    >
+      <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+        <div className={`message-renderer-shell min-w-0 group ${!isUser ? 'w-full' : ''} flex flex-col gap-2`}>
+          <MessageRenderer
+            message={message}
+            allowStreamingLayoutAnimation={message.isStreaming ? allowStreamingLayoutAnimation : false}
+            turnDuration={turnDuration}
+            isTurnLatestAssistant={isTurnLatestAssistant}
+            processContentScope={processContentScope}
+            onUndo={isUser ? onUndo : undefined}
+            onFork={onFork}
+            forkMessageId={forkMessageId}
+            canUndo={isUser ? canUndo : undefined}
+            onEnsureParts={NOOP}
+            onEntryGrowComplete={isUser ? onEntryGrowComplete : undefined}
+          />
+        </div>
+      </div>
+    </div>
+  )
+})
+
+interface RowProps {
+  virtualItem: VirtualItem
+  item: ProcessTimelineItem
+  maxWidthClass: string
+  paddingClass: string
+  registerMessage?: (id: string, element: HTMLElement | null) => void
+  onUndo?: (userMessageId: string) => void
+  onFork?: (message: Message, forkMessageId?: string) => void | Promise<void>
+  canUndo?: boolean
+  forkMap: Map<string, string | undefined>
+  turnDurationMap: Map<string, number>
+  turnLatestAssistantIds: Set<string>
+  allowStreamingLayoutAnimation: boolean
   measureElement: (el: HTMLElement | null) => void
+  onEntryGrowComplete?: (messageId: string) => void
 }
 
 const VirtualRow = memo(function VirtualRow({
-  virtualItem, message, maxWidthClass, paddingClass,
-  registerMessage, onUndo, onFork, canUndo, forkMessageId,
-  turnDuration, isTurnLatestAssistant, allowStreamingLayoutAnimation, measureElement,
+  virtualItem,
+  item,
+  maxWidthClass,
+  paddingClass,
+  registerMessage,
+  onUndo,
+  onFork,
+  canUndo,
+  forkMap,
+  turnDurationMap,
+  turnLatestAssistantIds,
+  allowStreamingLayoutAnimation,
+  measureElement,
+  onEntryGrowComplete,
 }: RowProps) {
   const rowRef = useRef<HTMLDivElement | null>(null)
-  const messageId = message.info.id
-  const isUser = message.info.role === 'user'
 
-  // ref 回调: 注册到 virtualizer 的 elementsCache，触发 measureElement 内置 RO
   const setRef = useCallback((el: HTMLDivElement | null) => {
     rowRef.current = el
     measureElement(el)
   }, [measureElement])
 
-  // index 变化时重新测量（行被复用）
   useLayoutEffect(() => {
     if (rowRef.current) measureElement(rowRef.current)
-  }, [measureElement, virtualItem.index])
+  }, [measureElement, virtualItem.index, item.key])
 
   return (
     <div
       ref={setRef}
-      data-timeline-key={messageId}
+      data-timeline-key={item.key}
       data-index={virtualItem.index}
       style={{ position: 'absolute', top: 0, left: 0, width: '100%' }}
     >
-      <div
-        ref={node => registerMessage?.(messageId, node as HTMLDivElement | null)}
-        data-message-id={messageId}
-        data-anchor-source-id={forkMessageId ?? messageId}
-      >
-        <div className={`w-full ${maxWidthClass} mx-auto ${paddingClass} py-3 transition-[max-width] duration-300 ease-in-out`}>
-          <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-            <div className={`message-renderer-shell min-w-0 group ${!isUser ? 'w-full' : ''} flex flex-col gap-2`}>
-              <MessageRenderer
-                message={message}
-                allowStreamingLayoutAnimation={message.isStreaming ? allowStreamingLayoutAnimation : false}
-                turnDuration={turnDuration}
-                isTurnLatestAssistant={isTurnLatestAssistant}
-                onUndo={isUser ? onUndo : undefined}
-                onFork={onFork}
-                forkMessageId={forkMessageId}
-                canUndo={isUser ? canUndo : undefined}
-                onEnsureParts={NOOP}
-              />
+      <div className={`w-full ${maxWidthClass} mx-auto ${paddingClass} py-3 transition-[max-width] duration-300 ease-in-out`}>
+        {item.kind === 'message' ? (
+          <MessageBody
+            message={item.message}
+            registerMessage={registerMessage}
+            onUndo={onUndo}
+            onFork={onFork}
+            canUndo={canUndo}
+            forkMessageId={forkMap.get(item.message.info.id)}
+            turnDuration={turnDurationMap.get(item.message.info.id)}
+            isTurnLatestAssistant={
+              item.message.info.role === 'assistant'
+                ? turnLatestAssistantIds.has(item.message.info.id)
+                : undefined
+            }
+            allowStreamingLayoutAnimation={allowStreamingLayoutAnimation}
+            processContentScope={item.processContentScope ?? 'all'}
+            onEntryGrowComplete={onEntryGrowComplete}
+          />
+        ) : (
+          <div className="flex justify-start">
+            <div className="message-renderer-shell min-w-0 group w-full flex flex-col gap-2">
+              <ProcessCollapseBlock
+                stateKey={`turn-process:${item.userMessageId ?? item.key}`}
+                startedAt={item.startedAt}
+                durationMs={item.durationMs}
+                isActive={item.isActive}
+              >
+                {item.children.map(child => (
+                  <MessageBody
+                    key={`${child.message.info.id}:${child.processContentScope}`}
+                    message={child.message}
+                    registerMessage={registerMessage}
+                    onUndo={onUndo}
+                    onFork={onFork}
+                    canUndo={canUndo}
+                    forkMessageId={forkMap.get(child.message.info.id)}
+                    turnDuration={turnDurationMap.get(child.message.info.id)}
+                    isTurnLatestAssistant={turnLatestAssistantIds.has(child.message.info.id)}
+                    allowStreamingLayoutAnimation={allowStreamingLayoutAnimation}
+                    processContentScope={child.processContentScope}
+                  />
+                ))}
+              </ProcessCollapseBlock>
+              {item.finalMessage && (
+                <MessageBody
+                  message={item.finalMessage}
+                  registerMessage={registerMessage}
+                  onUndo={onUndo}
+                  onFork={onFork}
+                  canUndo={canUndo}
+                  forkMessageId={forkMap.get(item.finalMessage.info.id)}
+                  turnDuration={turnDurationMap.get(item.finalMessage.info.id)}
+                  isTurnLatestAssistant
+                  allowStreamingLayoutAnimation={allowStreamingLayoutAnimation}
+                  processContentScope="final"
+                />
+              )}
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   )
@@ -147,18 +281,19 @@ const VirtualRow = memo(function VirtualRow({
   prev.virtualItem.index === next.virtualItem.index &&
   prev.virtualItem.start === next.virtualItem.start &&
   prev.virtualItem.size === next.virtualItem.size &&
-  prev.message === next.message &&
+  prev.item === next.item &&
   prev.maxWidthClass === next.maxWidthClass &&
   prev.paddingClass === next.paddingClass &&
   prev.registerMessage === next.registerMessage &&
   prev.onUndo === next.onUndo &&
   prev.onFork === next.onFork &&
   prev.canUndo === next.canUndo &&
-  prev.forkMessageId === next.forkMessageId &&
-  prev.turnDuration === next.turnDuration &&
-  prev.isTurnLatestAssistant === next.isTurnLatestAssistant &&
+  prev.forkMap === next.forkMap &&
+  prev.turnDurationMap === next.turnDurationMap &&
+  prev.turnLatestAssistantIds === next.turnLatestAssistantIds &&
   prev.allowStreamingLayoutAnimation === next.allowStreamingLayoutAnimation &&
-  prev.measureElement === next.measureElement
+  prev.measureElement === next.measureElement &&
+  prev.onEntryGrowComplete === next.onEntryGrowComplete
 )
 
 // ─── 会话缓存（LRU 16） ───────────────────────────────────────
@@ -174,7 +309,7 @@ export const ChatArea = memo(
         messages, visibleMessages: visibleMessagesProp,
         forkTargetIdMap: forkTargetIdMapProp, turnDurationMap: turnDurationMapProp,
         turnLatestAssistantIds: turnLatestAssistantIdsProp,
-        sessionId, allowStreamingLayoutAnimation = true,
+        sessionId, isStreaming = false, allowStreamingLayoutAnimation = true,
         loadState = 'idle', loadError, connectionError, onOpenSettings,
         hasMoreHistory = false, onLoadMore, onUndo, onFork, canUndo,
         registerMessage, retryStatus = null, bottomPadding = 0,
@@ -183,7 +318,7 @@ export const ChatArea = memo(
       ref,
     ) => {
       const { t } = useTranslation('chat')
-      const { isWideMode } = useTheme()
+      const { isWideMode, processCollapseEnabled } = useTheme()
       const { presentation } = useChatViewport()
       const atBottomThreshold = presentation.isCompact ? 150 : AT_BOTTOM_THRESHOLD_PX
       const paddingClass = presentation.isCompact ? 'px-3' : 'px-5'
@@ -207,6 +342,88 @@ export const ChatArea = memo(
         () => turnLatestAssistantIdsProp ?? buildTurnLatestAssistantIdSet(visibleMessages),
         [turnLatestAssistantIdsProp, visibleMessages],
       )
+
+      // 空 Working 壳：等 user 入场生长完成 + 额外停顿后再挂。
+      // 有 assistant 时 buildProcessTimeline 会立刻挂壳，不走这个闸门。
+      // idle 时清空闸门，避免「中断空回合」在下次发送时被 streaming 抢先重开。
+      const emptyShellReadyRef = useRef(new Set<string>())
+      const emptyShellTimersRef = useRef(new Map<string, number>())
+      const streamingRef = useRef(isStreaming)
+      streamingRef.current = isStreaming
+      const [emptyShellReadyVersion, setEmptyShellReadyVersion] = useState(0)
+
+      const clearEmptyShellGate = useCallback(() => {
+        for (const timer of emptyShellTimersRef.current.values()) window.clearTimeout(timer)
+        emptyShellTimersRef.current.clear()
+        if (emptyShellReadyRef.current.size > 0) {
+          emptyShellReadyRef.current.clear()
+          setEmptyShellReadyVersion(v => v + 1)
+        }
+      }, [])
+
+      const handleEntryGrowComplete = useCallback((messageId: string) => {
+        // 只在 session 仍 busy 时武装空壳；idle 后的回调（历史 remount）忽略
+        if (!streamingRef.current) return
+        if (emptyShellReadyRef.current.has(messageId)) {
+          setEmptyShellReadyVersion(v => v + 1)
+          return
+        }
+        if (emptyShellTimersRef.current.has(messageId)) return
+        const timer = window.setTimeout(() => {
+          emptyShellTimersRef.current.delete(messageId)
+          // timer 到期时若已 idle，不再武装
+          if (!streamingRef.current) return
+          emptyShellReadyRef.current.add(messageId)
+          setEmptyShellReadyVersion(v => v + 1)
+        }, EMPTY_WORKING_SHELL_EXTRA_DELAY_MS)
+        emptyShellTimersRef.current.set(messageId, timer)
+      }, [])
+
+      useEffect(() => {
+        if (!isStreaming) clearEmptyShellGate()
+      }, [isStreaming, clearEmptyShellGate])
+
+      useEffect(() => {
+        return () => {
+          for (const timer of emptyShellTimersRef.current.values()) window.clearTimeout(timer)
+          emptyShellTimersRef.current.clear()
+        }
+      }, [])
+
+      // 过程折叠：按 user 回合建时间线；关闭时退回「一行一条消息」
+      const timeline = useMemo<ProcessTimelineItem[]>(() => {
+        if (!processCollapseEnabled) {
+          return visibleMessages.map(message => ({
+            kind: 'message' as const,
+            key: message.info.id,
+            message,
+          }))
+        }
+        return buildProcessTimeline(visibleMessages, {
+          turnDurationMap,
+          sessionIsStreaming: isStreaming,
+          messageHasProcess: messageHasProcessContent,
+          messageHasFinal: messageHasFinalContent,
+          // 空壳闸门：入场完成 + 额外停顿后才 true；有 assistant 的回合不查这个
+          isUserEntryReady: id => emptyShellReadyRef.current.has(id),
+        })
+        // emptyShellReadyVersion：额外延迟到期后强制重算，挂上 Working 壳
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [processCollapseEnabled, visibleMessages, turnDurationMap, isStreaming, emptyShellReadyVersion])
+
+      const messageIdToTimelineIndex = useMemo(() => {
+        const map = new Map<string, number>()
+        timeline.forEach((item, index) => {
+          if (item.kind === 'message') {
+            map.set(item.message.info.id, index)
+            return
+          }
+          if (item.userMessageId) map.set(item.userMessageId, index)
+          for (const child of item.children) map.set(child.message.info.id, index)
+          if (item.finalMessage) map.set(item.finalMessage.info.id, index)
+        })
+        return map
+      }, [timeline])
 
       // ── Refs（避免闭包过期） ──
       const scrollRef = useRef<HTMLDivElement | null>(null)
@@ -261,7 +478,9 @@ export const ChatArea = memo(
 
       // ── Virtualizer ──
       // parent key={sessionId} remount 后，这里只在 mount 时读一次 cache
-      const initialCacheRef = useRef(sessionId ? sessionCache.get(sessionId)?.measurements : undefined)
+      // cache key 必须带过程折叠模式：flat 与 process 的 item key/高度完全不同
+      const cacheKey = sessionId ? sessionCacheKey(sessionId, processCollapseEnabled) : null
+      const initialCacheRef = useRef(cacheKey ? sessionCache.get(cacheKey)?.measurements : undefined)
       const coldBottomMount = !initialCacheRef.current?.length
       const [renderOverscan, setRenderOverscan] = useState(
         initialCacheRef.current?.length || coldBottomMount ? 6 : 15,
@@ -278,18 +497,19 @@ export const ChatArea = memo(
           const last = cached[cached.length - 1]
           return Math.max(0, (last?.end ?? 0) + spacerHeight - 600)
         }
-        return Math.max(0, visibleMessages.length * ROW_ESTIMATE + spacerHeight - 600)
+        const estimatedTotal = timeline.reduce((sum, item) => sum + estimateTimelineItemSize(item), 0)
+        return Math.max(0, estimatedTotal + spacerHeight - 600)
         // 只在 mount 用初始 count 估一次
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, [])
 
       const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
-        count: visibleMessages.length,
+        count: timeline.length,
         getScrollElement: () => scrollRef.current,
         initialOffset: estimatedBottomOffset,
         initialMeasurementsCache: initialCacheRef.current,
-        estimateSize: () => ROW_ESTIMATE,
-        getItemKey: (i) => visibleMessages[i]?.info.id ?? `removed:${i}`,
+        estimateSize: (index) => estimateTimelineItemSize(timeline[index]),
+        getItemKey: (i) => timeline[i]?.key ?? `removed:${i}`,
         paddingEnd: spacerHeight,
         scrollEndThreshold: 80,
         // 预写 total height，避免浏览器把新 offset clamp 到旧高度（oc 同款）
@@ -457,10 +677,10 @@ export const ChatArea = memo(
       }, [autoSetContentRef, virtualizer, computeScrollState])
 
       const pinToBottom = useCallback(() => {
-        if (visibleMessages.length === 0) return
+        if (timeline.length === 0) return
         autoMarkAuto(scrollRef.current)
         virtualizer.scrollToEnd()
-      }, [autoMarkAuto, virtualizer, visibleMessages.length])
+      }, [autoMarkAuto, virtualizer, timeline.length])
 
       // ── 事件处理 ──
       const onScroll = useCallback(() => {
@@ -515,10 +735,10 @@ export const ChatArea = memo(
       // rows 变化且应贴底时再确认一次（append / 首批消息）
       // prepend 由 anchorTo + prepend 锚点处理，这里在 userScrolled 时不跟
       useLayoutEffect(() => {
-        if (visibleMessages.length === 0) return
+        if (timeline.length === 0) return
         if (!shouldAnchorBottom() || prependLoading.current) return
         pinToBottom()
-      }, [visibleMessages.length, pinToBottom])
+      }, [timeline.length, pinToBottom])
 
       // 用户返回底部时重新贴底
       const userScrolledInit = useRef(false)
@@ -543,25 +763,25 @@ export const ChatArea = memo(
 
       // unmount：snapshot 写回 cache（对齐 oc onCleanup）
       useLayoutEffect(() => {
-        const sid = sessionId
+        const key = cacheKey
         return () => {
           if (fillFrame.current !== undefined) cancelAnimationFrame(fillFrame.current)
           if (resizePinFrame.current !== undefined) cancelAnimationFrame(resizePinFrame.current)
           clearPrepend()
-          if (!sid) return
-          sessionCache.delete(sid)
-          sessionCache.set(sid, { measurements: virtualizer.takeSnapshot() })
+          if (!key) return
+          sessionCache.delete(key)
+          sessionCache.set(key, { measurements: virtualizer.takeSnapshot() })
           while (sessionCache.size > SESSION_CACHE_LIMIT) {
             sessionCache.delete(sessionCache.keys().next().value!)
           }
         }
-      }, [sessionId, virtualizer, clearPrepend])
+      }, [cacheKey, virtualizer, clearPrepend])
 
       // ── 渲染数据 ──
       const items = virtualizer.getVirtualItems()
       const mountedMessageIdsKey = useMemo(
-        () => items.map(item => visibleMessages[item.index]?.info.id).filter(Boolean).join(','),
-        [items, visibleMessages],
+        () => items.map(item => timeline[item.index]?.key).filter(Boolean).join(','),
+        [items, timeline],
       )
 
       // Outline 可见消息：跟随虚拟行挂载变化
@@ -605,22 +825,28 @@ export const ChatArea = memo(
           pinToBottom()
         },
         scrollToLastMessage: () => {
-          if (visibleMessages.length === 0) return
+          if (timeline.length === 0) return
           autoMarkAuto(scrollRef.current)
-          virtualizer.scrollToIndex(visibleMessages.length - 1, { align: 'end' })
+          virtualizer.scrollToIndex(timeline.length - 1, { align: 'end' })
         },
         scrollToMessageIndex: (index: number) => {
+          // index 仍按 visibleMessages 语义；过程折叠时映射到 timeline 行
           if (index < 0 || index >= visibleMessages.length) return
+          const messageId = visibleMessages[index]?.info.id
+          const timelineIndex = messageId != null
+            ? (messageIdToTimelineIndex.get(messageId) ?? index)
+            : index
+          if (timelineIndex < 0 || timelineIndex >= timeline.length) return
           autoPause()
-          virtualizer.scrollToIndex(index, { align: 'center' })
+          virtualizer.scrollToIndex(timelineIndex, { align: 'center' })
         },
         scrollToMessageId: (messageId: string) => {
-          const index = visibleMessages.findIndex(m => m.info.id === messageId)
-          if (index < 0) return
+          const timelineIndex = messageIdToTimelineIndex.get(messageId)
+          if (timelineIndex == null) return
           autoPause()
-          virtualizer.scrollToIndex(index, { align: 'center' })
+          virtualizer.scrollToIndex(timelineIndex, { align: 'center' })
         },
-      }), [autoForceScroll, autoPause, autoMarkAuto, pinToBottom, virtualizer, visibleMessages])
+      }), [autoForceScroll, autoPause, autoMarkAuto, pinToBottom, virtualizer, timeline, visibleMessages, messageIdToTimelineIndex])
 
       return (
         <div className="h-full overflow-hidden contain-strict relative">
@@ -659,28 +885,25 @@ export const ChatArea = memo(
 
             <div ref={setVirtualContent} style={{ position: 'relative', width: '100%' }}>
               {items.map(item => {
-                const message = visibleMessages[item.index]
-                if (!message) return null
+                const timelineItem = timeline[item.index]
+                if (!timelineItem) return null
                 return (
                   <VirtualRow
                     key={item.key}
                     virtualItem={item}
-                    message={message}
+                    item={timelineItem}
                     maxWidthClass={maxWidthClass}
                     paddingClass={paddingClass}
                     registerMessage={registerMessage}
                     onUndo={onUndo}
                     onFork={onFork}
                     canUndo={canUndo}
-                    forkMessageId={forkMap.get(message.info.id)}
-                    turnDuration={turnDurationMap.get(message.info.id)}
-                    isTurnLatestAssistant={
-                      message.info.role === 'assistant'
-                        ? turnLatestAssistantIds.has(message.info.id)
-                        : undefined
-                    }
+                    forkMap={forkMap}
+                    turnDurationMap={turnDurationMap}
+                    turnLatestAssistantIds={turnLatestAssistantIds}
                     allowStreamingLayoutAnimation={allowStreamingLayoutAnimation}
                     measureElement={virtualizer.measureElement as (el: HTMLElement | null) => void}
+                    onEntryGrowComplete={handleEntryGrowComplete}
                   />
                 )
               })}

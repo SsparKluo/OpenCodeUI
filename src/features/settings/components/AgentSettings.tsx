@@ -15,6 +15,7 @@ export function AgentSettings() {
   const [toolCardStyle, setToolCardStyle] = useState(themeStore.toolCardStyle)
   const [immersiveMode, setImmersiveMode] = useState(themeStore.immersiveMode)
   const [compactInlinePermission, setCompactInlinePermission] = useState(themeStore.compactInlinePermission)
+  const [processCollapseEnabled, setProcessCollapseEnabled] = useState(themeStore.processCollapseEnabled)
 
   const handleAlwaysAllowModeChange = (mode: AlwaysAllowMode) => {
     setAlwaysAllowMode(mode)
@@ -65,6 +66,12 @@ export function AgentSettings() {
     setDescriptiveToolSteps(next)
     setToolCardStyle(next ? 'compact' : 'classic')
     setCompactInlinePermission(next)
+  }
+
+  const handleProcessCollapseToggle = () => {
+    const next = !processCollapseEnabled
+    setProcessCollapseEnabled(next)
+    themeStore.setProcessCollapseEnabled(next)
   }
 
   return (
@@ -127,6 +134,14 @@ export function AgentSettings() {
           onClick={handleDescriptiveToolStepsToggle}
         >
           <Toggle enabled={descriptiveToolSteps} onChange={handleDescriptiveToolStepsToggle} />
+        </SettingRow>
+
+        <SettingRow
+          label={t('chat.processCollapse')}
+          description={t('chat.processCollapseDesc')}
+          onClick={handleProcessCollapseToggle}
+        >
+          <Toggle enabled={processCollapseEnabled} onChange={handleProcessCollapseToggle} />
         </SettingRow>
 
         <SettingRow

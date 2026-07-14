@@ -234,6 +234,10 @@ export function useTheme() {
     themeStore.setDesktopCollapsedInputDock(enabled)
   }, [])
 
+  const setProcessCollapseEnabled = useCallback((enabled: boolean) => {
+    themeStore.setProcessCollapseEnabled(enabled)
+  }, [])
+
   return {
     // 日夜模式（向后兼容）
     mode: state.colorMode,
@@ -344,5 +348,9 @@ export function useTheme() {
     // 桌面端输入框上滚收起
     desktopCollapsedInputDock: state.desktopCollapsedInputDock,
     setDesktopCollapsedInputDock,
+
+    // 过程折叠
+    processCollapseEnabled: state.processCollapseEnabled,
+    setProcessCollapseEnabled,
   }
 }

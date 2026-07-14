@@ -7,6 +7,9 @@
   "forkFromHere": "Fork from here",
   "forkingFromHere": "Forking...",
   "stepsCount": "{{done}}/{{total}} steps",
+  "processedFor": "Worked for {{duration}}",
+  "processing": "Processing...",
+  "processingWithDuration": "Working for {{duration}}",
   "tokens": "tokens",
   "tokensK": "{{count}}k tokens",
   "defaultRenderer": {

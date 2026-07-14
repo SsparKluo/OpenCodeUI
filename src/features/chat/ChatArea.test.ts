@@ -3,6 +3,7 @@ import {
   buildChatPages,
   buildExpandedPageSelection,
   buildPageRenderSegments,
+  buildProcessTimeline,
   buildTurnDurationMap,
   buildTurnLatestAssistantIdSet,
   computeAnchorRestoreScrollDelta,
@@ -448,6 +449,231 @@ describe('buildTurnLatestAssistantIdSet', () => {
     expect(latest.has('assistant-1')).toBe(false)
     expect(latest.has('assistant-2')).toBe(true)
     expect(latest.has('assistant-3')).toBe(true)
+  })
+})
+
+describe('buildProcessTimeline', () => {
+  const hasProcess = (message: Message) =>
+    message.parts.some(p => p.type === 'tool' || p.type === 'reasoning')
+  const hasFinal = (message: Message) =>
+    message.parts.some(p => p.type === 'text')
+
+  it('delays empty Working shell until entry-ready gate opens', () => {
+    const messages = [createUserMessage('user-1', 1000)]
+    // ChatArea 会在 user 入场完成后再额外 delay，再把 id 放进 ready 集合
+    const ready = new Set<string>()
+    const early = buildProcessTimeline(messages, {
+      turnDurationMap: new Map(),
+      sessionIsStreaming: true,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
+      isUserEntryReady: id => ready.has(id),
+    })
+    expect(early).toHaveLength(1)
+    expect(early[0]).toMatchObject({ kind: 'message', key: 'user-1' })
+
+    ready.add('user-1')
+    const after = buildProcessTimeline(messages, {
+      turnDurationMap: new Map(),
+      sessionIsStreaming: true,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
+      isUserEntryReady: id => ready.has(id),
+    })
+    expect(after).toHaveLength(2)
+    expect(after[1]).toMatchObject({
+      kind: 'process-shell',
+      isActive: true,
+      startedAt: 1000,
+      children: [],
+    })
+  })
+
+  it('shows Working shell immediately once any assistant content exists', () => {
+    const mid = createAssistantMessage('assistant-1', [createToolPart('tool-1', 'assistant-1')], 1001)
+    mid.isStreaming = true
+    const messages = [createUserMessage('user-1', 1000), mid]
+    const timeline = buildProcessTimeline(messages, {
+      turnDurationMap: new Map(),
+      sessionIsStreaming: true,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
+      // 用户入场未完成也不拦：有 assistant 就立刻挂
+      isUserEntryReady: () => false,
+    })
+    const shell = timeline.find(item => item.kind === 'process-shell')
+    expect(shell).toBeTruthy()
+    if (shell?.kind === 'process-shell') {
+      expect(shell.children.map(c => c.message.info.id)).toEqual(['assistant-1'])
+    }
+  })
+
+  it('drops empty Working shell after abort when no assistant ever arrived', () => {
+    const messages = [createUserMessage('user-1', 1000)]
+    const timeline = buildProcessTimeline(messages, {
+      turnDurationMap: new Map(),
+      sessionIsStreaming: false,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
+    })
+
+    expect(timeline).toHaveLength(1)
+    expect(timeline[0]).toMatchObject({ kind: 'message', key: 'user-1' })
+  })
+
+  it('keeps all assistants inside active shell and supports async second Working shell', () => {
+    const mid = createAssistantMessage('assistant-1', [createToolPart('tool-1', 'assistant-1')], 1001)
+    mid.isStreaming = true
+    const messages = [
+      createUserMessage('user-1', 1000),
+      mid,
+      createUserMessage('user-2', 2000),
+    ]
+    const timeline = buildProcessTimeline(messages, {
+      turnDurationMap: new Map(),
+      sessionIsStreaming: true,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
+    })
+
+    const shells = timeline.filter(item => item.kind === 'process-shell')
+    expect(shells).toHaveLength(2)
+    expect(shells[0]).toMatchObject({ kind: 'process-shell', isActive: true })
+    if (shells[0].kind === 'process-shell') {
+      expect(shells[0].children.map(c => c.message.info.id)).toEqual(['assistant-1'])
+    }
+    expect(shells[1]).toMatchObject({ kind: 'process-shell', isActive: true, children: [] })
+  })
+
+  it('settles shell with process inside and final answer outside', () => {
+    const processOnly = createAssistantMessage(
+      'assistant-1',
+      [createToolPart('tool-1', 'assistant-1')],
+      1001,
+      1200,
+    )
+    const finalAnswer = createAssistantMessage(
+      'assistant-2',
+      [
+        createToolPart('tool-2', 'assistant-2'),
+        {
+          id: 'text-1',
+          sessionID: 'session-1',
+          messageID: 'assistant-2',
+          type: 'text',
+          text: 'done',
+        },
+      ],
+      1201,
+      1500,
+    )
+    const messages = [createUserMessage('user-1', 1000), processOnly, finalAnswer]
+    const durationMap = buildTurnDurationMap(messages, messages)
+    const timeline = buildProcessTimeline(messages, {
+      turnDurationMap: durationMap,
+      sessionIsStreaming: false,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
+    })
+
+    const shell = timeline.find(item => item.kind === 'process-shell')
+    expect(shell).toBeTruthy()
+    if (shell?.kind !== 'process-shell') return
+    expect(shell.isActive).toBe(false)
+    expect(shell.durationMs).toBe(500)
+    expect(shell.children.map(c => [c.message.info.id, c.processContentScope])).toEqual([
+      ['assistant-1', 'inline'],
+      ['assistant-2', 'process'],
+    ])
+    expect(shell.finalMessage?.info.id).toBe('assistant-2')
+  })
+
+  it('does not reopen an aborted empty turn when streaming starts before the next user lands', () => {
+    // 用户发了第一条、打断、再发：streaming 先 true，新 user 未入列，最新仍是空的 user-1
+    // 若 isUserEntryReady(user-1) 仍 true（上次 Working 闸门残留），旧空壳会瞬间闪一下
+    const messages = [createUserMessage('user-1', 1000)]
+    const staleReady = new Set(['user-1'])
+    const timeline = buildProcessTimeline(messages, {
+      turnDurationMap: new Map(),
+      sessionIsStreaming: true,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
+      // 模拟 idle 后闸门已清空：旧 user 不应再 armed
+      isUserEntryReady: id => staleReady.has(id) && false,
+    })
+    expect(timeline).toHaveLength(1)
+    expect(timeline[0]).toMatchObject({ kind: 'message', key: 'user-1' })
+
+    // 闸门未清空时的错误形态（回归文档）：ready 仍在 → 会挂空壳
+    const leaked = buildProcessTimeline(messages, {
+      turnDurationMap: new Map(),
+      sessionIsStreaming: true,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
+      isUserEntryReady: id => staleReady.has(id),
+    })
+    // 有 ready 时仍允许挂（当前发送周期内合法）；关键是 ChatArea idle 时清空 ready
+    // 这里只断言：无 ready 时绝不挂
+    expect(timeline.some(i => i.kind === 'process-shell')).toBe(false)
+    expect(leaked.some(i => i.kind === 'process-shell')).toBe(true)
+  })
+
+  it('does not reopen a settled previous turn when session starts streaming before new user lands', () => {
+    const settled = createAssistantMessage(
+      'assistant-1',
+      [
+        createToolPart('tool-1', 'assistant-1'),
+        {
+          id: 'text-1',
+          sessionID: 'session-1',
+          messageID: 'assistant-1',
+          type: 'text',
+          text: 'done',
+        },
+      ],
+      1001,
+      1500,
+    )
+    // 发送瞬间：streaming 已 true，新 user 还没进列表，最新回合仍是旧的已收工回合
+    const messages = [createUserMessage('user-1', 1000), settled]
+    const timeline = buildProcessTimeline(messages, {
+      turnDurationMap: new Map([['assistant-1', 500]]),
+      sessionIsStreaming: true,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
+    })
+    const shell = timeline.find(item => item.kind === 'process-shell')
+    expect(shell).toBeTruthy()
+    if (shell?.kind === 'process-shell') {
+      expect(shell.isActive).toBe(false)
+    }
+  })
+
+  it('does not wrap pure final answer turns in an empty process shell', () => {
+    const plain = createAssistantMessage(
+      'assistant-1',
+      [
+        {
+          id: 'text-1',
+          sessionID: 'session-1',
+          messageID: 'assistant-1',
+          type: 'text',
+          text: 'hello',
+        },
+      ],
+      1001,
+      1100,
+    )
+    const messages = [createUserMessage('user-1', 1000), plain]
+    const timeline = buildProcessTimeline(messages, {
+      turnDurationMap: new Map([['assistant-1', 100]]),
+      sessionIsStreaming: false,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
+    })
+
+    expect(timeline.map(item => item.kind)).toEqual(['message', 'message'])
+    expect(timeline[1]).toMatchObject({ kind: 'message', key: 'assistant-1' })
   })
 })
 

@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react'
+import { memo, useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { diffLines } from 'diff'
 import { animate } from 'motion/mini'
@@ -7,6 +7,7 @@ import { CopyButton, SmoothHeight } from '../../components/ui'
 import { MarkdownRenderer } from '../../components/MarkdownRenderer'
 import { useDelayedRender, useDisclosureScrollLock } from '../../hooks'
 import { useInputCapabilities } from '../../hooks/useInputCapabilities'
+import { useNow } from '../../hooks/useNow'
 import { useTheme } from '../../hooks/useTheme'
 import {
   useInlineToolRequests,
@@ -39,8 +40,245 @@ import type {
   AssistantMessageInfo,
 } from '../../types/message'
 import { isToolPart, isVisibleReasoningPart, isVisibleTextPart } from '../../types/message'
+import {
+  ENTRY_GROW_DURATION_MS,
+  isEntryGrowComplete,
+  markEntryGrowComplete,
+  shouldPlayEntryGrow,
+} from '../../utils/entryGrow'
 import { formatDuration, formatCompletedAt, formatDetailedDateTime } from '../../utils/formatUtils'
+import { lockScrollAroundAnchor } from '../../utils/scrollUtils'
 import { useUiDisclosureState } from '../../utils/uiDisclosureState'
+
+/**
+ * 过程折叠 header：进行中自己走表，只有这一行因计时更新；children 不跟时钟走。
+ */
+const ProcessCollapseHeader = memo(function ProcessCollapseHeader({
+  isActive,
+  startedAt,
+  durationMs,
+  expanded,
+  onToggle,
+  headerRef,
+}: {
+  isActive: boolean
+  startedAt?: number
+  durationMs?: number
+  expanded: boolean
+  onToggle: () => void
+  headerRef: React.RefObject<HTMLButtonElement | null>
+}) {
+  const { t } = useTranslation('message')
+  const now = useNow(1000, isActive && startedAt != null)
+  const liveMs = isActive && startedAt != null ? Math.max(0, now - startedAt) : null
+  const lastLiveMsRef = useRef(0)
+  if (liveMs != null) lastLiveMsRef.current = liveMs
+  const displayMs =
+    liveMs != null
+      ? liveMs
+      : durationMs != null && durationMs > 0
+        ? durationMs
+        : lastLiveMsRef.current
+  const durationLabel = formatDuration(displayMs)
+  const label = isActive
+    ? t('processingWithDuration', { duration: durationLabel })
+    : t('processedFor', { duration: durationLabel })
+
+  return (
+    <button
+      ref={headerRef}
+      type="button"
+      onClick={onToggle}
+      className="flex w-full items-center gap-1.5 rounded-md py-1 text-left text-[length:var(--fs-sm)] leading-5 text-text-400 hover:bg-bg-200/30 hover:text-text-200 transition-colors"
+    >
+      <span className={isActive ? 'reasoning-shimmer-text' : 'text-text-400'}>{label}</span>
+      <span className="inline-flex items-center justify-center text-text-500">
+        {expanded ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
+      </span>
+    </button>
+  )
+})
+
+/** 过程折叠块：动画与 tool steps 一致（grid-rows + delayed body） */
+export function ProcessCollapseBlock({
+  children,
+  durationMs,
+  startedAt,
+  isActive,
+  stateKey,
+}: {
+  children: ReactNode
+  durationMs?: number
+  startedAt?: number
+  isActive: boolean
+  stateKey: string
+}) {
+  const [expanded, setExpanded] = useUiDisclosureState(stateKey, isActive)
+  const shouldRenderBody = useDelayedRender(expanded)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const headerRef = useRef<HTMLButtonElement>(null)
+  const unlockScrollRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    setExpanded(isActive, { touched: false, respectUser: true })
+  }, [isActive, setExpanded])
+
+  useEffect(() => {
+    return () => {
+      unlockScrollRef.current?.()
+      unlockScrollRef.current = null
+    }
+  }, [])
+
+  const toggleExpanded = useCallback(() => {
+    unlockScrollRef.current?.()
+    unlockScrollRef.current = lockScrollAroundAnchor(headerRef.current, {
+      observe: rootRef.current,
+    })
+    setExpanded(!expanded)
+  }, [expanded, setExpanded])
+
+  // 进行中默认展开：不要跑 grid 展开动画（否则每条新消息都带动画高度重排）
+  // 用户手动折叠/展开、或结束后自动收起时再开动画
+  // 挂载本身不另做入场生长——像普通消息一样直接出现
+  const animateGrid = !isActive || expanded !== isActive
+
+  return (
+    <div ref={rootRef} className="flex flex-col">
+      <ProcessCollapseHeader
+        isActive={isActive}
+        startedAt={startedAt}
+        durationMs={durationMs}
+        expanded={expanded}
+        onToggle={toggleExpanded}
+        headerRef={headerRef}
+      />
+      <div
+        className={
+          animateGrid
+            ? `grid transition-[grid-template-rows] duration-300 ease-in-out ${
+                expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+              }`
+            : expanded
+              ? 'grid grid-rows-[1fr]'
+              : 'grid grid-rows-[0fr]'
+        }
+      >
+        <div className="min-h-0 min-w-0 overflow-hidden" style={{ clipPath: 'inset(0 -100% 0 -100%)' }}>
+          {shouldRenderBody && <div className="flex flex-col gap-2 pt-1">{children}</div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * 消息内容范围：
+ * - all: 正常渲染
+ * - process: 只渲染过程部分（进外层折叠块）
+ * - final: 只渲染尾部最终 text
+ * - inline: 完整渲染（已在外层过程块内）
+ */
+export type ProcessContentScope = 'all' | 'process' | 'final' | 'inline'
+
+type ProcessSplit = {
+  processItems: RenderItem[]
+  finalItems: RenderItem[]
+  hasProcess: boolean
+  hasFinal: boolean
+}
+
+/**
+ * 把 render items 拆成「过程」和「最终回答」。
+ * 最终回答 = 消息中最后一段连续 text + 紧随的独立 step-finish。
+ * reasoning / tool 永远进过程。
+ */
+export function splitProcessRenderItems(items: RenderItem[]): ProcessSplit {
+  if (items.length === 0) {
+    return { processItems: [], finalItems: [], hasProcess: false, hasFinal: false }
+  }
+
+  let lastTextIdx = -1
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i]
+    if (item.type === 'single' && item.part.type === 'text') {
+      lastTextIdx = i
+      break
+    }
+    if (item.type === 'single' && item.part.type === 'step-finish') continue
+    break
+  }
+
+  if (lastTextIdx < 0) {
+    return {
+      processItems: items,
+      finalItems: [],
+      hasProcess: items.length > 0,
+      hasFinal: false,
+    }
+  }
+
+  let textRunStart = lastTextIdx
+  while (textRunStart > 0) {
+    const prev = items[textRunStart - 1]
+    if (prev.type === 'single' && prev.part.type === 'text') {
+      textRunStart -= 1
+      continue
+    }
+    break
+  }
+
+  let textRunEnd = lastTextIdx
+  while (textRunEnd + 1 < items.length) {
+    const next = items[textRunEnd + 1]
+    if (next.type === 'single' && next.part.type === 'step-finish') {
+      textRunEnd += 1
+      continue
+    }
+    break
+  }
+
+  const finalItems = items.slice(textRunStart, textRunEnd + 1)
+  const before = items.slice(0, textRunStart)
+  const after = items.slice(textRunEnd + 1)
+  const afterProcess = after.filter(
+    item => !(item.type === 'single' && item.part.type === 'step-finish'),
+  )
+  const afterStepFinish = after.filter(
+    item => item.type === 'single' && item.part.type === 'step-finish',
+  )
+  const processItems = afterProcess.length > 0 ? [...before, ...afterProcess] : before
+  const mergedFinal = afterStepFinish.length > 0 ? [...finalItems, ...afterStepFinish] : finalItems
+
+  return {
+    processItems,
+    finalItems: mergedFinal,
+    hasProcess: processItems.length > 0,
+    hasFinal: mergedFinal.length > 0,
+  }
+}
+
+/** 流式未完成时不拆 final：中间 text 后面还可能跟 tool */
+export function messageStillStreamingProcess(message: Message): boolean {
+  if (message.info.role !== 'assistant') return false
+  return !!message.isStreaming || message.info.time.completed == null
+}
+
+/** 是否有可收进过程块的内容（tool / reasoning 等，不含尾部最终 text） */
+export function messageHasProcessContent(message: Message): boolean {
+  if (message.info.role !== 'assistant') return false
+  if (messageStillStreamingProcess(message)) return true
+  const items = groupPartsForRender(message.parts)
+  if (items.length === 0) return false
+  return splitProcessRenderItems(items).hasProcess
+}
+
+/** 是否有应留在折叠块外的最终 text（仅消息已结束后才拆） */
+export function messageHasFinalContent(message: Message): boolean {
+  if (message.info.role !== 'assistant') return false
+  if (messageStillStreamingProcess(message)) return false
+  return splitProcessRenderItems(groupPartsForRender(message.parts)).hasFinal
+}
 
 interface MessageRendererProps {
   message: Message
@@ -53,11 +291,15 @@ interface MessageRendererProps {
    * 未传入时按 true 处理（单条消息场景）。
    */
   isTurnLatestAssistant?: boolean
+  /** 过程折叠时的内容范围 */
+  processContentScope?: ProcessContentScope
   onUndo?: (userMessageId: string) => void
   onFork?: (message: Message, forkMessageId?: string) => Promise<void> | void
   forkMessageId?: string
   canUndo?: boolean
   onEnsureParts?: (messageId: string) => void
+  /** 用户消息入场生长完成（供过程壳等待挂载） */
+  onEntryGrowComplete?: (messageId: string) => void
 }
 
 export const MessageRenderer = memo(function MessageRenderer({
@@ -65,11 +307,13 @@ export const MessageRenderer = memo(function MessageRenderer({
   allowStreamingLayoutAnimation = true,
   turnDuration,
   isTurnLatestAssistant = true,
+  processContentScope = 'all',
   onUndo,
   onFork,
   forkMessageId,
   canUndo,
   onEnsureParts,
+  onEntryGrowComplete,
 }: MessageRendererProps) {
   const { info } = message
   const isUser = info.role === 'user'
@@ -82,6 +326,7 @@ export const MessageRenderer = memo(function MessageRenderer({
         onFork={onFork}
         forkMessageId={forkMessageId}
         canUndo={canUndo}
+        onEntryGrowComplete={onEntryGrowComplete}
       />
     )
   }
@@ -92,6 +337,7 @@ export const MessageRenderer = memo(function MessageRenderer({
       allowStreamingLayoutAnimation={allowStreamingLayoutAnimation}
       turnDuration={turnDuration}
       isTurnLatestAssistant={isTurnLatestAssistant}
+      processContentScope={processContentScope}
       onFork={onFork}
       forkMessageId={forkMessageId}
       onEnsureParts={onEnsureParts}
@@ -101,20 +347,57 @@ export const MessageRenderer = memo(function MessageRenderer({
 
 // ============================================
 // 入场生长动画 hook — 新消息作为对话流的延续，从 height 0 平滑展开
+// 完成后 markEntryGrowComplete，供过程壳「等用户登场完再挂」使用
 // ============================================
 
-function useEntryGrowAnimation(created: number) {
+function useEntryGrowAnimation(
+  created: number,
+  enabled = true,
+  completeId?: string,
+  onComplete?: (id: string) => void,
+) {
   const ref = useRef<HTMLDivElement>(null)
+  const onCompleteRef = useRef(onComplete)
+  onCompleteRef.current = onComplete
+
   useLayoutEffect(() => {
     const el = ref.current
-    if (!el || Date.now() - created > 3000) return
+    const finish = () => {
+      if (!completeId) return
+      if (!isEntryGrowComplete(completeId)) markEntryGrowComplete(completeId)
+      onCompleteRef.current?.(completeId)
+    }
+
+    // 过程壳内消息禁止入场生长：会连着虚拟行反复 measure，造成整列高度抽搐
+    if (!enabled || !el) {
+      finish()
+      return
+    }
+    // 已完成过（虚拟行复用 remount）或消息太旧：不播，直接放行
+    if ((completeId && isEntryGrowComplete(completeId)) || !shouldPlayEntryGrow(created)) {
+      finish()
+      return
+    }
+
     const targetHeight = el.scrollHeight
     el.style.height = '0px'
     el.style.clipPath = 'inset(0 -100% 0 -100%)'
-    animate(el, { height: `${targetHeight}px` }, { duration: 0.2, ease: 'easeOut' }).then(() => {
+    let cancelled = false
+    animate(el, { height: `${targetHeight}px` }, { duration: ENTRY_GROW_DURATION_MS / 1000, ease: 'easeOut' }).then(
+      () => {
+        if (cancelled) return
+        el.style.height = ''
+        el.style.clipPath = ''
+        finish()
+      },
+    )
+    return () => {
+      cancelled = true
+      // 虚拟行中途卸载也放行，避免 Working 壳永远等不到入场完成
       el.style.height = ''
       el.style.clipPath = ''
-    })
+      finish()
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return ref
 }
@@ -266,6 +549,7 @@ interface UserMessageViewProps {
   onFork?: (message: Message, forkMessageId?: string) => Promise<void> | void
   forkMessageId?: string
   canUndo?: boolean
+  onEntryGrowComplete?: (messageId: string) => void
 }
 
 /** PC 精细指针：默认隐藏，悬浮消息/聚焦时显示；触控优先设备始终显示 */
@@ -282,6 +566,7 @@ const UserMessageView = memo(function UserMessageView({
   onFork,
   forkMessageId,
   canUndo,
+  onEntryGrowComplete,
 }: UserMessageViewProps) {
   const { t } = useTranslation('message')
   const { parts, info } = message
@@ -298,7 +583,7 @@ const UserMessageView = memo(function UserMessageView({
   const { collapseUserMessages, renderUserMarkdown } = useTheme()
   const actionBarClass = useMessageActionBarClass()
 
-  const wrapperRef = useEntryGrowAnimation(info.time.created)
+  const wrapperRef = useEntryGrowAnimation(info.time.created, true, info.id, onEntryGrowComplete)
 
   // 分离不同类型的 parts
   const textParts = parts.filter((p): p is TextPart => p.type === 'text' && !p.synthetic)
@@ -413,6 +698,7 @@ const AssistantMessageView = memo(function AssistantMessageView({
   allowStreamingLayoutAnimation = true,
   turnDuration,
   isTurnLatestAssistant = true,
+  processContentScope = 'all',
   onFork,
   forkMessageId,
   onEnsureParts,
@@ -421,6 +707,7 @@ const AssistantMessageView = memo(function AssistantMessageView({
   allowStreamingLayoutAnimation?: boolean
   turnDuration?: number
   isTurnLatestAssistant?: boolean
+  processContentScope?: ProcessContentScope
   onFork?: (message: Message, forkMessageId?: string) => Promise<void> | void
   forkMessageId?: string
   onEnsureParts?: (messageId: string) => void
@@ -431,10 +718,16 @@ const AssistantMessageView = memo(function AssistantMessageView({
   // 整轮最新 assistant 才允许显示 step 完成信息（latestOnly 时中间 assistant 全隐藏）
   const allowStepFinishOnMessage = !stepFinishDisplay.latestOnly || isTurnLatestAssistant
   // 分叉/复制：默认只在回合末尾助手消息显示，避免连续多条打断阅读
-  const showMessageActions = !actionsOnLatestAssistantOnly || isTurnLatestAssistant
+  // final 位始终显示操作；process/inline 不显示（避免壳内外重复）
+  const showMessageActions =
+    processContentScope !== 'process' &&
+    processContentScope !== 'inline' &&
+    (!actionsOnLatestAssistantOnly || isTurnLatestAssistant || processContentScope === 'final')
   const actionBarClass = useMessageActionBarClass()
 
-  const wrapperRef = useEntryGrowAnimation(info.time.created)
+  // 壳内（process/inline）和壳外 final 都别做 height 0→N：final 也是拆分后新挂载，动画会顶布局
+  const allowEntryGrow = processContentScope === 'all'
+  const wrapperRef = useEntryGrowAnimation(info.time.created, allowEntryGrow)
 
   useEffect(() => {
     if (parts.length === 0 && onEnsureParts) {
@@ -442,8 +735,19 @@ const AssistantMessageView = memo(function AssistantMessageView({
     }
   }, [parts.length, onEnsureParts, message.info.id])
 
-  // 收集连续的 tool parts 合并渲染
-  const renderItems = useMemo(() => groupPartsForRender(parts), [parts])
+  // 收集连续的 tool parts 合并渲染；过程折叠时按 scope 拆分
+  const renderItems = useMemo(() => {
+    const items = groupPartsForRender(parts)
+    if (processContentScope === 'all' || processContentScope === 'inline') return items
+    // 流式未完成：整袋当 process，不拆 final
+    if (messageStillStreamingProcess(message)) {
+      return processContentScope === 'process' ? items : []
+    }
+    const split = splitProcessRenderItems(items)
+    if (processContentScope === 'process') return split.processItems
+    if (processContentScope === 'final') return split.finalItems
+    return items
+  }, [parts, processContentScope, message])
 
   // 判断哪些 reasoning part 已经结束（后面出现了任何非基础设施 part）
   // 直接检查源 parts 数组，而非 renderItems，因为 renderItems 会过滤掉空 text，
@@ -499,6 +803,8 @@ const AssistantMessageView = memo(function AssistantMessageView({
     completed != null
 
   if (!isStreaming && parts.length === 0) {
+    // process/final 空内容时不占位
+    if (processContentScope === 'process' || processContentScope === 'final') return null
     // 有错误时直接显示错误信息
     if (messageError) {
       return (
@@ -512,10 +818,15 @@ const AssistantMessageView = memo(function AssistantMessageView({
     return <div className="w-full min-h-[40px]" />
   }
 
+  // process/final 拆完后可能为空
+  if (renderItems.length === 0 && processContentScope !== 'all' && processContentScope !== 'inline') {
+    return null
+  }
+
   return (
     <div ref={wrapperRef} className="flex flex-col gap-2 w-full group">
       {/* 只在贴底跟随时保留高度补间；用户看历史时关闭，避免消息生长把视口顶走 */}
-      <SmoothHeight isActive={!!isStreaming && allowStreamingLayoutAnimation}>
+      <SmoothHeight isActive={!!isStreaming && allowStreamingLayoutAnimation && processContentScope === 'all'}>
         <div className="flex flex-col gap-2">
           {renderItems.map((item: RenderItem, idx: number) => {
             // 本消息内最后一个含 stepFinish 的 item（耗时/完成时刻只挂这里）
@@ -587,10 +898,12 @@ const AssistantMessageView = memo(function AssistantMessageView({
         </div>
       </SmoothHeight>
 
-      {/* Message-level error */}
-      {messageError && <MessageErrorView error={messageError} stateKey={`message:${info.id}:error`} />}
+      {/* Message-level error：过程壳内不重复挂错误 */}
+      {messageError && processContentScope !== 'process' && processContentScope !== 'inline' && (
+        <MessageErrorView error={messageError} stateKey={`message:${info.id}:error`} />
+      )}
 
-      {(showTurnDurationFooter || showCompletedAtFooter) && (
+      {processContentScope !== 'process' && processContentScope !== 'inline' && (showTurnDurationFooter || showCompletedAtFooter) && (
         <div className="flex items-center gap-3 py-0.5 text-[length:var(--fs-xxs)] text-text-500">
           {showTurnDurationFooter && (
             <span>{t('stepFinish.totalDuration', { duration: formatDuration(turnDuration!) })}</span>

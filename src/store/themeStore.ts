@@ -134,6 +134,8 @@ const DEFAULT_OUTLINE_CURRENT_HIGHLIGHT = true
 const DEFAULT_ACTIONS_ON_LATEST_ASSISTANT_ONLY = true
 /** 桌面端是否启用输入框上滚收起（移动端始终可用） */
 const DEFAULT_DESKTOP_COLLAPSED_INPUT_DOCK = true
+/** 过程折叠：按用户消息把中间过程收成计时折叠块 */
+const DEFAULT_PROCESS_COLLAPSE_ENABLED = false
 
 export interface ThemeState {
   /** 当前选中的主题风格 ID */
@@ -190,6 +192,8 @@ export interface ThemeState {
   actionsOnLatestAssistantOnly: boolean
   /** 桌面端是否启用输入框上滚收起为胶囊 */
   desktopCollapsedInputDock: boolean
+  /** 过程折叠：用户发送后显示 Working 计时，结束后收成折叠块，最终回答留在外面 */
+  processCollapseEnabled: boolean
 }
 
 export type ThemeBackup = ThemeState
@@ -225,6 +229,7 @@ const STORAGE_KEY_EXTERNAL_FILE_DROP_MODE = 'external-file-drop-mode'
 const STORAGE_KEY_OUTLINE_CURRENT_HIGHLIGHT = 'outline-current-highlight'
 const STORAGE_KEY_ACTIONS_ON_LATEST_ASSISTANT_ONLY = 'actions-on-latest-assistant-only'
 const STORAGE_KEY_DESKTOP_COLLAPSED_INPUT_DOCK = 'desktop-collapsed-input-dock'
+const STORAGE_KEY_PROCESS_COLLAPSE_ENABLED = 'process-collapse-enabled'
 
 // ============================================
 // DOM Style Element IDs
@@ -366,6 +371,12 @@ class ThemeStore {
         ? DEFAULT_DESKTOP_COLLAPSED_INPUT_DOCK
         : savedDesktopCollapsedInputDock === 'true'
 
+    const savedProcessCollapseEnabled = localStorage.getItem(STORAGE_KEY_PROCESS_COLLAPSE_ENABLED)
+    const processCollapseEnabled =
+      savedProcessCollapseEnabled === null
+        ? DEFAULT_PROCESS_COLLAPSE_ENABLED
+        : savedProcessCollapseEnabled === 'true'
+
     this.state = {
       presetId: normalizedPreset,
       colorMode: savedMode,
@@ -394,6 +405,7 @@ class ThemeStore {
       outlineCurrentHighlight,
       actionsOnLatestAssistantOnly,
       desktopCollapsedInputDock,
+      processCollapseEnabled,
     }
   }
 
@@ -485,6 +497,10 @@ class ThemeStore {
 
   get desktopCollapsedInputDock() {
     return this.state.desktopCollapsedInputDock
+  }
+
+  get processCollapseEnabled() {
+    return this.state.processCollapseEnabled
   }
 
   /** 获取当前主题预设（内置主题返回对象，自定义返回 undefined） */
@@ -781,6 +797,13 @@ class ThemeStore {
     this.emit()
   }
 
+  setProcessCollapseEnabled(enabled: boolean) {
+    if (this.state.processCollapseEnabled === enabled) return
+    this.state = { ...this.state, processCollapseEnabled: enabled }
+    localStorage.setItem(STORAGE_KEY_PROCESS_COLLAPSE_ENABLED, String(enabled))
+    this.emit()
+  }
+
   // ---- Theme Application ----
 
   /** 初始化：应用当前主题到 DOM */
@@ -1036,6 +1059,10 @@ function normalizeThemeBackup(raw: unknown): ThemeBackup {
       typeof parsed?.desktopCollapsedInputDock === 'boolean'
         ? parsed.desktopCollapsedInputDock
         : DEFAULT_DESKTOP_COLLAPSED_INPUT_DOCK,
+    processCollapseEnabled:
+      typeof parsed?.processCollapseEnabled === 'boolean'
+        ? parsed.processCollapseEnabled
+        : DEFAULT_PROCESS_COLLAPSE_ENABLED,
   }
 }
 
@@ -1084,4 +1111,5 @@ export function importThemeBackup(raw: unknown): void {
     String(backup.actionsOnLatestAssistantOnly),
   )
   localStorage.setItem(STORAGE_KEY_DESKTOP_COLLAPSED_INPUT_DOCK, String(backup.desktopCollapsedInputDock))
+  localStorage.setItem(STORAGE_KEY_PROCESS_COLLAPSE_ENABLED, String(backup.processCollapseEnabled))
 }

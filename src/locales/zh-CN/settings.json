@@ -100,6 +100,8 @@
     "desktopCollapsedInputDockDesc": "上滚浏览历史时把输入框收成胶囊，点一下再展开；移动端始终启用，默认开启",
     "descriptiveToolSteps": "描述型步骤",
     "descriptiveToolStepsDesc": "把普通 steps 计数改成带工具描述的摘要，并让单工具调用也显示步骤描述",
+    "processCollapse": "过程折叠",
+    "processCollapseDesc": "用户发送后显示处理计时，并把中间过程收进折叠块；最终回答留在外面",
     "inlineToolRequests": "工具内嵌请求",
     "inlineToolRequestsDesc": "把待处理的权限和提问显示在对应工具下方，而不是浮层弹窗",
     "compactInlinePermission": "精简内嵌权限",
