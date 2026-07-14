@@ -16,6 +16,8 @@ export function ChatSettings() {
     setOutlineCurrentHighlight,
     actionsOnLatestAssistantOnly,
     setActionsOnLatestAssistantOnly,
+    desktopCollapsedInputDock,
+    setDesktopCollapsedInputDock,
     renderUserMarkdown,
     setRenderUserMarkdown,
   } = useTheme()
@@ -52,6 +54,10 @@ export function ChatSettings() {
 
   const handleActionsOnLatestOnlyToggle = () => {
     setActionsOnLatestAssistantOnly(!actionsOnLatestAssistantOnly)
+  }
+
+  const handleDesktopCollapsedInputDockToggle = () => {
+    setDesktopCollapsedInputDock(!desktopCollapsedInputDock)
   }
 
   return (
@@ -120,6 +126,14 @@ export function ChatSettings() {
           onClick={handleActionsOnLatestOnlyToggle}
         >
           <Toggle enabled={actionsOnLatestAssistantOnly} onChange={handleActionsOnLatestOnlyToggle} />
+        </SettingRow>
+
+        <SettingRow
+          label={t('chat.desktopCollapsedInputDock')}
+          description={t('chat.desktopCollapsedInputDockDesc')}
+          onClick={handleDesktopCollapsedInputDockToggle}
+        >
+          <Toggle enabled={desktopCollapsedInputDock} onChange={handleDesktopCollapsedInputDockToggle} />
         </SettingRow>
 
         <div>
