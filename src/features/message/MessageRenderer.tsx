@@ -79,7 +79,9 @@ const ProcessCollapseHeader = memo(function ProcessCollapseHeader({
       : durationMs != null && durationMs > 0
         ? durationMs
         : lastLiveMsRef.current
-  const durationLabel = formatDuration(displayMs)
+  // Working/Worked 只用整秒，不要 1.2s 这种小数
+  const wholeSeconds = Math.max(0, Math.floor(displayMs / 1000))
+  const durationLabel = `${wholeSeconds}s`
   const label = isActive
     ? t('processingWithDuration', { duration: durationLabel })
     : t('processedFor', { duration: durationLabel })
