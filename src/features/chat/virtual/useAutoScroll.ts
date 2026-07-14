@@ -92,17 +92,11 @@ export function useAutoScroll(bottomThreshold = 10) {
     contentElRef.current = el ?? undefined
   }, [])
 
-  // contentRef ResizeObserver: 流式内容增长时自动贴底
-  useEffect(() => {
-    const content = contentElRef.current
-    if (!content || typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(() => {
-      if (userScrolledRef.current) return
-      scrollToBottom(false)
-    })
-    ro.observe(content)
-    return () => ro.disconnect()
-  }, [scrollToBottom])
+  // 不使用 contentRef ResizeObserver：
+  // measureElement 内置 RO → resizeItem → applyScrollAdjustment 已经处理了贴底。
+  // contentRef RO 会在 item 首次测量时触发（container height 变化），
+  // 把 scrollTop 拉回底部，覆盖 applyScrollAdjustment 的正确行为，
+  // 导致视口上方的行永远无法稳定渲染。
 
   useEffect(() => () => { if (autoTimer.current) clearTimeout(autoTimer.current) }, [])
 

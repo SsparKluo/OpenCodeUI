@@ -293,7 +293,10 @@ export const ChatArea = memo(
       const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
         count: visibleMessages.length,
         getScrollElement: () => scrollRef.current,
-        initialOffset: Number.MAX_SAFE_INTEGER,
+        // 不用 MAX_SAFE_INTEGER：单列模式下 calculateRangeImpl 不向前扩展，
+        // MAX_SAFE_INTEGER 会导致 startIndex=lastIndex，只有最后一条可见。
+        // 用 0，靠 scrollToEnd() 在 layout effect 中贴底（directDomUpdates 下 paint 前完成）。
+        initialOffset: 0,
         initialMeasurementsCache: cached?.measurements,
         estimateSize: () => ROW_ESTIMATE,
         getItemKey: (i) => visibleMessages[i]?.info.id ?? `removed:${i}`,
