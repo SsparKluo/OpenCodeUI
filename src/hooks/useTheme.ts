@@ -230,6 +230,10 @@ export function useTheme() {
     themeStore.setActionsOnLatestAssistantOnly(enabled)
   }, [])
 
+  const setDesktopCollapsedInputDock = useCallback((enabled: boolean) => {
+    themeStore.setDesktopCollapsedInputDock(enabled)
+  }, [])
+
   return {
     // 日夜模式（向后兼容）
     mode: state.colorMode,
@@ -336,5 +340,9 @@ export function useTheme() {
     // 连续助手消息仅在末尾显示分叉/复制
     actionsOnLatestAssistantOnly: state.actionsOnLatestAssistantOnly,
     setActionsOnLatestAssistantOnly,
+
+    // 桌面端输入框上滚收起
+    desktopCollapsedInputDock: state.desktopCollapsedInputDock,
+    setDesktopCollapsedInputDock,
   }
 }

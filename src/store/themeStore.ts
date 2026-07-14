@@ -132,6 +132,8 @@ const DEFAULT_EXTERNAL_FILE_DROP_MODE: ExternalFileDropMode = 'upload-first'
 const DEFAULT_OUTLINE_CURRENT_HIGHLIGHT = true
 /** 连续助手消息时，仅在回合末尾显示分叉/复制按钮 */
 const DEFAULT_ACTIONS_ON_LATEST_ASSISTANT_ONLY = true
+/** 桌面端是否启用输入框上滚收起（移动端始终可用） */
+const DEFAULT_DESKTOP_COLLAPSED_INPUT_DOCK = true
 
 export interface ThemeState {
   /** 当前选中的主题风格 ID */
@@ -186,6 +188,8 @@ export interface ThemeState {
   outlineCurrentHighlight: boolean
   /** 连续助手消息时，仅在回合末尾显示分叉/复制按钮 */
   actionsOnLatestAssistantOnly: boolean
+  /** 桌面端是否启用输入框上滚收起为胶囊 */
+  desktopCollapsedInputDock: boolean
 }
 
 export type ThemeBackup = ThemeState
@@ -220,6 +224,7 @@ const STORAGE_KEY_MANUAL_TERMINAL_TITLES = 'manual-terminal-titles'
 const STORAGE_KEY_EXTERNAL_FILE_DROP_MODE = 'external-file-drop-mode'
 const STORAGE_KEY_OUTLINE_CURRENT_HIGHLIGHT = 'outline-current-highlight'
 const STORAGE_KEY_ACTIONS_ON_LATEST_ASSISTANT_ONLY = 'actions-on-latest-assistant-only'
+const STORAGE_KEY_DESKTOP_COLLAPSED_INPUT_DOCK = 'desktop-collapsed-input-dock'
 
 // ============================================
 // DOM Style Element IDs
@@ -355,6 +360,12 @@ class ThemeStore {
         ? DEFAULT_ACTIONS_ON_LATEST_ASSISTANT_ONLY
         : savedActionsOnLatestAssistantOnly === 'true'
 
+    const savedDesktopCollapsedInputDock = localStorage.getItem(STORAGE_KEY_DESKTOP_COLLAPSED_INPUT_DOCK)
+    const desktopCollapsedInputDock =
+      savedDesktopCollapsedInputDock === null
+        ? DEFAULT_DESKTOP_COLLAPSED_INPUT_DOCK
+        : savedDesktopCollapsedInputDock === 'true'
+
     this.state = {
       presetId: normalizedPreset,
       colorMode: savedMode,
@@ -382,6 +393,7 @@ class ThemeStore {
       externalFileDropMode,
       outlineCurrentHighlight,
       actionsOnLatestAssistantOnly,
+      desktopCollapsedInputDock,
     }
   }
 
@@ -469,6 +481,10 @@ class ThemeStore {
 
   get actionsOnLatestAssistantOnly() {
     return this.state.actionsOnLatestAssistantOnly
+  }
+
+  get desktopCollapsedInputDock() {
+    return this.state.desktopCollapsedInputDock
   }
 
   /** 获取当前主题预设（内置主题返回对象，自定义返回 undefined） */
@@ -758,6 +774,13 @@ class ThemeStore {
     this.emit()
   }
 
+  setDesktopCollapsedInputDock(enabled: boolean) {
+    if (this.state.desktopCollapsedInputDock === enabled) return
+    this.state = { ...this.state, desktopCollapsedInputDock: enabled }
+    localStorage.setItem(STORAGE_KEY_DESKTOP_COLLAPSED_INPUT_DOCK, String(enabled))
+    this.emit()
+  }
+
   // ---- Theme Application ----
 
   /** 初始化：应用当前主题到 DOM */
@@ -1009,6 +1032,10 @@ function normalizeThemeBackup(raw: unknown): ThemeBackup {
       typeof parsed?.actionsOnLatestAssistantOnly === 'boolean'
         ? parsed.actionsOnLatestAssistantOnly
         : DEFAULT_ACTIONS_ON_LATEST_ASSISTANT_ONLY,
+    desktopCollapsedInputDock:
+      typeof parsed?.desktopCollapsedInputDock === 'boolean'
+        ? parsed.desktopCollapsedInputDock
+        : DEFAULT_DESKTOP_COLLAPSED_INPUT_DOCK,
   }
 }
 
@@ -1056,4 +1083,5 @@ export function importThemeBackup(raw: unknown): void {
     STORAGE_KEY_ACTIONS_ON_LATEST_ASSISTANT_ONLY,
     String(backup.actionsOnLatestAssistantOnly),
   )
+  localStorage.setItem(STORAGE_KEY_DESKTOP_COLLAPSED_INPUT_DOCK, String(backup.desktopCollapsedInputDock))
 }

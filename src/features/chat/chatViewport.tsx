@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components -- exports viewport helpers, hooks, and provider */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { useInputCapabilities } from '../../hooks/useInputCapabilities'
+import { themeStore } from '../../store/themeStore'
 
 export type ChatSurfaceVariant = 'desktop' | 'compact'
 export type ChatInteractionMode = 'pointer' | 'touch'
@@ -56,6 +57,8 @@ interface ComputedViewportInput {
   requestedRightPanelWidth: number
   preferTouchUi: boolean
   touchCapable: boolean
+  /** 桌面端设置开关：上滚时收起输入框 */
+  desktopCollapsedInputDock: boolean
 }
 
 export interface ChatViewportValue {
@@ -123,6 +126,7 @@ function computeChatViewport(input: ComputedViewportInput): Omit<ChatViewportVal
     requestedRightPanelWidth,
     preferTouchUi,
     touchCapable,
+    desktopCollapsedInputDock,
   } = input
 
   const overlayPanels = viewportWidth < CHAT_VIEWPORT_MOBILE_BREAKPOINT
@@ -207,7 +211,8 @@ function computeChatViewport(input: ComputedViewportInput): Omit<ChatViewportVal
       // message outline rail, prefer pointer interaction whenever hover is
       // available; only switch to touch when the UI itself prefers touch.
       outlineInteraction: overlayPanels || preferTouchUi ? 'touch' : 'pointer',
-      enableCollapsedInputDock: overlayPanels,
+      // 移动端（overlay）始终开启；桌面端由设置开关控制
+      enableCollapsedInputDock: overlayPanels || desktopCollapsedInputDock,
     },
     layout: {
       viewportWidth,
@@ -279,6 +284,10 @@ export function useChatViewportController({
 }) {
   const { preferTouchUi, hasCoarsePointer, hasTouch } = useInputCapabilities()
   const touchCapable = preferTouchUi || hasCoarsePointer || hasTouch
+  const desktopCollapsedInputDock = useSyncExternalStore(
+    themeStore.subscribe,
+    () => themeStore.getSnapshot().desktopCollapsedInputDock,
+  )
   const [surfaceElement, setSurfaceElement] = useState<HTMLElement | null>(null)
   const surfaceRef = useCallback((node: HTMLElement | null) => {
     setSurfaceElement(node)
@@ -357,6 +366,7 @@ export function useChatViewportController({
         requestedRightPanelWidth,
         preferTouchUi,
         touchCapable,
+        desktopCollapsedInputDock,
       }),
     [
       viewportWidth,
@@ -369,6 +379,7 @@ export function useChatViewportController({
       requestedRightPanelWidth,
       preferTouchUi,
       touchCapable,
+      desktopCollapsedInputDock,
     ],
   )
 

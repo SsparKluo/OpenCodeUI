@@ -96,6 +96,8 @@
     "outlineCurrentHighlightDesc": "在右侧历史导航条中标出当前视口所属的用户提示词",
     "actionsOnLatestAssistantOnly": "仅末尾显示操作按钮",
     "actionsOnLatestAssistantOnlyDesc": "一轮对话里连续多条助手消息时，只在最后一条显示分叉和复制按钮",
+    "desktopCollapsedInputDock": "桌面端输入框收起",
+    "desktopCollapsedInputDockDesc": "上滚浏览历史时把输入框收成胶囊，点一下再展开；移动端始终启用，默认开启",
     "descriptiveToolSteps": "描述型步骤",
     "descriptiveToolStepsDesc": "把普通 steps 计数改成带工具描述的摘要，并让单工具调用也显示步骤描述",
     "inlineToolRequests": "工具内嵌请求",
