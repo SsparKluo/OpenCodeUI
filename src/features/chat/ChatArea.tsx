@@ -475,7 +475,7 @@ export const ChatArea = memo(
           elementScroll(offset, options, instance)
         },
         anchorTo: 'end',
-        followOnAppend: true,
+        followOnAppend: false,
         overscan: 50,
         directDomUpdates: true,
         directDomUpdatesMode: 'transform',
@@ -510,10 +510,22 @@ export const ChatArea = memo(
               })
             })
           }
-          origResize(index, size)
-          // 仅在用户仍贴底时，对 size change 做 scrollToEnd。
-          // 用户已上滚（userScrolledRef）时绝不拉回——否则 HTML 时钟/字体加载
-          // 每秒重测会把视口拽回底部。
+          // 核心修复：用户已上滚（userScrolledRef）时，临时关掉 anchorTo:'end'，
+          // 阻止 virtual-core resizeItem 内部的 wasAtEnd 路径（applyScrollAdjustment 拉回）。
+          // wasAtEnd 用 getVirtualDistanceFromEnd()（基于内部 scrollOffset），
+          // 但 React commit 阶段 ref 回调触发 measureElement 时 scroll 事件还没 fire，
+          // scrollOffset 是陈旧的（仍指向底部），wasAtEnd 误判为 true → 拉回。
+          // userScrolledRef 由 handleWheel 上滚设 true，只由 handleWheel 下滚回底设 false，
+          // handleScroll 不清它（避免流式增长推回时误清）。
+          if (userScrolledRef.current) {
+            const opts = (virtualizer as any).options
+            const origAnchor = opts.anchorTo
+            opts.anchorTo = 'start'
+            origResize(index, size)
+            opts.anchorTo = origAnchor
+          } else {
+            origResize(index, size)
+          }
           if (
             root
             && shouldAnchorBottom()
@@ -531,8 +543,6 @@ export const ChatArea = memo(
           }
         }
         virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item: VirtualItem, _delta: number, instance: any) => {
-          // 用户已离底：只补偿视口上方行（默认行为）
-          // 用户贴底：关掉 adjust，交给上面的 isAtEnd + scrollToEnd
           if (shouldAnchorBottom()) return false
           return item.end <= (instance.getScrollOffset?.() ?? 0) + (instance.scrollAdjustments ?? 0)
         }
@@ -689,7 +699,7 @@ export const ChatArea = memo(
       }, [])
 
       // rows 变化且应贴底时再确认一次（append / 首批消息）
-      // prepend 由 anchorTo + prepend 锚点处理，这里在 userScrolled 时不跟
+      // prepend 由 anchorTo + prepend 锚点处理，这里在用户已离底时不跟
       useLayoutEffect(() => {
         if (timeline.length === 0) return
         if (!shouldAnchorBottom() || prependLoading.current) return
@@ -776,6 +786,12 @@ export const ChatArea = memo(
           pinToBottom()
         },
         scrollToBottomIfAtBottom: () => {
+          // userScrolled 守卫：用户上滚后 userScrolled=true，此函数由 onScrollRequest
+          //（每个 SSE chunk）调用。autoForceScroll() 的 force=true 会清掉 userScrolled，
+          // 导致 resizeItem 的 anchorTo toggle 失效 → wasAtEnd 恢复拉回。
+          // 不在此处清 userScrolled——用户主动下滚回底时 handleWheel 会清。
+          // 正常贴底跟随（userScrolled=false 时）不受影响。
+          if (userScrolledRef.current) return
           if (!prevState.current.bottom) return
           autoForceScroll()
           pinToBottom()
