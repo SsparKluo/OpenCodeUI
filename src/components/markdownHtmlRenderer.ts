@@ -177,7 +177,9 @@ function renderTextExtensionsHtml(text: string, isReasoning: boolean): string {
     if (text[cursor] === '~' && text[cursor + 1] !== '~') {
       const close = findUnescaped(text, '~', cursor + 1)
       const content = close === -1 ? '' : text.slice(cursor + 1, close)
-      if (content && !/\s/.test(content)) {
+      // 仅解析化学式下标（H~2~O、SO~4~）：无空格、无 CJK、长度 ≤ 5。
+      // 否则 ~ 会被范围/约数文本误匹配（如 TGP021~024流量8.85~9.16）。
+      if (content && !/\s/.test(content) && !/[\u4e00-\u9fff\u3040-\u30ff]/.test(content) && content.length <= 5) {
         pushText(cursor)
         chunks.push(`<sub>${renderTextExtensionsHtml(content, isReasoning)}</sub>`)
         cursor = close + 1
@@ -329,7 +331,11 @@ function createMarkdownHtmlRenderer(isReasoning: boolean) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   renderer.del = function (this: any, { raw, tokens }: any) {
     if (typeof raw === 'string' && raw.startsWith('~') && !raw.startsWith('~~') && !raw.endsWith('~~')) {
-      return `<sub>${this.parser.parseInline(tokens)}</sub>`
+      const inner = raw.slice(1, -1)
+      // 仅解析化学式下标（H~2~O、SO~4~）：无空格、无 CJK、长度 ≤ 5。
+      if (inner && !/\s/.test(inner) && !/[\u4e00-\u9fff\u3040-\u30ff]/.test(inner) && inner.length <= 5) {
+        return `<sub>${this.parser.parseInline(tokens)}</sub>`
+      }
     }
     const className = isReasoning
       ? 'text-[length:var(--fs-sm)] text-text-500 line-through decoration-text-500/50'

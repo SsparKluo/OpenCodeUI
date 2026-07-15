@@ -618,7 +618,13 @@ function renderInlineTokensToReact(tokens: unknown[], _isReasoning: boolean): Re
     if (item.type === 'em') return <em key={index} className={_isReasoning ? 'italic text-text-300' : 'italic text-text-200'}>{renderInlineTokensToReact((item.tokens as unknown[]) ?? [], _isReasoning)}</em>
     if (item.type === 'del') {
       const raw = typeof item.raw === 'string' ? item.raw : ''
-      if (raw.startsWith('~') && !raw.startsWith('~~') && !raw.endsWith('~~')) return <sub key={index}>{renderInlineTokensToReact((item.tokens as unknown[]) ?? [], _isReasoning)}</sub>
+      if (raw.startsWith('~') && !raw.startsWith('~~') && !raw.endsWith('~~')) {
+        const inner = raw.slice(1, -1)
+        // 仅解析化学式下标（H~2~O、SO~4~）：无空格、无 CJK、长度 ≤ 5。
+        if (inner && !/\s/.test(inner) && !/[\u4e00-\u9fff\u3040-\u30ff]/.test(inner) && inner.length <= 5) {
+          return <sub key={index}>{renderInlineTokensToReact((item.tokens as unknown[]) ?? [], _isReasoning)}</sub>
+        }
+      }
       return <del key={index} className={_isReasoning ? 'text-text-500 line-through decoration-text-500/50' : 'text-text-400 line-through decoration-text-400/50'}>{renderInlineTokensToReact((item.tokens as unknown[]) ?? [], _isReasoning)}</del>
     }
     if (item.type === 'codespan') return <code key={index} className={_isReasoning ? 'font-mono text-accent-main-100 text-[0.9em] align-baseline break-words' : 'text-accent-main-100 text-[0.9em] font-mono align-baseline break-words'}>{String(item.text ?? '')}</code>
@@ -738,7 +744,9 @@ function renderTextExtensionsToReact(text: string, keyPrefix: string, isReasonin
     if (text[cursor] === '~' && text[cursor + 1] !== '~') {
       const close = findUnescapedText(text, '~', cursor + 1)
       const content = close === -1 ? '' : text.slice(cursor + 1, close)
-      if (content && !/\s/.test(content)) {
+      // 仅解析化学式下标（H~2~O、SO~4~）：无空格、无 CJK、长度 ≤ 5。
+      // 否则 ~ 会被范围/约数文本误匹配（如 TGP021~024流量8.85~9.16）。
+      if (content && !/\s/.test(content) && !/[\u4e00-\u9fff\u3040-\u30ff]/.test(content) && content.length <= 5) {
         pushText(cursor)
         parts.push(<sub key={`${keyPrefix}-sub-${cursor}`}>{renderTextExtensionsToReact(content, `${keyPrefix}-sub-${cursor}`, isReasoning)}</sub>)
         cursor = close + 1
