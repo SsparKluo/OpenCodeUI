@@ -7,7 +7,7 @@
  * - Loading 状态 -> Skeleton
  */
 
-import { memo, useState, useMemo, useEffect, useRef, useId, type ReactNode, type TransitionEvent } from 'react'
+import { memo, useState, useMemo, useEffect, useId, type ReactNode, type TransitionEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { diffLines } from 'diff'
 import { ChevronDownIcon, ChevronRightIcon, MaximizeIcon } from './Icons'
@@ -17,6 +17,7 @@ import { CodePreview } from './CodePreview'
 import { detectLanguage } from '../utils/languageUtils'
 import { ViewModeSwitch } from './FullscreenViewer'
 import { extractContentFromUnifiedDiff } from '../utils/diffUtils'
+import { useCompositorExpand } from '../hooks/useCompositorExpand'
 import { useDelayedRender } from '../hooks/useDelayedRender'
 import { useResponsiveMaxHeight } from '../hooks/useResponsiveMaxHeight'
 import { useFullscreenLayer } from '../contexts'
@@ -106,7 +107,6 @@ export const ContentBlock = memo(function ContentBlock({
   const [diffViewMode, setDiffViewMode] = useState<ViewMode>('split')
   const [fullscreenDiffViewMode, setFullscreenDiffViewMode] = useState<ViewMode>('split')
   const [contentLayoutVersion, setContentLayoutVersion] = useState(0)
-  const contentRef = useRef<HTMLDivElement>(null)
 
   // 响应式 maxHeight，外部传入的值优先
   const responsiveMaxHeight = useResponsiveMaxHeight()
@@ -218,6 +218,11 @@ export const ContentBlock = memo(function ContentBlock({
   ])
   const { isOpen: fullscreenOpen, open: openFullscreen } = useFullscreenLayer(fullscreenLayer)
 
+  // 是否展开内容区
+  const showBody = (hasContent && !collapsed) || (isLoading && !hasContent)
+  const { contentRef, layoutOpen, keepMounted, panelClassName } = useCompositorExpand(showBody)
+  const shouldRenderContent = useDelayedRender(keepMounted)
+
   useEffect(() => {
     onFullscreenChange?.(fullscreenOpen)
     return () => {
@@ -241,7 +246,7 @@ export const ContentBlock = memo(function ContentBlock({
     const observer = new ResizeObserver(updateViewMode)
     observer.observe(container)
     return () => observer.disconnect()
-  }, [isDiff])
+  }, [isDiff, contentRef, shouldRenderContent, layoutOpen])
 
   // 全屏时响应式切换 diff view mode
   useEffect(() => {
@@ -252,12 +257,8 @@ export const ContentBlock = memo(function ContentBlock({
     return () => window.removeEventListener('resize', checkWidth)
   }, [fullscreenOpen, isDiff])
 
-  // 是否展开内容区
-  const showBody = (hasContent && !collapsed) || (isLoading && !hasContent)
-  const shouldRenderContent = useDelayedRender(showBody)
-
   const handleBodyTransitionEnd = (event: TransitionEvent<HTMLDivElement>) => {
-    if (event.target !== event.currentTarget || !showBody) return
+    if (event.target !== event.currentTarget || !layoutOpen) return
     setContentLayoutVersion(version => version + 1)
   }
 
@@ -354,12 +355,11 @@ export const ContentBlock = memo(function ContentBlock({
       <div
         data-content-block-body
         onTransitionEnd={handleBodyTransitionEnd}
-        className={`grid transition-[grid-template-rows] duration-300 ease-out ${
-          showBody ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        className={`grid ${panelClassName} ${
+          layoutOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
         }`}
       >
-        <div className="overflow-hidden">
-          {/* Content */}
+        <div className="overflow-hidden min-h-0">
           {shouldRenderContent && hasContent && (
             <div ref={contentRef} className="relative group/content">
               {content && <CopyButton text={content} position="absolute" groupName="content" />}
@@ -379,7 +379,7 @@ export const ContentBlock = memo(function ContentBlock({
                   code={content}
                   language={lang}
                   maxHeight={maxHeight}
-                  isVisible={showBody}
+                  isVisible={layoutOpen}
                   layoutVersion={contentLayoutVersion}
                 />
               ) : null}

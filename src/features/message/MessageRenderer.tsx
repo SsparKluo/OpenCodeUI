@@ -5,7 +5,7 @@ import { animate } from 'motion/mini'
 import { ChevronDownIcon, ChevronRightIcon, SplitIcon, SpinnerIcon, UndoIcon } from '../../components/Icons'
 import { CopyButton, SmoothHeight } from '../../components/ui'
 import { MarkdownRenderer } from '../../components/MarkdownRenderer'
-import { useDelayedRender, useDisclosureScrollLock } from '../../hooks'
+import { useCompositorExpand, useDelayedRender, useDisclosureScrollLock } from '../../hooks'
 import { useInputCapabilities } from '../../hooks/useInputCapabilities'
 import { useNow } from '../../hooks/useNow'
 import { useTheme } from '../../hooks/useTheme'
@@ -1058,8 +1058,16 @@ const ToolGroup = memo(function ToolGroup({
   ])
 
   const effectiveExpanded = expanded || hasPendingInteraction
+  // Android expand: instant layout + max-height fake; collapse: original grid-rows.
+  // Only animate at the steps shell level so nested ToolPartView does not double-animate.
+  const {
+    contentRef: stepsExpandContentRef,
+    layoutOpen: stepsLayoutOpen,
+    keepMounted: stepsKeepMounted,
+    panelClassName: stepsPanelClassName,
+  } = useCompositorExpand(effectiveExpanded)
   // 展开即挂工具行：默认展开时 header 与 body 同帧
-  const shouldRenderBody = useDelayedRender(effectiveExpanded)
+  const shouldRenderBody = useDelayedRender(stepsKeepMounted)
 
   // compact: 单工具时用紧凑布局（图标内联，无 timeline 连接线）
   // 不区分 streaming 状态 — 单工具始终 compact，第二个工具到来时再自然过渡到 timeline
@@ -1069,7 +1077,6 @@ const ToolGroup = memo(function ToolGroup({
 
   // 统一容器结构 — ToolPartView 始终在同一 React 树位置，
   // streaming→idle / 1→N 工具切换时不 remount，expanded 状态不丢失
-  // 高度动画交给消息级 SmoothHeight，组内不再嵌套一层
   return (
     <div ref={stepsRootRef} className="flex flex-col">
         {showStepsHeader &&
@@ -1133,11 +1140,12 @@ const ToolGroup = memo(function ToolGroup({
         <div
           className={
             showStepsHeader
-              ? `grid transition-[grid-template-rows] duration-300 ease-in-out ${effectiveExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`
+              ? `grid ${stepsPanelClassName} ${stepsLayoutOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`
               : ''
           }
         >
           <div
+            ref={showStepsHeader ? stepsExpandContentRef : undefined}
             className={showStepsHeader ? 'flex flex-col min-h-0 min-w-0 overflow-hidden' : 'flex flex-col'}
             style={showStepsHeader ? { clipPath: 'inset(0 -100% 0 -100%)' } : undefined}
           >
