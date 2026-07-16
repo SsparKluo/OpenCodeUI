@@ -206,10 +206,22 @@ describe('MessageRenderer assistant fork', () => {
 
     render(<MessageRenderer message={message} />)
 
-    expect(screen.getByTestId('user-markdown').parentElement).not.toHaveStyle({ maxHeight: '8lh' })
+    const container = screen.getByTestId('user-markdown').parentElement!
+    expect(container.style.maxHeight).toBe('')
+    expect(container.style.contain).toBe('')
     expect(screen.getByTestId('user-markdown').closest('.bg-bg-300')).toHaveClass('w-full', 'max-w-2xl')
     expect(screen.getByTestId('user-markdown').closest('.group')).toHaveClass('w-full')
     expect(screen.getByTestId('user-markdown').closest('[data-user-html-artifact]')).toBeInTheDocument()
+  })
+
+  it('clamps a collapsible non-artifact user message with layout isolation', () => {
+    mockRenderUserMarkdown = true
+    mockCollapseUserMessages = true
+    render(<MessageRenderer message={createUserTextMessage('just some plain text')} />)
+
+    const container = screen.getByTestId('user-markdown').parentElement!
+    expect(container.style.maxHeight).not.toBe('')
+    expect(container.style.contain).toBe('layout paint')
   })
 })
 

@@ -20,7 +20,7 @@ export const TextPartView = memo(function TextPartView({ part, isStreaming = fal
   if (part.synthetic) return null
 
   return (
-    <div>
+    <div style={{ contain: 'layout' }}>
       <MarkdownRenderer content={displayText} isStreaming={isStreaming} />
     </div>
   )
