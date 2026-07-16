@@ -81,8 +81,8 @@ class MessageStore {
   private pendingNotifyAllSessions = false
   private pendingSessionNotifyIds = new Set<string>()
   private rafId: number | null = null
-  // delta 批量化：按 session 追踪被 mutable 修改过的消息，在 notify 前统一做不可变快照
-  private dirtyMessagesBySession = new Map<string, Set<string>>()
+  // delta 批量化：只追踪真正变化的 part，避免同消息内稳定 part 的 memo 引用失效
+  private dirtyPartsBySession = new Map<string, Map<string, Set<string>>>()
 
   // ============================================
   // Subscription & Notification
@@ -177,23 +177,30 @@ class MessageStore {
 
   /**
    * 将 delta 期间 mutable 修改过的消息做一次不可变快照。
-   * 这样一帧内多个 delta 只产生一次数组拷贝，而不是每个 delta 都拷贝。
+   * 这样一帧内多个 delta 只产生一次数组拷贝，未变化的 part 继续复用引用。
    */
   private flushDirtyMessages() {
-    if (this.dirtyMessagesBySession.size === 0) return
+    if (this.dirtyPartsBySession.size === 0) return
 
-    for (const [sessionId, dirtyMessages] of this.dirtyMessagesBySession) {
+    for (const [sessionId, dirtyPartsByMessage] of this.dirtyPartsBySession) {
       const state = this.sessions.get(sessionId)
       if (!state) continue
 
-      // 只对被标记 dirty 的消息生成新引用（包括 parts 内的对象）
       let changed = false
       const newMessages = state.messages.map(m => {
-        if (dirtyMessages.has(m.info.id)) {
-          changed = true
-          return { ...m, parts: m.parts.map(p => ({ ...p })) }
-        }
-        return m
+        const dirtyPartIds = dirtyPartsByMessage.get(m.info.id)
+        if (!dirtyPartIds) return m
+
+        let partsChanged = false
+        const parts = m.parts.map(part => {
+          if (!dirtyPartIds.has(part.id)) return part
+          partsChanged = true
+          return { ...part }
+        })
+        if (!partsChanged) return m
+
+        changed = true
+        return { ...m, parts }
       })
 
       if (changed) {
@@ -201,7 +208,7 @@ class MessageStore {
       }
     }
 
-    this.dirtyMessagesBySession.clear()
+    this.dirtyPartsBySession.clear()
   }
 
   private notifyImmediate(sessionIds?: Iterable<string> | 'all') {
@@ -511,7 +518,7 @@ class MessageStore {
   clearAll() {
     this.sessions.clear()
     this.sessionAccessTime.clear()
-    this.dirtyMessagesBySession.clear()
+    this.dirtyPartsBySession.clear()
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId)
       this.rafId = null
@@ -523,7 +530,7 @@ class MessageStore {
   clearSession(sessionId: string) {
     this.sessions.delete(sessionId)
     this.sessionAccessTime.delete(sessionId)
-    this.dirtyMessagesBySession.delete(sessionId)
+    this.dirtyPartsBySession.delete(sessionId)
     this.notify([sessionId])
   }
 
@@ -608,12 +615,17 @@ class MessageStore {
       // flushDirtyMessages() 会在 notify 的 rAF 回调中统一生成新引用。
     ;(part as { text: string }).text += data.delta
 
-    let dirtyMessages = this.dirtyMessagesBySession.get(data.sessionID)
-    if (!dirtyMessages) {
-      dirtyMessages = new Set<string>()
-      this.dirtyMessagesBySession.set(data.sessionID, dirtyMessages)
+    let dirtyPartsByMessage = this.dirtyPartsBySession.get(data.sessionID)
+    if (!dirtyPartsByMessage) {
+      dirtyPartsByMessage = new Map<string, Set<string>>()
+      this.dirtyPartsBySession.set(data.sessionID, dirtyPartsByMessage)
     }
-    dirtyMessages.add(data.messageID)
+    let dirtyPartIds = dirtyPartsByMessage.get(data.messageID)
+    if (!dirtyPartIds) {
+      dirtyPartIds = new Set<string>()
+      dirtyPartsByMessage.set(data.messageID, dirtyPartIds)
+    }
+    dirtyPartIds.add(data.partID)
     this.notify([data.sessionID])
   }
 
