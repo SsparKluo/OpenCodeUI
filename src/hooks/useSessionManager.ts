@@ -44,18 +44,65 @@ interface UseSessionManagerOptions {
   onSessionMissing?: (sessionId: string) => void
 }
 
+function preferCompatiblePartText(local: string, incoming: string): string {
+  if (local === incoming) return incoming
+  if (local.startsWith(incoming)) return local
+  if (incoming.startsWith(local)) return incoming
+  return incoming
+}
+
+function messageTimeIncomplete(time?: { completed?: number } | { created: number }) {
+  if (!time) return true
+  return !('completed' in time) || time.completed == null
+}
+
+function mergePartsForReload(
+  localParts: ApiMessageWithParts['parts'],
+  apiParts: ApiMessageWithParts['parts'],
+): ApiMessageWithParts['parts'] {
+  const localById = new Map(localParts.map(part => [part.id, part]))
+  return apiParts.map(part => {
+    const local = localById.get(part.id)
+    if (!local || !('text' in local) || !('text' in part)) return part
+    if (typeof local.text !== 'string' || typeof part.text !== 'string') return part
+    const text = preferCompatiblePartText(local.text, part.text)
+    if (text === part.text) return part
+    return { ...part, text: text as typeof part.text }
+  })
+}
+
 function mergeWithLocalStreamingMessages(
   apiMessages: ApiMessageWithParts[],
   localState?: SessionState,
 ): ApiMessageWithParts[] {
-  if (!localState?.isStreaming || localState.messages.length === 0) return apiMessages
+  if (!localState || localState.messages.length === 0) return apiMessages
 
+  const localById = new Map(localState.messages.map(message => [message.info.id, message]))
   const apiIds = new Set(apiMessages.map(m => m.info.id))
-  const localOnly = localState.messages.filter(m => !apiIds.has(m.info.id)).map(toApiMessageWithParts)
 
-  if (localOnly.length === 0) return apiMessages
+  // 同 message：流式/未完成时 part 文本不回退（服务端快照可能短暂更短）
+  const mergedApi = apiMessages.map(apiMessage => {
+    const local = localById.get(apiMessage.info.id)
+    if (!local) return apiMessage
+    const preserve =
+      localState.isStreaming ||
+      local.isStreaming ||
+      messageTimeIncomplete(local.info.time) ||
+      messageTimeIncomplete(apiMessage.info.time)
+    if (!preserve) return apiMessage
+    return {
+      ...apiMessage,
+      parts: mergePartsForReload(local.parts as ApiMessageWithParts['parts'], apiMessage.parts),
+    }
+  })
 
-  return [...apiMessages, ...localOnly].sort((a, b) => {
+  const localOnly = localState.isStreaming
+    ? localState.messages.filter(m => !apiIds.has(m.info.id)).map(toApiMessageWithParts)
+    : []
+
+  if (localOnly.length === 0) return mergedApi
+
+  return [...mergedApi, ...localOnly].sort((a, b) => {
     const aCreated = a.info.time?.created ?? 0
     const bCreated = b.info.time?.created ?? 0
     return aCreated - bCreated

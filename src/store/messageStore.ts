@@ -21,6 +21,48 @@ type Subscriber = () => void
 
 const MAX_CACHED_SESSIONS = 10
 
+/**
+ * 同步合并文本：live 更长且与服务端兼容（服务端是前缀）时不回退；
+ * 服务端更长则跟上；分叉时以服务端为准。
+ */
+function preferCompatibleText(local: string, incoming: string): string {
+  if (local === incoming) return incoming
+  if (local.startsWith(incoming)) return local
+  if (incoming.startsWith(local)) return incoming
+  return incoming
+}
+
+function partHasText(part: Part): part is Part & { text: string } {
+  return 'text' in part && typeof (part as { text?: unknown }).text === 'string'
+}
+
+function mergePartPreferLiveText(local: Part | undefined, incoming: Part): Part {
+  if (!local || local.id !== incoming.id) return incoming
+  if (!partHasText(local) || !partHasText(incoming)) return incoming
+  const text = preferCompatibleText(local.text, incoming.text)
+  if (text === incoming.text) return incoming
+  return { ...incoming, text } as Part
+}
+
+function mergePartsPreferLiveText(localParts: Part[], incomingParts: Part[]): Part[] {
+  if (localParts.length === 0) return incomingParts
+  const localById = new Map(localParts.map(part => [part.id, part]))
+  return incomingParts.map(part => mergePartPreferLiveText(localById.get(part.id), part))
+}
+
+function messageIsIncomplete(message: { isStreaming?: boolean; info: { time?: { completed?: number } } }) {
+  if (message.isStreaming) return true
+  const completed = message.info.time && 'completed' in message.info.time ? message.info.time.completed : undefined
+  return completed == null
+}
+
+function shouldPreserveLiveParts(
+  message: { isStreaming?: boolean; info: { time?: { completed?: number } } },
+  sessionStreaming: boolean,
+) {
+  return sessionStreaming || messageIsIncomplete(message)
+}
+
 class MessageStore {
   private sessions = new Map<string, SessionState>()
   private subscribers = new Set<Subscriber>()
@@ -383,8 +425,20 @@ class MessageStore {
     },
   ) {
     const state = this.ensureSession(sessionId)
+    const previousMessages = state.messages
+    const previousById = new Map(previousMessages.map(message => [message.info.id, message]))
+    const sessionWasStreaming = state.isStreaming
 
-    state.messages = apiMessages.map(toUIMessage)
+    state.messages = apiMessages.map(apiMessage => {
+      const next = toUIMessage(apiMessage)
+      const previous = previousById.get(next.info.id)
+      if (!previous || !shouldPreserveLiveParts(previous, sessionWasStreaming)) return next
+      return {
+        ...next,
+        parts: mergePartsPreferLiveText(previous.parts, next.parts),
+        isStreaming: previous.isStreaming || next.isStreaming,
+      }
+    })
     state.loadState = 'loaded'
     state.loadError = undefined
     state.hasMoreHistory = options?.hasMoreHistory ?? false
@@ -517,11 +571,16 @@ class MessageStore {
     const oldMessage = state.messages[msgIndex]
     const newParts = [...oldMessage.parts]
     const existingPartIndex = newParts.findIndex(p => p.id === apiPart.id)
+    const incoming = toUIPart(apiPart)
 
     if (existingPartIndex >= 0) {
-      newParts[existingPartIndex] = toUIPart(apiPart)
+      const existing = newParts[existingPartIndex]
+      // 流式中 updated 可能短暂落后于本地 delta：兼容前缀时不回退
+      newParts[existingPartIndex] = shouldPreserveLiveParts(oldMessage, state.isStreaming)
+        ? mergePartPreferLiveText(existing, incoming)
+        : incoming
     } else {
-      newParts.push(toUIPart(apiPart))
+      newParts.push(incoming)
     }
 
     const newMessage = { ...oldMessage, parts: newParts }

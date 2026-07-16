@@ -165,6 +165,71 @@ describe('messageStore', () => {
     expect(messageStore.getSessionState('session-1')).toBeUndefined()
   })
 
+  it('does not regress longer live part text when a shorter snapshot arrives while streaming', () => {
+    messageStore.setMessages('session-1', [
+      {
+        info: {
+          ...createAssistantMessage('message-1'),
+          time: { created: 1 },
+        },
+        parts: [createTextPart('part-message-1', 'message-1', 'hello world')],
+      },
+    ])
+    messageStore.setStreaming('session-1', true)
+    const live = messageStore.getSessionState('session-1')?.messages[0]
+    if (live) live.isStreaming = true
+
+    messageStore.handlePartUpdated({
+      ...createTextPart('part-message-1', 'message-1', 'hello'),
+    })
+
+    expect(messageStore.getSessionState('session-1')?.messages[0].parts[0]).toMatchObject({
+      text: 'hello world',
+    })
+  })
+
+  it('adopts a longer server snapshot when reloading messages', () => {
+    messageStore.setMessages('session-1', [createMessageWithParts('message-1', 'hello')])
+    messageStore.setStreaming('session-1', true)
+    const live = messageStore.getSessionState('session-1')?.messages[0]
+    if (live) live.isStreaming = true
+
+    messageStore.setMessages('session-1', [createMessageWithParts('message-1', 'hello world')])
+
+    expect(messageStore.getSessionState('session-1')?.messages[0].parts[0]).toMatchObject({
+      text: 'hello world',
+    })
+  })
+
+  it('keeps longer live text when setMessages receives a shorter server snapshot while streaming', () => {
+    messageStore.setMessages('session-1', [
+      {
+        info: {
+          ...createAssistantMessage('message-1'),
+          time: { created: 1 },
+        },
+        parts: [createTextPart('part-message-1', 'message-1', 'hello world')],
+      },
+    ])
+    messageStore.setStreaming('session-1', true)
+    const live = messageStore.getSessionState('session-1')?.messages[0]
+    if (live) live.isStreaming = true
+
+    messageStore.setMessages('session-1', [
+      {
+        info: {
+          ...createAssistantMessage('message-1'),
+          time: { created: 1 },
+        },
+        parts: [createTextPart('part-message-1', 'message-1', 'hello')],
+      },
+    ])
+
+    expect(messageStore.getSessionState('session-1')?.messages[0].parts[0]).toMatchObject({
+      text: 'hello world',
+    })
+  })
+
   it('flushes mutable part deltas for multiple sessions in the same frame', () => {
     const rafCallbacks: Array<(time: number) => void> = []
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation(cb => {
