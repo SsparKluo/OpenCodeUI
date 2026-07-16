@@ -331,4 +331,37 @@ inside comment
 
     expect(next.blocks).toEqual(splitMarkdownStream('before\n\n```ts\nconst x = 1\n```', true))
   })
+
+  it('projects pure live-tail append without rebuilding stable blocks', () => {
+    const first = projectMarkdownStream(undefined, 'hello', true)
+    const next = projectMarkdownStream(first, 'hello world', true)
+
+    expect(next.blocks).toHaveLength(1)
+    expect(next.blocks[0].mode).toBe('live')
+    expect(next.blocks[0].src).toBe('hello world')
+  })
+
+  it('keeps earlier full blocks by reference when live tail appends text', () => {
+    const first = projectMarkdownStream(undefined, 'stable paragraph\n\nlive', true)
+    expect(first.blocks.length).toBeGreaterThanOrEqual(2)
+    const next = projectMarkdownStream(first, 'stable paragraph\n\nlive tail', true)
+
+    expect(next.blocks[0]).toBe(first.blocks[0])
+    expect(next.blocks.at(-1)?.mode).toBe('live')
+    expect(next.blocks.at(-1)?.src).toContain('live tail')
+  })
+
+  it('falls back to full splitting when live suffix opens a new block boundary', () => {
+    const first = projectMarkdownStream(undefined, 'hello', true)
+    const next = projectMarkdownStream(first, 'hello\n\n## Title', true)
+
+    expect(next.blocks).toEqual(splitMarkdownStream('hello\n\n## Title', true))
+  })
+
+  it('falls back when live suffix starts a list after a newline', () => {
+    const first = projectMarkdownStream(undefined, 'intro', true)
+    const next = projectMarkdownStream(first, 'intro\n- item', true)
+
+    expect(next.blocks).toEqual(splitMarkdownStream('intro\n- item', true))
+  })
 })

@@ -449,6 +449,20 @@ export function splitMarkdownStream(markdown: string, isStreaming: boolean): Mar
   })
 }
 
+/** suffix 可能切出新块时必须全量 re-lex；宁可多 split，不可错并块 */
+function suffixBreaksLiveBlock(suffix: string): boolean {
+  if (!suffix) return false
+  if (suffix.includes('\n\n')) return true
+  if (suffix.includes('```') || suffix.includes('~~~')) return true
+  // 引用定义 / 脚注标号
+  if (suffix.includes(']:')) return true
+  // 行首块结构（heading / list / quote / table / hr）
+  if (/\n(?:#{1,6}\s|[-*+]\s|\d+\.\s|>\s?|\||-{3,}|\*{3,}|_{3,})/.test(suffix)) return true
+  // suffix 本身以块结构开头（上一帧刚好停在段落边界之后）
+  if (/^(?:#{1,6}\s|[-*+]\s|\d+\.\s|>\s?|\|)/.test(suffix)) return true
+  return false
+}
+
 export function projectMarkdownStream(
   previous: MarkdownStreamProjection | undefined,
   markdown: string,
@@ -459,20 +473,45 @@ export function projectMarkdownStream(
   }
 
   const suffix = markdown.slice(previous.text.length)
+  if (!suffix) return previous
+
   const tail = previous.blocks.at(-1)
-  if (!suffix || tail?.mode !== 'code' || tail.complete || !tail.raw || !hasOpenFence(tail.raw) || suffixClosesOpenFence(tail.raw, suffix)) {
-    return { text: markdown, blocks: splitMarkdownStream(markdown, isStreaming) }
+  const stablePrefix = previous.blocks.slice(0, -1)
+
+  // 未闭合 code fence：纯追加不 re-lex
+  if (
+    tail?.mode === 'code' &&
+    !tail.complete &&
+    tail.raw &&
+    hasOpenFence(tail.raw) &&
+    !suffixClosesOpenFence(tail.raw, suffix)
+  ) {
+    return {
+      text: markdown,
+      blocks: [
+        ...stablePrefix,
+        {
+          ...tail,
+          raw: tail.raw + suffix,
+          src: tail.src + suffix,
+        },
+      ],
+    }
   }
 
-  return {
-    text: markdown,
-    blocks: [
-      ...previous.blocks.slice(0, -1),
-      {
-        ...tail,
-        raw: tail.raw + suffix,
-        src: tail.src + suffix,
-      },
-    ],
+  // live 尾段纯追加：稳定块保持同一引用，只改 tail.src
+  if (tail?.mode === 'live' && !suffixBreaksLiveBlock(suffix)) {
+    return {
+      text: markdown,
+      blocks: [
+        ...stablePrefix,
+        {
+          ...tail,
+          src: tail.src + suffix,
+        },
+      ],
+    }
   }
+
+  return { text: markdown, blocks: splitMarkdownStream(markdown, isStreaming) }
 }

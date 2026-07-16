@@ -372,7 +372,8 @@ describe('MarkdownRenderer', () => {
   })
 
   it('uses incremental code block highlighting while content is streaming', () => {
-    render(<MarkdownRenderer content={'```ts\nconst x = 1\n```'} isStreaming />)
+    // 未闭合 fence 才走流式高亮；已闭合的稳定 code 块 isStreaming 收窄为 false 以冻 memo
+    render(<MarkdownRenderer content={'```ts\nconst x = 1'} isStreaming />)
 
     expect(screen.getByTestId('code-block')).toHaveAttribute('data-defer-highlight', 'false')
     expect(screen.getByTestId('code-block')).toHaveAttribute('data-force-highlight', 'true')
@@ -1176,10 +1177,11 @@ $$`
 
     const chunks = container.querySelectorAll('.markdown-stream-block')
     expect(chunks.length).toBeGreaterThan(1)
-    expect(chunks[0]).toHaveClass('markdown-stream-block-first')
-    expect(chunks[0]).toHaveClass('markdown-stream-block-not-last')
-    expect(chunks[chunks.length - 1]).toHaveClass('markdown-stream-block-not-first')
-    expect(chunks[chunks.length - 1]).toHaveClass('markdown-stream-block-last')
+    expect(chunks[0]).toHaveClass('markdown-stream-block')
+    expect(chunks[chunks.length - 1]).toHaveClass('markdown-stream-block')
+    // 间距靠 :first-child/:last-child，不再依赖 isFirst/isLast class props
+    expect(chunks[0].parentElement?.firstElementChild).toBe(chunks[0])
+    expect(chunks[0].parentElement?.lastElementChild).toBe(chunks[chunks.length - 1])
   })
 
   it('keeps desktop controls for hover-capable touch input', async () => {

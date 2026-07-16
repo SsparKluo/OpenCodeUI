@@ -1395,8 +1395,6 @@ const MarkdownStreamBlock = memo(function MarkdownStreamBlock({
   complete,
   isReasoning,
   isStreaming,
-  isFirst,
-  isLast,
 }: {
   src: string
   mode: 'full' | 'live' | 'code' | 'table'
@@ -1404,12 +1402,13 @@ const MarkdownStreamBlock = memo(function MarkdownStreamBlock({
   complete?: boolean
   isReasoning: boolean
   isStreaming: boolean
-  isFirst: boolean
-  isLast: boolean
 }) {
+  // 流式高亮/未完成态只对「未闭合 code」或 live 有意义；稳定 full 块 isStreaming 恒 false 以冻 memo
+  const streamActive = isStreaming && (mode === 'live' || (mode === 'code' && !complete))
+
   if (mode === 'table') {
     return (
-      <div className={`markdown-stream-block ${isFirst ? 'markdown-stream-block-first' : 'markdown-stream-block-not-first'} ${isLast ? 'markdown-stream-block-last' : 'markdown-stream-block-not-last'}`}>
+      <div className="markdown-stream-block">
         <div className={MARKDOWN_BLOCK_CONTENT_CLASS}>{renderTableFromSrc(src, isReasoning)}</div>
       </div>
     )
@@ -1418,29 +1417,29 @@ const MarkdownStreamBlock = memo(function MarkdownStreamBlock({
   if (mode === 'code') {
     if (language?.toLowerCase() === 'mermaid') {
       return (
-        <div className={`markdown-stream-block ${isFirst ? 'markdown-stream-block-first' : 'markdown-stream-block-not-first'} ${isLast ? 'markdown-stream-block-last' : 'markdown-stream-block-not-last'}`}>
+        <div className="markdown-stream-block">
           <div className={MARKDOWN_BLOCK_CONTENT_CLASS}>
-            <MarkdownMermaid code={src} isIncomplete={isStreaming && !complete} />
+            <MarkdownMermaid code={src} isIncomplete={streamActive} />
           </div>
         </div>
       )
     }
     if (isMarkupPreviewLanguage(language) && !isReasoning) {
       return (
-        <div className={`markdown-stream-block ${isFirst ? 'markdown-stream-block-first' : 'markdown-stream-block-not-first'} ${isLast ? 'markdown-stream-block-last' : 'markdown-stream-block-not-last'}`}>
+        <div className="markdown-stream-block">
           <div className={MARKDOWN_BLOCK_CONTENT_CLASS}>
             <MarkdownHtmlArtifact
               code={src}
               language={language}
               isReasoning={isReasoning}
-              isIncomplete={isStreaming && !complete}
+              isIncomplete={streamActive}
             />
           </div>
         </div>
       )
     }
     return (
-      <div className={`markdown-stream-block ${isFirst ? 'markdown-stream-block-first' : 'markdown-stream-block-not-first'} ${isLast ? 'markdown-stream-block-last' : 'markdown-stream-block-not-last'}`}>
+      <div className="markdown-stream-block">
         <div className={MARKDOWN_BLOCK_CONTENT_CLASS}>
           <div className={isReasoning ? 'my-2 first:mt-0 last:mb-0 w-full' : 'my-4 first:mt-0 last:mb-0 w-full'}>
             <CodeBlock
@@ -1448,8 +1447,8 @@ const MarkdownStreamBlock = memo(function MarkdownStreamBlock({
               language={language}
               variant={isReasoning ? 'reasoning' : 'default'}
               wordwrap={isReasoning}
-              forceHighlight={isStreaming && isLast}
-              streamingHighlight={isStreaming && isLast}
+              forceHighlight={streamActive}
+              streamingHighlight={streamActive}
             />
           </div>
         </div>
@@ -1464,9 +1463,9 @@ const MarkdownStreamBlock = memo(function MarkdownStreamBlock({
     (BLOCK_HTML_SOURCE_PATTERN.test(htmlSourceStart) || PREFIXED_BLOCK_HTML_SOURCE_PATTERN.test(htmlSourceStart))
   if (!isReasoning && (isHtmlDocument || isHtmlArtifact)) {
     return (
-      <div className={`markdown-stream-block ${isFirst ? 'markdown-stream-block-first' : 'markdown-stream-block-not-first'} ${isLast ? 'markdown-stream-block-last' : 'markdown-stream-block-not-last'}`}>
+      <div className="markdown-stream-block">
         <div className={MARKDOWN_BLOCK_CONTENT_CLASS}>
-          <MarkdownHtmlArtifact code={src} isReasoning={false} isIncomplete={isStreaming && mode === 'live'} />
+          <MarkdownHtmlArtifact code={src} isReasoning={false} isIncomplete={streamActive && mode === 'live'} />
         </div>
       </div>
     )
@@ -1474,14 +1473,14 @@ const MarkdownStreamBlock = memo(function MarkdownStreamBlock({
 
   if (!isReasoning && BLOCK_HTML_SOURCE_PATTERN.test(htmlSourceStart)) {
     return (
-      <div className={`markdown-stream-block ${isFirst ? 'markdown-stream-block-first' : 'markdown-stream-block-not-first'} ${isLast ? 'markdown-stream-block-last' : 'markdown-stream-block-not-last'}`}>
+      <div className="markdown-stream-block">
         <MarkdownHtmlIsland src={src} isReasoning={false} isLive={mode === 'live'} />
       </div>
     )
   }
 
   return (
-    <div className={`markdown-stream-block ${isFirst ? 'markdown-stream-block-first' : 'markdown-stream-block-not-first'} ${isLast ? 'markdown-stream-block-last' : 'markdown-stream-block-not-last'}`}>
+    <div className="markdown-stream-block">
       <MarkdownDomBlock src={src} isReasoning={isReasoning} isLive={mode === 'live'} />
     </div>
   )
@@ -1557,7 +1556,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     <div
       className={`markdown-content ${isReasoning ? 'text-[length:var(--fs-sm)] leading-5 text-text-400' : 'text-[length:var(--fs-base)] leading-relaxed text-text-100'} break-words min-w-0 overflow-hidden ${className}`}
     >
-      {streamBlocks.map((block, index) => (
+      {streamBlocks.map(block => (
         <MarkdownStreamBlock
           key={block.key}
           src={block.src}
@@ -1565,9 +1564,9 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           language={block.language}
           complete={block.complete}
           isReasoning={isReasoning}
-          isStreaming={isStreaming}
-          isFirst={index === 0}
-          isLast={index === streamBlocks.length - 1}
+          isStreaming={
+            isStreaming && (block.mode === 'live' || (block.mode === 'code' && !block.complete))
+          }
         />
       ))}
     </div>

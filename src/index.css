@@ -484,20 +484,21 @@ body {
 }
 
 /* Streaming Markdown is rendered in stable/live chunks. Without this, Tailwind
- * first:/last: margin utilities run per chunk root and make adjacent blocks too tight. */
-.markdown-content .markdown-stream-block-not-first > :first-child > :first-child {
+ * first:/last: margin utilities run per chunk root and make adjacent blocks too tight.
+ * Use DOM position (:first-child/:last-child) so settled blocks need no isFirst/isLast props. */
+.markdown-content .markdown-stream-block:not(:first-child) > :first-child > :first-child {
   margin-top: 1rem;
 }
 
-.markdown-content .markdown-stream-block-not-last > :last-child > :last-child {
+.markdown-content .markdown-stream-block:not(:last-child) > :last-child > :last-child {
   margin-bottom: 1rem;
 }
 
-.markdown-content.text-\[length\:var\(--fs-sm\)\] .markdown-stream-block-not-first > :first-child > :first-child {
+.markdown-content.text-\[length\:var\(--fs-sm\)\] .markdown-stream-block:not(:first-child) > :first-child > :first-child {
   margin-top: 0.5rem;
 }
 
-.markdown-content.text-\[length\:var\(--fs-sm\)\] .markdown-stream-block-not-last > :last-child > :last-child {
+.markdown-content.text-\[length\:var\(--fs-sm\)\] .markdown-stream-block:not(:last-child) > :last-child > :last-child {
   margin-bottom: 0.5rem;
 }
 
