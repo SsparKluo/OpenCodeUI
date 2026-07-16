@@ -11,11 +11,21 @@ function createDeferred<T>() {
   return { promise, resolve }
 }
 
-const getSessionsMock = vi.fn()
-const createSessionMock = vi.fn()
-const deleteSessionMock = vi.fn()
-const subscribeToEventsMock = vi.fn()
-const onServerChangeMock = vi.fn()
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyFn = (...args: any[]) => any
+const {
+  getSessionsMock,
+  createSessionMock,
+  deleteSessionMock,
+  subscribeToEventsMock,
+  onServerChangeMock,
+} = vi.hoisted(() => ({
+  getSessionsMock: vi.fn<AnyFn>(),
+  createSessionMock: vi.fn<AnyFn>(),
+  deleteSessionMock: vi.fn<AnyFn>(),
+  subscribeToEventsMock: vi.fn<AnyFn>(),
+  onServerChangeMock: vi.fn<AnyFn>(() => () => {}),
+}))
 let latestEventCallbacks: Partial<EventCallbacks> = {}
 let latestServerChange: (() => void) | undefined
 
@@ -64,8 +74,8 @@ describe('useSessions', () => {
       latestEventCallbacks = callbacks
       return vi.fn()
     })
-    onServerChangeMock.mockImplementation(listener => {
-      latestServerChange = listener as () => void
+    onServerChangeMock.mockImplementation((listener: () => void) => {
+      latestServerChange = listener
       return vi.fn()
     })
   })
