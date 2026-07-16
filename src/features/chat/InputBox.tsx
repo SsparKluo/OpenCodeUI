@@ -1270,16 +1270,25 @@ function InputBoxComponent({
   }, [attachments])
 
   // 底部 padding 计算：
-  // - isCollapsed (收起态 / 移动端「回复胶囊」)：
-  //   公式 max(12, env)。Safari env()=0 → 12px breathing；PWA env()=34 → 34px，
-  //   胶囊底部刚好贴 safe-area 顶部，避免 env+12 叠加出现的「多一截」间距。
-  // - 展开态：Footer (h-8 = 2rem) 已是一个天然的视觉缓冲，只需补足 safe-area
-  //   超出 Footer 的部分。这避免 PWA 下 Footer + 完整 safe-area 叠加出现
-  //   「双倍 safe-area」的视觉 gap。
-  //   公式：max(0, env - 2rem) → 总缓冲 = Footer + padding = max(32px, env)
+  // 核心约束：收起/展开态的总底部缓冲必须相等，否则折叠时 inputBoxHeight 变化
+  // → bottomPadding 变化 → virtualizer paddingEnd 变化（virtual-core 不补偿 paddingEnd）
+  // → dist 平移 → isCollapsed 翻转回 → 振荡闪烁。
+  //
+  // 展开态总缓冲 = Footer(h-8=2rem) + padding = 2rem + max(0, env-2rem) = max(2rem, env)
+  // 收起态总缓冲 = 0(无 Footer) + padding → padding 必须 = max(2rem, env)
+  //
+  // - env ≥ 2rem（iPhone home indicator）：收起 = env，胶囊贴 safe-area 顶，无多截
+  // - env < 2rem（PC / 部分 Android）：收起 = 2rem，胶囊与展开态 Footer 位置对齐
+  //
+  // 但 2rem(32px) 对胶囊来说视觉上离底部太远，下方用 translateY 把收起态内容
+  // 整体下移补偿——transform 不影响布局高度，inputBoxHeight 不变，不破坏上述约束。
   const bottomDockPadding = isCollapsed
-    ? 'max(12px, var(--safe-area-inset-bottom, 0px))'
+    ? 'max(2rem, var(--safe-area-inset-bottom, 0px))'
     : 'max(0px, calc(var(--safe-area-inset-bottom, 0px) - 2rem))'
+  // 收起态视觉下移：把 2rem 撑出的多余缓冲吃掉，只留 0.75rem(12px) 呼吸空间
+  const collapsedVisualOffset = isCollapsed
+    ? 'translateY(calc(2rem - 0.75rem))'
+    : 'none'
 
   return (
     <div className="w-full">
@@ -1293,7 +1302,7 @@ function InputBoxComponent({
           className={`relative flex flex-col gap-2 ${isCollapsed ? 'justify-end' : ''}`}
           style={
             isCollapsed && expandedHeight > 0
-              ? { minHeight: expandedHeight, maxHeight: composerMaxHeight }
+              ? { minHeight: expandedHeight, maxHeight: composerMaxHeight, transform: collapsedVisualOffset }
               : { maxHeight: composerMaxHeight }
           }
         >
