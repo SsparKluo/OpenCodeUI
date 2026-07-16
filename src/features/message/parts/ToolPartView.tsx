@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { diffLines } from 'diff'
 import { ChevronDownIcon, ChevronRightIcon } from '../../../components/Icons'
 import type { ToolPart } from '../../../types/message'
-import { useDelayedRender, useDisclosureScrollLock } from '../../../hooks'
+import { useCompositorExpand, useDelayedRender, useDisclosureScrollLock } from '../../../hooks'
 import { useNow } from '../../../hooks/useNow'
 import { serverStore } from '../../../store/serverStore'
 import { useTheme } from '../../../hooks/useTheme'
@@ -127,8 +127,11 @@ export const ToolPartView = memo(function ToolPartView({
   const [isChildFullscreen, setIsChildFullscreen] = useState(false)
   const { rootRef, headerRef, withScrollLock } = useDisclosureScrollLock()
   const effectiveExpanded = expanded || hasPendingInteraction || permissionResolved || isChildFullscreen
+  // Android expand: instant layout + max-height fake; collapse: original grid-rows.
+  const { contentRef: expandContentRef, layoutOpen, keepMounted, panelClassName } =
+    useCompositorExpand(effectiveExpanded)
   // 展开即挂 body：默认展开的工具 header/body 同帧，不再先 header 后 body
-  const shouldRenderBody = useDelayedRender(effectiveExpanded)
+  const shouldRenderBody = useDelayedRender(keepMounted)
   const toggleExpanded = useCallback(() => {
     withScrollLock(() => setExpanded(!expanded))
   }, [expanded, setExpanded, withScrollLock])
@@ -278,11 +281,17 @@ export const ToolPartView = memo(function ToolPartView({
         </button>
 
         <div
-          className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
-            effectiveExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+          className={`grid ${panelClassName} ${
+            layoutOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
           }`}
         >
-          <div className="overflow-hidden">{shouldRenderBody && <div className="pb-2 pt-1">{bodyContent}</div>}</div>
+          <div className="overflow-hidden min-h-0">
+            {shouldRenderBody && (
+              <div ref={expandContentRef} className="pb-2 pt-1">
+                {bodyContent}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     )
@@ -358,12 +367,16 @@ export const ToolPartView = memo(function ToolPartView({
 
           {/* Body */}
           <div
-            className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
-              effectiveExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+            className={`grid ${panelClassName} ${
+              layoutOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
             }`}
           >
-            <div className="overflow-hidden">
-              {shouldRenderBody && <div className="pl-2 pr-2.5 pb-2 pt-1">{bodyContent}</div>}
+            <div className="overflow-hidden min-h-0">
+              {shouldRenderBody && (
+                <div ref={expandContentRef} className="pl-2 pr-2.5 pb-2 pt-1">
+                  {bodyContent}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -451,12 +464,16 @@ export const ToolPartView = memo(function ToolPartView({
 
         {/* Body - grid collapse */}
         <div
-          className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
-            effectiveExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+          className={`grid ${panelClassName} ${
+            layoutOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
           }`}
         >
-          <div className="overflow-hidden">
-            {shouldRenderBody && <div className="pl-2 pr-2.5 pb-2 pt-1">{bodyContent}</div>}
+          <div className="overflow-hidden min-h-0">
+            {shouldRenderBody && (
+              <div ref={expandContentRef} className="pl-2 pr-2.5 pb-2 pt-1">
+                {bodyContent}
+              </div>
+            )}
           </div>
         </div>
       </div>

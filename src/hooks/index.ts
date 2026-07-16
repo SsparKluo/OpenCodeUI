@@ -15,6 +15,7 @@ export { registerSessionConsumer, updateConsumerSessionId, hasOtherConsumerForSe
 export type { SessionEventCallbacks } from './useGlobalEvents'
 export { useDelayedRender } from './useDelayedRender'
 export { useDisclosureScrollLock } from './useDisclosureScrollLock'
+export { useCompositorExpand } from './useCompositorExpand'
 export { useBackClose } from './useBackClose'
 export { useModelSelection } from './useModelSelection'
 export { useChatSession } from './useChatSession'

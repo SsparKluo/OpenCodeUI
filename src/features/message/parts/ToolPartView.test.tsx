@@ -24,6 +24,12 @@ vi.mock('../../../hooks', () => ({
     headerRef: () => undefined,
     withScrollLock: (action: () => void) => action(),
   }),
+  useCompositorExpand: (open: boolean) => ({
+    contentRef: { current: null },
+    layoutOpen: open,
+    keepMounted: open,
+    panelClassName: 'transition-[grid-template-rows] duration-300 ease-in-out',
+  }),
 }))
 
 vi.mock('../../../hooks/useTheme', () => ({
