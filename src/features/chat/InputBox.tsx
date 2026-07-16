@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, useSyncExternalStore, useLayoutEffect, memo } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { DragDropEvent } from '@tauri-apps/api/webview'
 import { AttachmentPreview, type Attachment } from '../attachment'
 import {
   MentionMenu,
@@ -34,7 +33,13 @@ import { useChatViewport } from './chatViewport'
 import type { ApiAgent } from '../../api/client'
 import type { ModelInfo, FileCapabilities } from '../../api'
 import type { Command } from '../../api/command'
-import { getDesktopPlatform, isTauri } from '../../utils/tauri'
+import {
+  getDroppedPathsInfo,
+  isTauriDropPointInsideElement,
+  subscribeTauriDragDrop,
+  type DroppedPathInfo,
+  type TauriDragDropEvent,
+} from '../../lib/tauriDragDrop'
 import {
   getInternalDragSnapshot,
   isPointInsideElement as isInternalPointInsideElement,
@@ -57,14 +62,6 @@ interface DraggedFileInfo {
   absolute: string
   name: string
 }
-
-interface DroppedPathInfo {
-  type: 'file' | 'folder'
-  path: string
-  name: string
-}
-
-type TauriDropPosition = Extract<DragDropEvent, { type: 'drop' }>['position']
 
 const TEXTAREA_MIN_HEIGHT = 24
 const TEXTAREA_VERTICAL_CHROME = 24
@@ -90,29 +87,6 @@ function getComposerMaxHeight(paneHeight: number, isCompact: boolean): number {
   const hardMax = isCompact ? COMPOSER_COMPACT_MAX_HEIGHT : COMPOSER_DESKTOP_MAX_HEIGHT
   const availableMax = Math.max(COMPOSER_MIN_HEIGHT, paneHeight - 96)
   return clamp(Math.floor(paneHeight * ratio), COMPOSER_MIN_HEIGHT, Math.min(hardMax, availableMax))
-}
-
-function getDropClientPoints(position: TauriDropPosition): Array<{ x: number; y: number }> {
-  const directPoint = { x: position.x, y: position.y }
-  const scale = window.devicePixelRatio || 1
-
-  if (scale === 1) return [directPoint]
-
-  return [
-    directPoint,
-    {
-      x: position.x / scale,
-      y: position.y / scale,
-    },
-  ]
-}
-
-function isPointInsideElement(position: TauriDropPosition, element: HTMLElement | null): boolean {
-  if (!element) return false
-  const rect = element.getBoundingClientRect()
-  return getDropClientPoints(position).some(
-    ({ x, y }) => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom,
-  )
 }
 
 function getMentionPathForDroppedPath(absolutePath: string, rootPath: string): string {
@@ -1104,8 +1078,7 @@ function InputBoxComponent({
       if (paths.length === 0 || isSubmitting) return
 
       try {
-        const { invoke } = await import('@tauri-apps/api/core')
-        const droppedPaths = await invoke<DroppedPathInfo[]>('get_dropped_paths_info', { paths })
+        const droppedPaths = await getDroppedPathsInfo(paths)
         const uploadAttachments: Attachment[] = []
         const mentionFiles: DraggedFileInfo[] = []
 
@@ -1136,14 +1109,14 @@ function InputBoxComponent({
   )
 
   const handleTauriDragDropEvent = useCallback(
-    (event: DragDropEvent) => {
+    (event: TauriDragDropEvent) => {
       if (event.type === 'leave') {
         dragCounterRef.current = 0
         setIsDragging(false)
         return
       }
 
-      const insideInput = isPointInsideElement(event.position, inputContainerRef.current)
+      const insideInput = isTauriDropPointInsideElement(event.position, inputContainerRef.current)
 
       if (event.type === 'enter' || event.type === 'over') {
         setIsDragging(insideInput)
@@ -1160,79 +1133,7 @@ function InputBoxComponent({
     [handleTauriExternalDrop],
   )
 
-  // macOS 上用 Rust WindowEvent::DragDrop 转发的 file-drop-* 事件（保底路径）
-  // 其他平台用 Tauri 标准 onDragDropEvent API
-  // 两条路径互斥，避免同一 drop 被处理两次
-  useEffect(() => {
-    if (!isTauri() || getDesktopPlatform() === 'macos') return
-
-    let disposed = false
-    let unlisten: (() => void) | null = null
-
-    void import('@tauri-apps/api/webview')
-      .then(async ({ getCurrentWebview }) => {
-        const cleanup = await getCurrentWebview().onDragDropEvent(event => {
-          handleTauriDragDropEvent(event.payload)
-        })
-
-        if (disposed) {
-          cleanup()
-        } else {
-          unlisten = cleanup
-        }
-      })
-      .catch(err => {
-        console.warn('[InputBox] Failed to listen for Tauri drag-drop events:', err)
-      })
-
-    return () => {
-      disposed = true
-      unlisten?.()
-    }
-  }, [handleTauriDragDropEvent])
-
-  // Rust 端 WindowEvent::DragDrop 转发的 file-drop-* 事件（仅 macOS，其他平台不用）
-  useEffect(() => {
-    if (!isTauri() || getDesktopPlatform() !== 'macos') return
-
-    let disposed = false
-    const cleanupFns: (() => void)[] = []
-
-    void import('@tauri-apps/api/event').then(async ({ listen }) => {
-      if (disposed) return
-
-      const { PhysicalPosition } = await import('@tauri-apps/api/dpi')
-
-      const onEnter = await listen<[string[], number, number]>('file-drop-enter', e => {
-        if (disposed) return
-        handleTauriDragDropEvent({ type: 'enter', paths: e.payload[0], position: new PhysicalPosition(e.payload[1], e.payload[2]) })
-      })
-      cleanupFns.push(onEnter)
-
-      const onOver = await listen<[number, number]>('file-drop-over', e => {
-        if (disposed) return
-        handleTauriDragDropEvent({ type: 'over', position: new PhysicalPosition(e.payload[0], e.payload[1]) })
-      })
-      cleanupFns.push(onOver)
-
-      const onDrop = await listen<[string[], number, number]>('file-drop-drop', e => {
-        if (disposed) return
-        handleTauriDragDropEvent({ type: 'drop', paths: e.payload[0], position: new PhysicalPosition(e.payload[1], e.payload[2]) })
-      })
-      cleanupFns.push(onDrop)
-
-      const onLeave = await listen<void>('file-drop-leave', () => {
-        if (disposed) return
-        handleTauriDragDropEvent({ type: 'leave' })
-      })
-      cleanupFns.push(onLeave)
-    })
-
-    return () => {
-      disposed = true
-      cleanupFns.forEach(fn => fn())
-    }
-  }, [handleTauriDragDropEvent])
+  useEffect(() => subscribeTauriDragDrop(handleTauriDragDropEvent), [handleTauriDragDropEvent])
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
