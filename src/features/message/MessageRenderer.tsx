@@ -414,6 +414,7 @@ function useEntryGrowAnimation(
 
 /** 默认预览 8 行 */
 const COLLAPSE_PREVIEW_LINES = 8
+const LEADING_RELAXED = 1.625
 const USER_HTML_ARTIFACT_PATTERN = /(?:```(?:html|htm)\b|<!doctype\s+html\b|<html\b|<style\b|<script\b|<canvas\b|\son[a-z]+\s*=)/i
 
 // 折叠状态缓存：消息是否溢出
@@ -444,9 +445,9 @@ const CollapsibleUserText = memo(function CollapsibleUserText({
     let disposed = false
     const measure = () => {
       if (disposed) return
-      const lineHeight = Number.parseFloat(window.getComputedStyle(el).lineHeight)
-      if (!Number.isFinite(lineHeight) || lineHeight <= 0) return
-      const collapsedHeight = lineHeight * COLLAPSE_PREVIEW_LINES
+      const fsBase = Number.parseFloat(window.getComputedStyle(el).getPropertyValue('--fs-base'))
+      if (!Number.isFinite(fsBase) || fsBase <= 0) return
+      const collapsedHeight = fsBase * LEADING_RELAXED * COLLAPSE_PREVIEW_LINES
       const next = el.scrollHeight > collapsedHeight + 1
       overflowStateCache.set(overflowCacheKey, next)
       setIsOverflow(prev => (prev === next ? prev : next))
@@ -483,7 +484,14 @@ const CollapsibleUserText = memo(function CollapsibleUserText({
           }${
             isCollapsed ? ' overflow-hidden' : ''
           }`}
-          style={isCollapsed ? { maxHeight: `${COLLAPSE_PREVIEW_LINES}lh` } : undefined}
+          style={
+            isCollapsed
+              ? {
+                  maxHeight: `calc(var(--fs-base) * ${LEADING_RELAXED} * ${COLLAPSE_PREVIEW_LINES})`,
+                  contain: 'layout paint',
+                }
+              : undefined
+          }
         >
           {renderMarkdown ? <MarkdownRenderer content={text} /> : text}
         </div>
