@@ -316,6 +316,37 @@ describe('messageStore', () => {
     expect(afterMessage2).not.toBe(beforeMessage2)
   })
 
+  it('preserves settled part references when another part receives a delta', () => {
+    const rafCallbacks: Array<(time: number) => void> = []
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(cb => {
+      rafCallbacks.push(cb as (time: number) => void)
+      return 1
+    })
+
+    const message = createMessageWithParts('message-1', 'settled')
+    message.parts.push(createTextPart('part-live', 'message-1', 'live'))
+    messageStore.setMessages('session-1', [message])
+
+    const beforeMessage = messageStore.getSessionState('session-1')?.messages[0]
+    const beforeSettledPart = beforeMessage?.parts[0]
+    const beforeLivePart = beforeMessage?.parts[1]
+
+    messageStore.handlePartDelta({
+      sessionID: 'session-1',
+      messageID: 'message-1',
+      partID: 'part-live',
+      field: 'text',
+      delta: ' text',
+    })
+    rafCallbacks[0]?.(0)
+
+    const afterMessage = messageStore.getSessionState('session-1')?.messages[0]
+    expect(afterMessage).not.toBe(beforeMessage)
+    expect(afterMessage?.parts[0]).toBe(beforeSettledPart)
+    expect(afterMessage?.parts[1]).not.toBe(beforeLivePart)
+    expect(afterMessage?.parts[1]).toMatchObject({ text: 'live text' })
+  })
+
   it('notifies only subscribers for changed sessions', () => {
     const session1Subscriber = vi.fn()
     const session2Subscriber = vi.fn()
