@@ -200,7 +200,8 @@ export interface HighlightOptions {
 
 /**
  * 流式语法高亮 —— 用于流式输出的代码块。
- * 直接走 worker，无缓存（流式内容每次都不同）。
+ * worker 侧已按 key latest-only；主线程再 rAF 合并 code，避免每 token 都 postMessage / setState。
+ * 无缓存（流式内容每次都不同）；落后结果用 plain suffix 垫着（CodeBlock）。
  */
 export function useStreamingSyntaxHighlight(
   code: string,
@@ -218,6 +219,8 @@ export function useStreamingSyntaxHighlight(
   const [outputState, setOutputState] = useState<{ code: string; tokens: HighlightTokens } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const workerKeyRef = useRef('')
+  const codeRef = useRef(code)
+  codeRef.current = code
 
   const key = `${instanceId}:${normalizedLang}:${resolvedTheme.key}`
 
@@ -227,6 +230,7 @@ export function useStreamingSyntaxHighlight(
         disposeShikiWorkerKey(workerKeyRef.current)
         workerKeyRef.current = ''
       }
+      setIsLoading(false)
       return
     }
 
@@ -235,28 +239,31 @@ export function useStreamingSyntaxHighlight(
     if (previousKey && previousKey !== key) disposeShikiWorkerKey(previousKey)
     workerKeyRef.current = key
 
-    const loadingFrame = requestAnimationFrame(() => {
-      if (!cancelled) setIsLoading(true)
+    // 同帧多次 code 变更只打一次 worker（读 codeRef 拿最新文本）
+    const frame = requestAnimationFrame(() => {
+      if (cancelled) return
+      const text = codeRef.current
+      setIsLoading(true)
+      void highlightTokensInWorker({ key, text, language: normalizedLang, theme: resolvedTheme.theme })
+        .then(result => {
+          if (cancelled) return
+          setOutputState(prev => (prev?.code === result.code ? prev : { code: result.code, tokens: result.tokens }))
+        })
+        .catch(err => {
+          if (import.meta.env.DEV && err instanceof Error && err.message !== 'superseded') {
+            console.warn('[Syntax] streaming Shiki worker error:', err)
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setIsLoading(false)
+        })
     })
-
-    void highlightTokensInWorker({ key, text: code, language: normalizedLang, theme: resolvedTheme.theme })
-      .then(result => {
-        if (!cancelled) setOutputState({ code: result.code, tokens: result.tokens })
-      })
-      .catch(err => {
-        if (import.meta.env.DEV && err instanceof Error && err.message !== 'superseded') {
-          console.warn('[Syntax] streaming Shiki worker error:', err)
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false)
-      })
 
     return () => {
       cancelled = true
-      cancelAnimationFrame(loadingFrame)
+      cancelAnimationFrame(frame)
     }
-  }, [code, enabled, instanceId, key, normalizedLang, resolvedTheme.theme])
+  }, [code, enabled, key, normalizedLang, resolvedTheme.theme])
 
   useEffect(() => {
     return () => {
