@@ -14,6 +14,7 @@ import { type ModelSelectorHandle } from './ModelSelector'
 import { OutlineIndex } from '../../components/OutlineIndex'
 import { PaneHeader } from './PaneHeader'
 import { PaneDropOverlay, resolveDropZone, type DropZone, type PaneDropOverlayHandle } from './PaneDropOverlay'
+import { useFolderProjectDrop } from './useFolderProjectDrop'
 import { useChatSession, useModels, useModelSelection } from '../../hooks'
 import { useServerStore } from '../../hooks/useServerStore'
 import { useCancelHint } from '../../hooks/useCancelHint'
@@ -21,6 +22,7 @@ import { InlineToolRequestContext, type InlineToolRequestContextValue } from './
 import { ChatViewportProvider, canUseSplitPane, useChatViewportMaybe, type ChatViewportValue } from './chatViewport'
 import { useChatPageViewModel } from './useChatPageViewModel'
 import { SessionNavigationContext } from '../../contexts/SessionNavigationContext'
+import { useDirectory } from '../../contexts/useDirectory'
 import { paneLayoutStore } from '../../store/paneLayoutStore'
 import { autoApproveStore } from '../../store/autoApproveStore'
 import { messageStore, paneControllerStore, useHiddenModelKeys } from '../../store'
@@ -148,6 +150,7 @@ export const ChatPane = memo(function ChatPane({
   // ============================================
   const chatAreaRef = useRef<ChatAreaHandle>(null)
   const modelSelectorRef = useRef<ModelSelectorHandle>(null)
+  const { addDirectory } = useDirectory()
 
   // ============================================
   // Models
@@ -513,6 +516,8 @@ export const ChatPane = memo(function ChatPane({
   // ============================================
   const overlayRef = useRef<PaneDropOverlayHandle>(null)
   const paneRootRef = useRef<HTMLDivElement>(null)
+  // 桌面端：文件夹拖到信息流 → 添加项目（输入框区域让给附件逻辑）
+  const isFolderDropActive = useFolderProjectDrop(paneRootRef, addDirectory)
   const currentZoneRef = useRef<DropZone | null>(null)
   const pendingZoneRef = useRef<DropZone | null>(null)
   const dropRafRef = useRef<number | null>(null)
@@ -1000,6 +1005,13 @@ export const ChatPane = memo(function ChatPane({
         )}
         {chatContent}
         <PaneDropOverlay ref={overlayRef} />
+        {isFolderDropActive && (
+          <div className="absolute inset-0 z-[5] pointer-events-none flex items-center justify-center bg-accent-main-100/5 backdrop-blur-[1px]">
+            <span className="rounded-xl border border-accent-main-100/40 bg-bg-100/90 px-4 py-2 text-[length:var(--fs-base)] font-medium text-accent-main-100 shadow-sm">
+              {t('chatArea.dropFolderToAddProject')}
+            </span>
+          </div>
+        )}
       </div>
     </SessionNavigationContext.Provider>
   )

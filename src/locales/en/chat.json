@@ -12,7 +12,8 @@
   },
   "chatArea": {
     "loadingSession": "Loading session...",
-    "loadingHistory": "Loading history..."
+    "loadingHistory": "Loading history...",
+    "dropFolderToAddProject": "Drop a folder to add a project"
   },
   "emptyState": {
     "title": "Start a new conversation",

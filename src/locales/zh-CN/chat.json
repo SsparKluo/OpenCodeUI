@@ -12,7 +12,8 @@
   },
   "chatArea": {
     "loadingSession": "加载会话中...",
-    "loadingHistory": "加载历史记录..."
+    "loadingHistory": "加载历史记录...",
+    "dropFolderToAddProject": "拖入文件夹以添加项目"
   },
   "emptyState": {
     "title": "开始新对话",
