@@ -12,7 +12,7 @@ import {
 import { IconButton } from '../../components/ui'
 import { ModelSelector, type ModelSelectorHandle } from './ModelSelector'
 import { ShareDialog } from './ShareDialog'
-import { messageStore, useMessageStore } from '../../store'
+import { messageStore, useHeaderSessionMeta } from '../../store'
 import { useLayoutStore, layoutStore } from '../../store/layoutStore'
 import { useSessionContext } from '../../contexts/useSessionContext'
 import { updateSession } from '../../api'
@@ -124,7 +124,7 @@ export function Header({
   modelSelectorRef,
 }: HeaderProps) {
   const { t } = useTranslation('chat')
-  const { sessionId, sessionDirectory, sessionTitle: currentSessionTitle } = useMessageStore()
+  const { sessionId, sessionDirectory, sessionTitle: currentSessionTitle } = useHeaderSessionMeta()
   const { rightPanelOpen, bottomPanelOpen } = useLayoutStore()
   const { refresh } = useSessionContext()
   const { currentDirectory } = useDirectory()
