@@ -82,7 +82,8 @@
     "tree": "Tree",
     "treeView": "Tree view",
     "unified": "Unified",
-    "split": "Split"
+    "split": "Split",
+    "openInFiles": "Open in Files"
   },
   "mcpPanel": {
     "title": "MCP Servers",

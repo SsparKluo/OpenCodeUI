@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionChangesPanel } from './SessionChangesPanel'
 import { changeScopeStore } from '../store/changeScopeStore'
+import { layoutStore } from '../store/layoutStore'
 import { FullscreenProvider } from '../contexts'
 
 const { getCurrentProject, initGitProject, getSessionDiff, getLastTurnDiff, getVcsInfo, getVcsDiff } = vi.hoisted(
@@ -295,5 +296,27 @@ describe('SessionChangesPanel', () => {
 
     expect(initGitProject).toHaveBeenCalledWith('/repo')
     expect(getLastTurnDiff).toHaveBeenCalledWith('session-1', '/repo')
+  })
+
+  it('opens the selected change file in the files panel from the context menu', async () => {
+    const openFilePreview = vi.spyOn(layoutStore, 'openFilePreview')
+
+    render(
+      <FullscreenProvider>
+        <SessionChangesPanel sessionId="session-1" directory="/repo" position="bottom" />
+      </FullscreenProvider>,
+    )
+
+    await act(async () => {
+      vi.runAllTimers()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const fileButtons = screen.getAllByRole('button', { name: /turn\.ts/ })
+    fireEvent.contextMenu(fileButtons[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Open in Files' }))
+
+    expect(openFilePreview).toHaveBeenCalledWith({ path: 'src/turn.ts', name: 'turn.ts' }, 'bottom')
   })
 })

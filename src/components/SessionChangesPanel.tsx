@@ -5,6 +5,7 @@
 // ============================================
 
 import { memo, useState, useEffect, useCallback, useRef, useMemo, useId } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { RetryIcon, ChevronRightIcon, MaximizeIcon, ClockIcon, GitBranchIcon, GitDiffIcon, LayersIcon } from './Icons'
 import { getMaterialIconUrl } from '../utils/materialIcons'
@@ -21,6 +22,7 @@ import { PreviewTabsBar, type PreviewTabsBarItem } from './PreviewTabsBar'
 import { useVerticalSplitResize } from '../hooks/useVerticalSplitResize'
 import { DropdownMenu } from './ui'
 import { changeScopeStore, useSessionChangeScope, type ChangeScopeMode } from '../store/changeScopeStore'
+import { layoutStore, type PanelPosition } from '../store/layoutStore'
 import { useFullscreenLayer } from '../contexts'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 
@@ -54,17 +56,20 @@ function reconcileDiffPreviewState(diffs: FileDiff[], openFiles: string[], activ
 interface SessionChangesPanelProps {
   sessionId: string
   directory?: string
+  position?: PanelPosition
   isResizing?: boolean
 }
 
 export const SessionChangesPanel = memo(function SessionChangesPanel({
   sessionId,
   directory,
+  position = 'right',
   isResizing: isPanelResizing = false,
 }: SessionChangesPanelProps) {
   const { t } = useTranslation(['components', 'common'])
   const containerRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const fileContextMenuRef = useRef<HTMLDivElement>(null)
   const consumerId = `session-changes-${useId()}`
   const {
     splitHeight: listHeight,
@@ -103,6 +108,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
 
   // 展开的目录
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
+  const [fileContextMenu, setFileContextMenu] = useState<{ x: number; y: number; file: string } | null>(null)
 
   const projectRequestIdRef = useRef(0)
   const diffRequestIdRef = useRef({ git: 0, branch: 0, session: 0, turn: 0 })
@@ -482,6 +488,40 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
     setSelectedFile(prev => (prev === file ? prev : file))
   }, [])
 
+  const handleFileContextMenu = useCallback((event: React.MouseEvent, file: string) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setFileContextMenu({ x: event.clientX, y: event.clientY, file })
+  }, [])
+
+  const handleOpenInFiles = useCallback(() => {
+    if (!fileContextMenu) return
+    const file = fileContextMenu.file
+    const name = file.split(/[/\\]/).pop() || file
+    layoutStore.openFilePreview({ path: file, name }, position)
+    setFileContextMenu(null)
+  }, [fileContextMenu, position])
+
+  useEffect(() => {
+    if (!fileContextMenu) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (fileContextMenuRef.current && !fileContextMenuRef.current.contains(event.target as Node)) {
+        setFileContextMenu(null)
+      }
+    }
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFileContextMenu(null)
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [fileContextMenu])
+
   // 切换目录展开/折叠
   const handleToggleDir = useCallback((path: string) => {
     setExpandedDirs(prev => {
@@ -810,6 +850,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
                       expandedDirs={expandedDirs}
                       onSelectFile={handleSelectFile}
                       onToggleDir={handleToggleDir}
+                      onContextMenuFile={handleFileContextMenu}
                     />
                   ))
                 : // Flat list view
@@ -819,7 +860,9 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
                     return (
                       <button
                         key={diff.file}
+                        type="button"
                         onClick={() => handleSelectFile(diff.file)}
+                        onContextMenu={event => handleFileContextMenu(event, diff.file)}
                         className={`
                        w-full min-w-0 flex items-center gap-2 px-3 py-1 text-left
                        hover:bg-bg-200/50 transition-colors text-[length:var(--fs-sm)]
@@ -852,6 +895,24 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
           )}
         </div>
       </div>
+
+      {fileContextMenu &&
+        createPortal(
+          <div
+            ref={fileContextMenuRef}
+            className="fixed z-[9999] bg-bg-100 border border-border-200 rounded-lg shadow-lg p-1 min-w-[160px]"
+            style={{ left: fileContextMenu.x, top: fileContextMenu.y }}
+          >
+            <button
+              type="button"
+              onClick={handleOpenInFiles}
+              className="w-full px-2.5 py-1.5 text-left text-[length:var(--fs-sm)] text-text-200 hover:bg-bg-200/60 hover:text-text-100 rounded-md transition-colors"
+            >
+              {t('sessionChanges.openInFiles')}
+            </button>
+          </div>,
+          document.body,
+        )}
 
       {/* Resize Handle - 与标签栏同色 */}
       {showPreview && (
@@ -1146,6 +1207,7 @@ interface ChangesTreeItemProps {
   expandedDirs: Set<string>
   onSelectFile: (path: string) => void
   onToggleDir: (path: string) => void
+  onContextMenuFile: (event: React.MouseEvent, file: string) => void
 }
 
 const ChangesTreeItem = memo(function ChangesTreeItem({
@@ -1154,6 +1216,7 @@ const ChangesTreeItem = memo(function ChangesTreeItem({
   expandedDirs,
   onSelectFile,
   onToggleDir,
+  onContextMenuFile,
 }: ChangesTreeItemProps) {
   const isExpanded = expandedDirs.has(node.path)
   const paddingLeft = 8 + depth * 16
@@ -1165,6 +1228,7 @@ const ChangesTreeItem = memo(function ChangesTreeItem({
     return (
       <>
         <button
+          type="button"
           onClick={() => onToggleDir(node.path)}
           className="w-full min-w-0 flex items-center gap-1.5 py-1 hover:bg-bg-200/50 transition-colors text-[length:var(--fs-sm)] text-text-300"
           style={{ paddingLeft }}
@@ -1197,6 +1261,7 @@ const ChangesTreeItem = memo(function ChangesTreeItem({
               expandedDirs={expandedDirs}
               onSelectFile={onSelectFile}
               onToggleDir={onToggleDir}
+              onContextMenuFile={onContextMenuFile}
             />
           ))}
       </>
@@ -1206,7 +1271,12 @@ const ChangesTreeItem = memo(function ChangesTreeItem({
   // File node
   return (
     <button
+      type="button"
       onClick={() => node.diff && onSelectFile(node.diff.file)}
+      onContextMenu={event => {
+        if (!node.diff) return
+        onContextMenuFile(event, node.diff.file)
+      }}
       className={`
          w-full min-w-0 flex items-center gap-1.5 py-1 transition-colors text-[length:var(--fs-sm)]
          hover:bg-bg-200/50

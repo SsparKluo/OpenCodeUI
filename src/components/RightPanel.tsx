@@ -273,7 +273,12 @@ const ChangesContent = memo(function ChangesContent({
     <>
       {changeTabs.map(tab => (
         <div key={tab.id} className={tab.id === activeTab.id ? 'h-full' : 'hidden'}>
-          <SessionChangesPanel sessionId={sessionId} directory={directory} isResizing={isPanelResizing} />
+          <SessionChangesPanel
+            sessionId={sessionId}
+            directory={directory}
+            position="right"
+            isResizing={isPanelResizing}
+          />
         </div>
       ))}
     </>

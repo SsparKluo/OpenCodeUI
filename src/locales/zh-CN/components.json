@@ -81,7 +81,8 @@
     "tree": "树形",
     "treeView": "树形视图",
     "unified": "统一",
-    "split": "分栏"
+    "split": "分栏",
+    "openInFiles": "在文件中打开"
   },
   "mcpPanel": {
     "title": "MCP 服务器",
