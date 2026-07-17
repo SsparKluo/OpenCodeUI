@@ -83,6 +83,73 @@ function getCachedHtml(src: string, isReasoning: boolean): string {
   return html
 }
 
+/**
+ * live 尾段是否可以只追加到最后一个文本节点。
+ * 保守：后缀一旦含 markdown 结构/强调/代码/链接等字符，回退全量 parse+morph。
+ */
+function canAppendLiveMarkdownSuffix(suffix: string): boolean {
+  if (!suffix) return false
+  // 排除会改 markdown 结构、math/code，或可能形成 autolink 的字符
+  // （含 :/@/ 时回退全量 parse，避免流式中链接一直是纯文本）
+  return /^[^\n`*_\[\]()#>|!~\\<$:/@]+$/.test(suffix)
+}
+
+/** 最后一个 Text 是否安全承接追加（不能在 strong/em/a/code 等行内节点里） */
+function canAppendIntoTextNode(textNode: Text): boolean {
+  const parent = textNode.parentElement
+  if (!parent) return false
+  // 父节点后面还有兄弟时，追加会插在中间，结构不对
+  if (parent.lastChild !== textNode) return false
+  // 只允许块级/列表等容器的直接文本；行内格式内追加会把后续字错误包进强调/链接
+  return /^(P|LI|TD|TH|H[1-6]|BLOCKQUOTE|DIV)$/.test(parent.tagName)
+}
+
+/** 把纯文本后缀接到 root 内最后一个 Text 节点；失败返回 false */
+function tryAppendLiveText(root: HTMLElement, suffix: string): boolean {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let last: Text | null = null
+  let node = walker.nextNode()
+  while (node) {
+    last = node as Text
+    node = walker.nextNode()
+  }
+  if (!last || !canAppendIntoTextNode(last)) return false
+  last.textContent = `${last.textContent ?? ''}${suffix}`
+  return true
+}
+
+function applyMarkdownHtml(root: HTMLElement, html: string) {
+  if (!root.hasChildNodes()) {
+    root.innerHTML = html
+    decorateMarkdownDom(root)
+    return
+  }
+  const next = document.createElement('div')
+  next.innerHTML = html
+  decorateMarkdownDom(next)
+  const dirtySelectValues = Array.from(
+    root.querySelectorAll<HTMLSelectElement>(`select[${MARKDOWN_USER_STATE_ATTRIBUTE}]`),
+    select => new Set(Array.from(select.selectedOptions, option => option.value)),
+  )
+  morphdom(root, next, {
+    childrenOnly: true,
+    onBeforeElUpdated: (fromEl, toEl) => {
+      if (fromEl instanceof HTMLElement && toEl instanceof HTMLElement) {
+        preserveMarkdownControlState(fromEl, toEl)
+      }
+      if (fromEl.isEqualNode(toEl)) return false
+      return true
+    },
+  })
+  root.querySelectorAll<HTMLSelectElement>(`select[${MARKDOWN_USER_STATE_ATTRIBUTE}]`).forEach((select, index) => {
+    const selectedValues = dirtySelectValues[index]
+    if (!selectedValues) return
+    Array.from(select.options).forEach(option => {
+      option.selected = selectedValues.has(option.value)
+    })
+  })
+}
+
 function createMermaidRenderId(prefix: string) {
   mermaidRenderCounter += 1
   const safePrefix = prefix.replace(/[^a-zA-Z0-9_-]/g, '') || 'diagram'
@@ -1258,9 +1325,10 @@ const MarkdownDomBlock = memo(function MarkdownDomBlock({
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const appliedHtmlRef = useRef<string | null>(null)
+  const appliedSrcRef = useRef<string | null>(null)
   const deferredSrc = useDeferredValue(src)
+  // live 用 deferred 降峰；定稿后立刻用最终 src，避免尾字滞后
   const renderSrc = isLive ? deferredSrc : src
-  const html = useMemo(() => getCachedHtml(renderSrc, isReasoning), [isReasoning, renderSrc])
 
   useEffect(() => {
     const root = rootRef.current
@@ -1281,39 +1349,34 @@ const MarkdownDomBlock = memo(function MarkdownDomBlock({
   useLayoutEffect(() => {
     const root = rootRef.current
     if (!root) return
-    // html 未变则跳过 DOM morph，避免父树重渲时白干活
-    if (appliedHtmlRef.current === html) return
-    appliedHtmlRef.current = html
-    if (!root.hasChildNodes()) {
-      root.innerHTML = html
-      decorateMarkdownDom(root)
+
+    // live 纯文本追加：跳过 parse + morphdom，只改最后一个 Text 节点
+    const prevSrc = appliedSrcRef.current
+    if (
+      isLive &&
+      prevSrc != null &&
+      root.hasChildNodes() &&
+      renderSrc.startsWith(prevSrc)
+    ) {
+      const suffix = renderSrc.slice(prevSrc.length)
+      if (canAppendLiveMarkdownSuffix(suffix) && tryAppendLiveText(root, suffix)) {
+        appliedSrcRef.current = renderSrc
+        // 文本已偏离开 html 快照，强制后续全量路径重算
+        appliedHtmlRef.current = null
+        return
+      }
+    }
+
+    // live 中间态不进 htmlCache（避免 64 槽被流式碎片挤爆）；稳定块才缓存
+    const html = isLive ? renderMarkdownToHtml(renderSrc, isReasoning) : getCachedHtml(renderSrc, isReasoning)
+    if (appliedHtmlRef.current === html) {
+      appliedSrcRef.current = renderSrc
       return
     }
-    const next = document.createElement('div')
-    next.innerHTML = html
-    decorateMarkdownDom(next)
-    const dirtySelectValues = Array.from(
-      root.querySelectorAll<HTMLSelectElement>(`select[${MARKDOWN_USER_STATE_ATTRIBUTE}]`),
-      select => new Set(Array.from(select.selectedOptions, option => option.value)),
-    )
-    morphdom(root, next, {
-      childrenOnly: true,
-      onBeforeElUpdated: (fromEl, toEl) => {
-        if (fromEl instanceof HTMLElement && toEl instanceof HTMLElement) {
-          preserveMarkdownControlState(fromEl, toEl)
-        }
-        if (fromEl.isEqualNode(toEl)) return false
-        return true
-      },
-    })
-    root.querySelectorAll<HTMLSelectElement>(`select[${MARKDOWN_USER_STATE_ATTRIBUTE}]`).forEach((select, index) => {
-      const selectedValues = dirtySelectValues[index]
-      if (!selectedValues) return
-      Array.from(select.options).forEach(option => {
-        option.selected = selectedValues.has(option.value)
-      })
-    })
-  }, [html])
+    appliedHtmlRef.current = html
+    appliedSrcRef.current = renderSrc
+    applyMarkdownHtml(root, html)
+  }, [renderSrc, isReasoning, isLive])
 
   const handleClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (event.defaultPrevented) return

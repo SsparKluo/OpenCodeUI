@@ -324,6 +324,34 @@ describe('MarkdownRenderer', () => {
     expect(screen.getByRole('paragraph')).toHaveTextContent('Hello world')
   })
 
+  it('keeps streaming plain-text appends and settles without losing content', async () => {
+    const view = render(<MarkdownRenderer content={'你好'} isStreaming />)
+    expect(screen.getByRole('paragraph')).toHaveTextContent('你好')
+
+    view.rerender(<MarkdownRenderer content={'你好世界'} isStreaming />)
+    await waitFor(() => {
+      expect(screen.getByRole('paragraph')).toHaveTextContent('你好世界')
+    })
+
+    view.rerender(<MarkdownRenderer content={'你好世界'} />)
+    await waitFor(() => {
+      expect(screen.getByRole('paragraph')).toHaveTextContent('你好世界')
+    })
+  })
+
+  it('does not leak trailing stream text into emphasis markup', async () => {
+    const view = render(<MarkdownRenderer content={'**粗体**'} isStreaming />)
+    expect(screen.getByRole('paragraph').querySelector('strong')).toHaveTextContent('粗体')
+
+    view.rerender(<MarkdownRenderer content={'**粗体** 后续'} isStreaming />)
+    await waitFor(() => {
+      const paragraph = screen.getByRole('paragraph')
+      expect(paragraph).toHaveTextContent('粗体 后续')
+      expect(paragraph.querySelector('strong')).toHaveTextContent('粗体')
+      expect(paragraph.querySelector('strong')).not.toHaveTextContent('后续')
+    })
+  })
+
   it('renders streaming inline math through the markdown renderer', () => {
     const { container } = render(<MarkdownRenderer content={'Inline $x + y$ math'} isStreaming />)
 
