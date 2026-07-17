@@ -956,6 +956,12 @@ body {
   animation: border-pulse 2s ease-in-out infinite;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .animate-border-pulse {
+    animation: none !important;
+  }
+}
+
 /* ============================================
  * CSS Containment - 优化布局性能，减少 CLS
  * ============================================ */

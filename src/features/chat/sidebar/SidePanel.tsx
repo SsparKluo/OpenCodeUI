@@ -872,7 +872,7 @@ export function SidePanel({
       <div className="mobile-safe-topbar-14 shrink-0 flex items-center">
         {/* Logo 区域 - 展开时显示 */}
         <div
-          className="overflow-hidden transition-all duration-300 ease-out"
+          className="overflow-hidden transition-[width,padding,opacity] duration-300 ease-out"
           style={{
             width: showLabels ? 'auto' : 0,
             paddingLeft: showLabels ? 16 : 0,
@@ -975,7 +975,7 @@ export function SidePanel({
         {/* Projects Dropdown */}
         <div
           ref={projectsDropdownRef}
-          className="overflow-hidden pb-px transition-all duration-300 ease-out"
+          className="overflow-hidden pb-px transition-[max-height,opacity,margin] duration-300 ease-out"
           style={{
             maxHeight: showLabels && projectsExpanded ? 304 : 0,
             opacity: showLabels && projectsExpanded ? 1 : 0,
@@ -1073,7 +1073,7 @@ export function SidePanel({
 
       {/* ===== Main Content ===== */}
       <div
-        className="flex-1 flex flex-col min-h-0 overflow-hidden transition-all duration-300 ease-out"
+        className="flex-1 flex flex-col min-h-0 overflow-hidden transition-opacity duration-300 ease-out"
         style={{
           opacity: showLabels ? 1 : 0,
           visibility: showLabels ? 'visible' : 'hidden',
