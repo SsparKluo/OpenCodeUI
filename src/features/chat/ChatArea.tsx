@@ -34,6 +34,7 @@ import {
   buildProcessTimeline,
   buildTurnDurationMap,
   buildTurnLatestAssistantIdSet,
+  reuseProcessTimelineItems,
   type ProcessTimelineItem,
   type StableChatPage,
 } from './chatPageModel'
@@ -348,21 +349,33 @@ export const ChatArea = memo(
       const emptyShellGate = useEmptyWorkingShellGate(isStreaming, EMPTY_WORKING_SHELL_EXTRA_DELAY_MS)
 
       // 过程折叠：按 user 回合建时间线；关闭时退回「一行一条消息」
+      // previous 用于 item 级 structural sharing：流式只脏热行，VirtualRow memo 才能命中
+      // 折叠开关切换时不跨模式复用（flat 与 process-shell 的 key 语义不同）
+      const previousTimelineRef = useRef<{
+        processCollapseEnabled: boolean
+        items?: ProcessTimelineItem[]
+      }>({ processCollapseEnabled })
       const timeline = useMemo<ProcessTimelineItem[]>(() => {
-        if (!processCollapseEnabled) {
-          return visibleMessages.map(message => ({
-            kind: 'message' as const,
-            key: message.info.id,
-            message,
-          }))
-        }
-        return buildProcessTimeline(visibleMessages, {
-          turnDurationMap,
-          sessionIsStreaming: isStreaming,
-          messageHasProcess: messageHasProcessContent,
-          messageHasFinal: messageHasFinalContent,
-          isUserEntryReady: emptyShellGate.isReady,
-        })
+        const next = !processCollapseEnabled
+          ? visibleMessages.map(message => ({
+              kind: 'message' as const,
+              key: message.info.id,
+              message,
+            }))
+          : buildProcessTimeline(visibleMessages, {
+              turnDurationMap,
+              sessionIsStreaming: isStreaming,
+              messageHasProcess: messageHasProcessContent,
+              messageHasFinal: messageHasFinalContent,
+              isUserEntryReady: emptyShellGate.isReady,
+            })
+        const previous =
+          previousTimelineRef.current.processCollapseEnabled === processCollapseEnabled
+            ? previousTimelineRef.current.items
+            : undefined
+        const reused = reuseProcessTimelineItems(previous, next)
+        previousTimelineRef.current = { processCollapseEnabled, items: reused }
+        return reused
         // emptyShellGate.version：额外延迟到期后强制重算，挂上 Working 壳
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, [processCollapseEnabled, visibleMessages, turnDurationMap, isStreaming, emptyShellGate.version, emptyShellGate.isReady])

@@ -12,6 +12,7 @@ import {
   expandSelectionWithPageKeys,
   findMessageSequenceOffset,
   reconcileStableChatPages,
+  reuseProcessTimelineItems,
   seedMeasuredPageHeightsFromPreviousPages,
 } from './chatPageModel'
 import { buildVisibleMessageEntries, getVisibleMessageForkTargetId } from './chatAreaVisibility'
@@ -449,6 +450,95 @@ describe('buildTurnLatestAssistantIdSet', () => {
     expect(latest.has('assistant-1')).toBe(false)
     expect(latest.has('assistant-2')).toBe(true)
     expect(latest.has('assistant-3')).toBe(true)
+  })
+})
+
+describe('reuseProcessTimelineItems', () => {
+  const hasProcess = (message: Message) =>
+    message.parts.some(p => p.type === 'tool' || p.type === 'reasoning')
+  const hasFinal = (message: Message) => message.parts.some(p => p.type === 'text')
+
+  it('keeps historical timeline item identity when only the last message streams', () => {
+    const messages = [
+      {
+        ...createUserMessage('user-1', 1),
+        parts: [createTextPart('user-text-1', 'user-1', 'prompt')],
+      },
+      createAssistantMessage(
+        'assistant-1',
+        [createTextPart('text-1', 'assistant-1', 'old')],
+        2,
+        3,
+      ),
+      {
+        ...createUserMessage('user-2', 4),
+        parts: [createTextPart('user-text-2', 'user-2', 'next')],
+      },
+      createAssistantMessage(
+        'assistant-2',
+        [createTextPart('text-2', 'assistant-2', 'hello')],
+        5,
+        undefined,
+      ),
+    ]
+
+    const first = buildProcessTimeline(messages, {
+      turnDurationMap: new Map([['assistant-1', 1000]]),
+      sessionIsStreaming: true,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
+    })
+
+    const streaming = messages[messages.length - 1]
+    const nextMessages = [
+      ...messages.slice(0, -1),
+      {
+        ...streaming,
+        parts: [{ ...streaming.parts[0], text: 'hello world' }],
+      },
+    ]
+    const rebuilt = buildProcessTimeline(nextMessages, {
+      turnDurationMap: new Map([['assistant-1', 1000]]),
+      sessionIsStreaming: true,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
+    })
+    const reused = reuseProcessTimelineItems(first, rebuilt)
+
+    expect(reused.length).toBe(first.length)
+    for (let i = 0; i < reused.length - 1; i++) {
+      expect(reused[i]).toBe(first[i])
+    }
+    expect(reused.at(-1)).not.toBe(first.at(-1))
+    expect(reused.at(-1)?.key).toBe(first.at(-1)?.key)
+  })
+
+  it('returns the previous array reference when nothing changed', () => {
+    const messages = [
+      {
+        ...createUserMessage('user-1', 1),
+        parts: [createTextPart('user-text-1', 'user-1', 'prompt')],
+      },
+      createAssistantMessage(
+        'assistant-1',
+        [createTextPart('text-1', 'assistant-1', 'done')],
+        2,
+        3,
+      ),
+    ]
+    const first = buildProcessTimeline(messages, {
+      turnDurationMap: new Map([['assistant-1', 500]]),
+      sessionIsStreaming: false,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
+    })
+    const rebuilt = buildProcessTimeline(messages, {
+      turnDurationMap: new Map([['assistant-1', 500]]),
+      sessionIsStreaming: false,
+      messageHasProcess: hasProcess,
+      messageHasFinal: hasFinal,
+    })
+    expect(reuseProcessTimelineItems(first, rebuilt)).toBe(first)
   })
 })
 
