@@ -4,12 +4,16 @@
  * Tauri WebView backdrop-filter 修复
  * ============================================
  * WebView2 (Windows) 和 WebKitGTK (Linux) 的部分版本
- * 不渲染 backdrop-filter blur。
- * will-change:auto 强制 GPU 合成层，使 blur 生效。
+ * 不渲染 backdrop-filter blur，需要合成层提示。
+ * 只给实际带 blur 的节点开 hint，避免 .tauri-app * 把整棵
+ * DOM 推成 GPU 层导致空闲功耗偏高。
+ * 不用 transform：避免打断 InputBox todo-swap 等 transform 动画，
+ * 也避免父层 transform 让子级 backdrop-blur 采样错位。
  * .tauri-app class 由 main.tsx 在 Tauri 环境下添加到 <html>。
  */
-.tauri-app * {
-  will-change: auto;
+.tauri-app[data-glass] :is(.glass, .glass-alt),
+.tauri-app [class*='backdrop-blur'] {
+  will-change: backdrop-filter;
 }
 
 .mobile-chat-pager {
