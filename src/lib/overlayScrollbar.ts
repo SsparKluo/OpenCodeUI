@@ -350,8 +350,31 @@ function reconcile(vp: HTMLElement, entry: Entry) {
 
 // ── 扫描 DOM ────────────────────────────────────────────
 
-function scan() {
-  // 已有 entry：检查是否还在 DOM / 方向是否变化
+function tryAttach(el: HTMLElement) {
+  if (
+    entries.has(el) ||
+    el.hasAttribute(ATTR) ||
+    el.classList.contains('os-thumb') ||
+    !isScrollable(el)
+  ) {
+    return
+  }
+  attach(el)
+}
+
+/** 在 root 子树内查找可滚动容器并 attach（root 自身也会检查） */
+function scanTree(root: HTMLElement) {
+  tryAttach(root)
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT)
+  let node: Node | null = walker.nextNode()
+  while (node) {
+    tryAttach(node as HTMLElement)
+    node = walker.nextNode()
+  }
+}
+
+/** 核对已有 entry：是否仍在 DOM / 方向是否变化 */
+function reconcileAll() {
   for (const [vp, entry] of entries) {
     if (!document.contains(vp) || !isScrollable(vp)) {
       detach(vp)
@@ -359,22 +382,51 @@ function scan() {
       reconcile(vp, entry)
     }
   }
+}
 
-  // 新元素
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT)
-  let node: Node | null = walker.currentNode
-  while (node) {
-    const el = node as HTMLElement
-    if (
-      el.nodeType === 1 &&
-      !entries.has(el) &&
-      !el.hasAttribute(ATTR) &&
-      !el.classList.contains('os-thumb') &&
-      isScrollable(el)
-    ) {
-      attach(el)
+function scan() {
+  reconcileAll()
+  if (document.body) scanTree(document.body)
+}
+
+/** 祖先链也可能因内容尺寸变化变成可滚动，沿 parent 向上补 attach */
+function tryAttachAncestors(el: HTMLElement) {
+  let cur: HTMLElement | null = el
+  while (cur && cur !== document.documentElement) {
+    if (cur.classList.contains('os-thumb')) {
+      cur = cur.parentElement
+      continue
     }
-    node = walker.nextNode()
+    tryAttach(cur)
+    cur = cur.parentElement
+  }
+}
+
+/**
+ * 增量扫描：只处理 mutation 触及的节点及其子树，避免流式 DOM 更新时
+ * 每次都 TreeWalker 整页 + getComputedStyle。
+ */
+function scanMutations(mutations: MutationRecord[]) {
+  reconcileAll()
+
+  for (const mutation of mutations) {
+    if (mutation.type === 'childList') {
+      // 子节点增减可能让 mutation.target 自身变成可滚动
+      if (mutation.target instanceof HTMLElement) {
+        tryAttachAncestors(mutation.target)
+      }
+      mutation.addedNodes.forEach(node => {
+        if (node instanceof HTMLElement) scanTree(node)
+      })
+      continue
+    }
+
+    if (mutation.type === 'attributes' && mutation.target instanceof HTMLElement) {
+      const el = mutation.target
+      if (el.classList.contains('os-thumb')) continue
+      // class/style 变了：自身与祖先都可能新变成可滚动
+      tryAttachAncestors(el)
+    }
   }
 }
 
@@ -389,37 +441,35 @@ export function initOverlayScrollbars() {
   scan()
 
   let timer: ReturnType<typeof setTimeout> | null = null
-  const debounceScan = () => {
-    if (timer) return
-    timer = setTimeout(() => {
-      timer = null
+  let pendingMutations: MutationRecord[] = []
+
+  const flushScan = () => {
+    timer = null
+    const batch = pendingMutations
+    pendingMutations = []
+    if (batch.length === 0) {
       scan()
-    }, 200)
+      return
+    }
+    scanMutations(batch)
   }
 
-  new MutationObserver(debounceScan).observe(document.body, {
+  const debounceScan = (mutations?: MutationRecord[]) => {
+    if (mutations) pendingMutations.push(...mutations)
+    if (timer) return
+    timer = setTimeout(flushScan, 200)
+  }
+
+  new MutationObserver(mutations => debounceScan(mutations)).observe(document.body, {
     childList: true,
     subtree: true,
     attributes: true,
     attributeFilter: ['style', 'class'],
   })
 
-  window.addEventListener('resize', debounceScan, { passive: true })
+  // resize 时布局全变，走全量 scan
+  window.addEventListener('resize', () => debounceScan(), { passive: true })
 
-  // 嵌套滚动会改变 sibling thumb 相对定位；每帧最多全量刷新一次，避免流式贴底时 N×getBoundingClientRect
-  let globalScrollRaf: number | null = null
-  document.addEventListener(
-    'scroll',
-    () => {
-      if (globalScrollRaf !== null) return
-      globalScrollRaf = requestAnimationFrame(() => {
-        globalScrollRaf = null
-        for (const e of entries.values()) {
-          e.v?.update()
-          e.h?.update()
-        }
-      })
-    },
-    { capture: true, passive: true },
-  )
+  // 每个 entry 已有 scroll 监听更新自身 thumb。
+  // 祖先滚动时，子 vp 与其 parent 同位移，相对定位不变，无需全量刷新所有 entry。
 }
