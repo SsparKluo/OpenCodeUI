@@ -91,7 +91,7 @@ function canAppendLiveMarkdownSuffix(suffix: string): boolean {
   if (!suffix) return false
   // 排除会改 markdown 结构、math/code，或可能形成 autolink 的字符
   // （含 :/@/ 时回退全量 parse，避免流式中链接一直是纯文本）
-  return /^[^\n`*_\[\]()#>|!~\\<$:/@]+$/.test(suffix)
+  return /^[^\n`*_[\]()#>|!~\\<$:/@]+$/.test(suffix)
 }
 
 /** 最后一个 Text 是否安全承接追加（不能在 strong/em/a/code 等行内节点里） */
