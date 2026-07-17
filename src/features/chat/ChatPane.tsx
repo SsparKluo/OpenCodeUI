@@ -980,7 +980,7 @@ export const ChatPane = memo(function ChatPane({
         data-chat-pane-root="true"
         className={
           showCompactShell
-            ? `relative h-full flex flex-col overflow-hidden rounded-lg transition-all duration-200 ${
+            ? `relative h-full flex flex-col overflow-hidden rounded-lg transition-colors duration-200 ${
                 isFocused
                   ? 'ring-1 ring-accent-main-100/60 bg-bg-100'
                   : 'ring-1 ring-border-200/30 bg-bg-100 hover:ring-border-200/50'

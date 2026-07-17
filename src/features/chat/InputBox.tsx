@@ -375,12 +375,23 @@ function InputBoxComponent({
       footerRef.current,
     ].filter((element): element is HTMLElement => !!element)
 
-    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateComposerHeightBudget) : null
+    // 同帧多次 RO/resize 合并为一次高度预算计算，避免布局连环读
+    let budgetRaf: number | null = null
+    const scheduleBudgetUpdate = () => {
+      if (budgetRaf !== null) return
+      budgetRaf = requestAnimationFrame(() => {
+        budgetRaf = null
+        updateComposerHeightBudget()
+      })
+    }
+
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleBudgetUpdate) : null
     observed.forEach(element => observer?.observe(element))
-    window.addEventListener('resize', updateComposerHeightBudget)
+    window.addEventListener('resize', scheduleBudgetUpdate)
     return () => {
       observer?.disconnect()
-      window.removeEventListener('resize', updateComposerHeightBudget)
+      window.removeEventListener('resize', scheduleBudgetUpdate)
+      if (budgetRaf !== null) cancelAnimationFrame(budgetRaf)
     }
   }, [updateComposerHeightBudget])
 

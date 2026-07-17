@@ -876,7 +876,7 @@ const SplitDiffView = memo(function SplitDiffView({
     const leftInner = leftContent.firstElementChild as HTMLElement
     const rightInner = rightContent.firstElementChild as HTMLElement
 
-    const measure = () => {
+    const measureNow = () => {
       if (leftInner) {
         const sw = leftInner.scrollWidth
         if (sw > maxLeftScrollWidthRef.current) {
@@ -897,7 +897,17 @@ const SplitDiffView = memo(function SplitDiffView({
       setRightClientWidth(rightContent.clientWidth)
     }
 
-    measure()
+    // 虚拟行窗口变化时 MutationObserver 会连发，同帧合并为一次布局读
+    let measureRaf: number | null = null
+    const measure = () => {
+      if (measureRaf !== null) return
+      measureRaf = requestAnimationFrame(() => {
+        measureRaf = null
+        measureNow()
+      })
+    }
+
+    measureNow()
     const ro = new ResizeObserver(() => {
       maxLeftScrollWidthRef.current = 0
       maxRightScrollWidthRef.current = 0
@@ -913,6 +923,7 @@ const SplitDiffView = memo(function SplitDiffView({
     return () => {
       ro.disconnect()
       mo.disconnect()
+      if (measureRaf !== null) cancelAnimationFrame(measureRaf)
     }
   }, [displayLines, startIndex, endIndex])
 
@@ -1255,7 +1266,7 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
     if (!content) return
     const inner = content.firstElementChild as HTMLElement
 
-    const measure = () => {
+    const measureNow = () => {
       if (inner) {
         const sw = inner.scrollWidth
         if (sw > maxScrollWidthRef.current) {
@@ -1267,7 +1278,17 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
       setContentClientWidth(content.clientWidth)
     }
 
-    measure()
+    // 虚拟行窗口变化时 MutationObserver 会连发，同帧合并为一次布局读
+    let measureRaf: number | null = null
+    const measure = () => {
+      if (measureRaf !== null) return
+      measureRaf = requestAnimationFrame(() => {
+        measureRaf = null
+        measureNow()
+      })
+    }
+
+    measureNow()
     const ro = new ResizeObserver(() => {
       maxScrollWidthRef.current = 0
       if (inner) inner.style.minWidth = ''
@@ -1279,6 +1300,7 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
     return () => {
       ro.disconnect()
       mo.disconnect()
+      if (measureRaf !== null) cancelAnimationFrame(measureRaf)
     }
   }, [startIndex, endIndex])
 
