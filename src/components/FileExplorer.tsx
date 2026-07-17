@@ -5,6 +5,7 @@
 // ============================================
 
 import { memo, useCallback, useMemo, useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useFileExplorer, type FileTreeNode } from '../hooks'
 import { useVerticalSplitResize } from '../hooks/useVerticalSplitResize'
@@ -41,7 +42,28 @@ import { searchText, searchFiles } from '../api/file'
 import type { FileContent, TextSearchMatch } from '../api/types'
 import { startInternalDrag } from '../lib/internalDragCore'
 import { toAbsolutePath } from '../features/mention'
+import { getDesktopPlatform, isTauri, isTauriMobile } from '../utils/tauri'
 import type { TargetLineRange } from './codeMirrorReadonlyExtensions'
+
+function canRevealInSystemExplorer(): boolean {
+  return isTauri() && !isTauriMobile()
+}
+
+function getRevealInSystemExplorerLabel(t: (key: string) => string): string {
+  switch (getDesktopPlatform()) {
+    case 'windows':
+      return t('fileExplorer.revealInExplorer')
+    case 'macos':
+      return t('fileExplorer.revealInFinder')
+    default:
+      return t('fileExplorer.revealInFileManager')
+  }
+}
+
+async function revealPathInSystemExplorer(absolutePath: string) {
+  const { revealItemInDir } = await import('@tauri-apps/plugin-opener')
+  await revealItemInDir(absolutePath)
+}
 
 // 常量
 const MIN_TREE_HEIGHT = 100
@@ -113,11 +135,15 @@ export const FileExplorer = memo(function FileExplorer({
   const { t } = useTranslation(['components', 'common'])
   const containerRef = useRef<HTMLDivElement>(null)
   const treeRef = useRef<HTMLDivElement>(null)
+  const fileContextMenuRef = useRef<HTMLDivElement>(null)
   const searchRequestIdRef = useRef(0)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<TextSearchMatch[]>([])
   const [fileResults, setFileResults] = useState<string[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
+  const [fileContextMenu, setFileContextMenu] = useState<{ x: number; y: number; absolutePath: string } | null>(null)
+  const canRevealFiles = canRevealInSystemExplorer()
+  const revealInSystemExplorerLabel = useMemo(() => getRevealInSystemExplorerLabel(t), [t])
   const [searchError, setSearchError] = useState<string | null>(null)
   const {
     splitHeight: treeHeight,
@@ -178,6 +204,54 @@ export const FileExplorer = memo(function FileExplorer({
     },
     [toggleExpand, position],
   )
+
+  const resolveAbsolutePath = useCallback(
+    (path: string, absolute?: string) => {
+      if (absolute) return absolute
+      if (!directory) return null
+      return toAbsolutePath(path, directory)
+    },
+    [directory],
+  )
+
+  const handleFileContextMenu = useCallback(
+    (event: React.MouseEvent, path: string, absolute?: string) => {
+      if (!canRevealFiles) return
+      const absolutePath = resolveAbsolutePath(path, absolute)
+      if (!absolutePath) return
+      event.preventDefault()
+      event.stopPropagation()
+      setFileContextMenu({ x: event.clientX, y: event.clientY, absolutePath })
+    },
+    [canRevealFiles, resolveAbsolutePath],
+  )
+
+  const handleRevealInSystemExplorer = useCallback(() => {
+    if (!fileContextMenu) return
+    const absolutePath = fileContextMenu.absolutePath
+    setFileContextMenu(null)
+    void revealPathInSystemExplorer(absolutePath).catch(() => {})
+  }, [fileContextMenu])
+
+  useEffect(() => {
+    if (!fileContextMenu) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (fileContextMenuRef.current && !fileContextMenuRef.current.contains(event.target as Node)) {
+        setFileContextMenu(null)
+      }
+    }
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFileContextMenu(null)
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [fileContextMenu])
 
   // 关闭预览
   const handleClosePreview = useCallback(() => {
@@ -386,6 +460,7 @@ export const FileExplorer = memo(function FileExplorer({
               error={searchError}
               onSelect={handleSearchResultClick}
               onSelectFile={handleFileResultClick}
+              onContextMenuFile={canRevealFiles ? handleFileContextMenu : undefined}
               directory={directory}
             />
           ) : isLoading && tree.length === 0 ? (
@@ -411,12 +486,31 @@ export const FileExplorer = memo(function FileExplorer({
                   expandedPaths={expandedPaths}
                   fileStatus={fileStatus}
                   onClick={handleFileClick}
+                  onContextMenu={canRevealFiles ? handleFileContextMenu : undefined}
                 />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {fileContextMenu &&
+        createPortal(
+          <div
+            ref={fileContextMenuRef}
+            className="fixed z-[9999] bg-bg-100 border border-border-200 rounded-lg shadow-lg p-1 min-w-[160px]"
+            style={{ left: fileContextMenu.x, top: fileContextMenu.y }}
+          >
+            <button
+              type="button"
+              onClick={handleRevealInSystemExplorer}
+              className="w-full px-2.5 py-1.5 text-left text-[length:var(--fs-sm)] text-text-200 hover:bg-bg-200/60 hover:text-text-100 rounded-md transition-colors"
+            >
+              {revealInSystemExplorerLabel}
+            </button>
+          </div>,
+          document.body,
+        )}
 
       {/* Resize Handle - 与标签栏同色 */}
       {showPreview && (
@@ -463,6 +557,7 @@ interface TextSearchResultsProps {
   error: string | null
   onSelect: (match: TextSearchMatch) => void
   onSelectFile: (path: string) => void
+  onContextMenuFile?: (event: React.MouseEvent, path: string, absolute?: string) => void
   directory?: string
 }
 
@@ -473,6 +568,7 @@ const TextSearchResults = memo(function TextSearchResults({
   error,
   onSelect,
   onSelectFile,
+  onContextMenuFile,
   directory,
 }: TextSearchResultsProps) {
   const { t } = useTranslation(['components', 'common'])
@@ -534,6 +630,7 @@ const TextSearchResults = memo(function TextSearchResults({
                 type="button"
                 onPointerDown={e => handlePointerDragStart(e, path)}
                 onClick={() => onSelectFile(path)}
+                onContextMenu={event => onContextMenuFile?.(event, path)}
                 className="w-full px-2 py-1.5 text-left hover:bg-bg-200/50 transition-colors"
               >
                 <div className="flex items-center gap-1.5 min-w-0">
@@ -576,6 +673,7 @@ const TextSearchResults = memo(function TextSearchResults({
                 type="button"
                 onPointerDown={e => handlePointerDragStart(e, path)}
                 onClick={() => onSelect(match)}
+                onContextMenu={event => onContextMenuFile?.(event, path)}
                 className="w-full px-2 py-1.5 text-left hover:bg-bg-200/50 transition-colors"
               >
                 <div className="flex items-center gap-1.5 min-w-0">
@@ -619,6 +717,7 @@ interface FileTreeItemProps {
   expandedPaths: Set<string>
   fileStatus: Map<string, { status: string }>
   onClick: (node: FileTreeNode) => void
+  onContextMenu?: (event: React.MouseEvent, path: string, absolute?: string) => void
 }
 
 const FileTreeItem = memo(function FileTreeItem({
@@ -627,6 +726,7 @@ const FileTreeItem = memo(function FileTreeItem({
   expandedPaths,
   fileStatus,
   onClick,
+  onContextMenu,
 }: FileTreeItemProps) {
   const isExpanded = expandedPaths.has(node.path)
   const isDirectory = node.type === 'directory'
@@ -665,8 +765,10 @@ const FileTreeItem = memo(function FileTreeItem({
   return (
     <div>
       <button
+        type="button"
         onPointerDown={handlePointerDragStart}
         onClick={() => onClick(node)}
+        onContextMenu={event => onContextMenu?.(event, node.path, node.absolute)}
         className={`
           w-full flex items-center gap-1 px-2 py-0.5 text-left cursor-default
           select-none hover:bg-bg-200/50 transition-colors text-[length:var(--fs-sm)]
@@ -719,6 +821,7 @@ const FileTreeItem = memo(function FileTreeItem({
               expandedPaths={expandedPaths}
               fileStatus={fileStatus}
               onClick={onClick}
+              onContextMenu={onContextMenu}
             />
           ))}
         </div>

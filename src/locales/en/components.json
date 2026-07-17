@@ -17,7 +17,10 @@
     "textSearchFailed": "Search failed",
     "binaryFile": "Binary file — preview not available",
     "fit": "Fit",
-    "oneToOne": "1:1"
+    "oneToOne": "1:1",
+    "revealInExplorer": "Reveal in File Explorer",
+    "revealInFinder": "Reveal in Finder",
+    "revealInFileManager": "Reveal in File Manager"
   },
   "terminal": {
     "terminal": "Terminal",

@@ -17,7 +17,10 @@
     "textSearchFailed": "搜索失败",
     "binaryFile": "二进制文件，无法预览",
     "fit": "适应",
-    "oneToOne": "1:1"
+    "oneToOne": "1:1",
+    "revealInExplorer": "在资源管理器中显示",
+    "revealInFinder": "在 Finder 中显示",
+    "revealInFileManager": "在文件管理器中显示"
   },
   "terminal": {
     "terminal": "终端",
