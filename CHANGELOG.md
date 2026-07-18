@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.6.32] - 2026-07-18
+
+- fix(chat): inline loading-history indicator into message stream (127ade3)
+- perf(codeblock): remove useDeferredValue for real-time highlighting (e83dac6)
+- perf(markdown): remove redundant useDeferredValue and cache fullText (1f9b228)
+- feat(terminal): long-press repeat and haptic feedback for mobile extra keys (1f5cce2)
+- fix(chat): clamp mention/slash menu below header shadow (2e77064)
+
 ## [v0.6.31] - 2026-07-17
 
 - fix(chat): keep retry status above input and re-pin on footer height change (77305b0)
