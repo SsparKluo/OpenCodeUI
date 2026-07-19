@@ -14,8 +14,10 @@ import {
   FolderIcon,
   GlobeIcon,
   PlusIcon,
+  NewChatIcon,
   TrashIcon,
   SearchIcon,
+  CloseIcon,
   ChevronDownIcon,
   ListFilterIcon,
   FolderMinusIcon,
@@ -164,6 +166,9 @@ export function SidePanel({
   const recentsSelectionRootRef = useRef<HTMLDivElement>(null)
   const projectToggleRef = useRef<HTMLButtonElement>(null)
   const projectsDropdownRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const pendingOpenProjectsRef = useRef(false)
+  const pendingFocusSearchRef = useRef(false)
   // 批量删除确认弹窗
   const [batchDeleteSessionConfirm, setBatchDeleteSessionConfirm] = useState(false)
   const [batchRemoveProjectConfirm, setBatchRemoveProjectConfirm] = useState(false)
@@ -267,6 +272,24 @@ export function SidePanel({
       projectToggleRef.current?.focus()
     }
   }, [projectsExpanded, showLabels])
+
+  // 收起态点项目/搜索：展开后再执行打开列表或聚焦输入
+  useEffect(() => {
+    if (!showLabels) return
+
+    if (pendingOpenProjectsRef.current) {
+      pendingOpenProjectsRef.current = false
+      setProjectsExpanded(true)
+    }
+
+    if (pendingFocusSearchRef.current) {
+      pendingFocusSearchRef.current = false
+      const frameId = requestAnimationFrame(() => {
+        searchInputRef.current?.focus()
+      })
+      return () => cancelAnimationFrame(frameId)
+    }
+  }, [showLabels])
 
   // Active sessions
   const busySessions = useBusySessions()
@@ -979,16 +1002,16 @@ export function SidePanel({
             <button
               onClick={onToggleSidebar}
               aria-label={isExpanded ? t('sidebar.collapseSidebar') : t('sidebar.expandSidebar')}
-              className="h-8 w-8 flex items-center justify-center rounded-lg text-text-400 hover:text-text-100 hover:bg-bg-200 active:scale-[0.98] transition-all duration-200"
+              className="h-8 w-8 flex items-center justify-center rounded-lg text-text-300 hover:text-text-100 hover:bg-bg-200 active:scale-[0.98] transition-all duration-200"
             >
-              <SidebarIcon size={18} />
+              <SidebarIcon size={16} />
             </button>
           </div>
         )}
       </div>
 
-      {/* ===== Navigation - 图标位置固定 ===== */}
-      <div className="flex flex-col gap-0.5 mx-2">
+      {/* ===== Navigation - 图标位置固定；间距与 Header 面板按钮对齐 ===== */}
+      <div className="flex flex-col gap-0.5 mx-2 -mt-2.5">
         {/* New Chat - 图标始终在 padding-left: 6px 位置，收起时刚好居中 */}
         <button
           type="button"
@@ -1003,7 +1026,7 @@ export function SidePanel({
           title={t('sidebar.newChat')}
         >
           <span className="size-5 flex items-center justify-center shrink-0">
-            <PlusIcon size={16} />
+            <NewChatIcon size={16} />
           </span>
           <span
             className="ml-2 text-[length:var(--fs-base)] whitespace-nowrap transition-opacity duration-300"
@@ -1019,48 +1042,66 @@ export function SidePanel({
           </span>
         </button>
 
-        {/* Project Selector - 只在展开时显示 */}
-        {showLabels && (
-          <button
-            ref={projectToggleRef}
-            type="button"
-            onClick={() => setProjectsExpanded(!projectsExpanded)}
-            aria-expanded={projectsExpanded}
-            className={`h-8 flex items-center rounded-lg active:scale-[0.98] transition-all duration-300 overflow-hidden ${
-              projectsExpanded ? 'bg-bg-200 text-text-100' : 'text-text-300 hover:text-text-100 hover:bg-bg-200'
-            }`}
-            style={{ paddingLeft: 6, paddingRight: 6 }}
-            title={currentProjectLabel}
+        {/* Project Selector - 收起时仅图标，点击展开侧栏并打开列表 */}
+        <button
+          ref={projectToggleRef}
+          type="button"
+          onClick={() => {
+            if (!showLabels) {
+              pendingOpenProjectsRef.current = true
+              onToggleSidebar()
+              return
+            }
+            setProjectsExpanded(!projectsExpanded)
+          }}
+          aria-expanded={showLabels ? projectsExpanded : false}
+          aria-label={currentProjectLabel}
+          className={`h-8 flex items-center rounded-lg active:scale-[0.98] transition-all duration-300 overflow-hidden ${
+            projectsExpanded && showLabels
+              ? 'bg-bg-200 text-text-100'
+              : 'text-text-300 hover:text-text-100 hover:bg-bg-200'
+          }`}
+          style={{
+            width: showLabels ? '100%' : 32,
+            paddingLeft: 6,
+            paddingRight: 6,
+          }}
+          title={currentProjectLabel}
+        >
+          <span className="size-5 flex items-center justify-center shrink-0">
+            {currentProject?.id === 'global' ? (
+              <GlobeIcon size={16} className="text-accent-main-100" />
+            ) : (
+              <FolderIcon size={16} />
+            )}
+          </span>
+          <div
+            className="ml-2 min-w-0 flex-1 text-left text-[length:var(--fs-base)] transition-opacity duration-300"
+            style={{ opacity: showLabels ? 1 : 0 }}
           >
-            <span className="size-5 flex items-center justify-center shrink-0">
-              {currentProject?.id === 'global' ? (
-                <GlobeIcon size={16} className="text-accent-main-100" />
-              ) : (
-                <FolderIcon size={16} />
-              )}
-            </span>
-            <div className="ml-2 min-w-0 flex-1 text-left text-[length:var(--fs-base)]">
-              <div
-                className="block overflow-hidden whitespace-nowrap text-left"
-                style={{
-                  WebkitMaskImage: 'linear-gradient(to right, black 82%, transparent 100%)',
-                  maskImage: 'linear-gradient(to right, black 82%, transparent 100%)',
-                }}
-              >
-                {currentProjectLabel}
-              </div>
+            <div
+              className="block overflow-hidden whitespace-nowrap text-left"
+              style={{
+                WebkitMaskImage: 'linear-gradient(to right, black 82%, transparent 100%)',
+                maskImage: 'linear-gradient(to right, black 82%, transparent 100%)',
+              }}
+            >
+              {currentProjectLabel}
             </div>
-            <ChevronDownIcon
-              size={14}
-              className={`ml-auto text-text-400 transition-transform duration-200 shrink-0 ${projectsExpanded ? '' : '-rotate-90'}`}
-            />
-          </button>
-        )}
+          </div>
+          <ChevronDownIcon
+            size={14}
+            className={`ml-auto text-text-400 transition-all duration-200 shrink-0 ${
+              projectsExpanded && showLabels ? '' : '-rotate-90'
+            }`}
+            style={{ opacity: showLabels ? 1 : 0 }}
+          />
+        </button>
 
         {/* Projects Dropdown */}
         <div
           ref={projectsDropdownRef}
-          className="overflow-hidden pb-px transition-[max-height,opacity,margin] duration-300 ease-out"
+          className="overflow-hidden transition-[max-height,opacity,margin] duration-300 ease-out"
           style={{
             maxHeight: showLabels && projectsExpanded ? 304 : 0,
             opacity: showLabels && projectsExpanded ? 1 : 0,
@@ -1154,6 +1195,53 @@ export function SidePanel({
             </div>
           </div>
         </div>
+
+        {/* Search — 与上方导航同列 gap-0.5；收起时图标，展开时输入框 */}
+        {showLabels ? (
+          <div className="relative w-full">
+            <span className="pointer-events-none absolute left-[6px] top-1/2 -translate-y-1/2 size-5 flex items-center justify-center text-text-300">
+              <SearchIcon size={16} />
+            </span>
+            <input
+              ref={searchInputRef}
+              type="text"
+              name="sidebar-chat-search"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={t('sidebar.searchChats')}
+              aria-label={t('sidebar.searchChats')}
+              autoComplete="off"
+              spellCheck={false}
+              className="h-8 w-full appearance-none rounded-lg border-0 bg-transparent pl-[34px] pr-[26px] text-[length:var(--fs-base)] text-text-100 shadow-none outline-none ring-0 placeholder:text-text-300 transition-shadow focus-visible:ring-1 focus-visible:ring-accent-main-100/30"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-[6px] top-1/2 flex size-[14px] -translate-y-1/2 items-center justify-center text-text-400 hover:text-text-100"
+                aria-label={t('sidebar.clearSearch')}
+              >
+                <CloseIcon size={14} />
+              </button>
+            )}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              pendingFocusSearchRef.current = true
+              onToggleSidebar()
+            }}
+            aria-label={t('sidebar.searchChats')}
+            className="h-8 flex items-center rounded-lg text-text-300 hover:text-text-100 hover:bg-bg-200 active:scale-[0.98] transition-all duration-300 overflow-hidden"
+            style={{ width: 32, paddingLeft: 6, paddingRight: 6 }}
+            title={t('sidebar.searchChats')}
+          >
+            <span className="size-5 flex items-center justify-center shrink-0">
+              <SearchIcon size={16} />
+            </span>
+          </button>
+        )}
       </div>
 
       {/* ===== Main Content ===== */}
@@ -1164,33 +1252,6 @@ export function SidePanel({
           visibility: showLabels ? 'visible' : 'hidden',
         }}
       >
-        {/* Search */}
-        <div className="px-3 pt-1.5 pb-2">
-          <div className="relative group">
-            <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-400 w-3.5 h-3.5 group-focus-within:text-accent-main-100 transition-colors" />
-            <input
-              type="text"
-              name="sidebar-chat-search"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={t('sidebar.searchChats')}
-              aria-label={t('sidebar.searchChats')}
-              autoComplete="off"
-              className="w-full bg-bg-200/40 hover:bg-bg-200/60 focus:bg-bg-000 border border-transparent focus:border-border-200 rounded-lg py-1.5 pl-[30px] pr-8 text-[length:var(--fs-sm)] text-text-100 placeholder:text-text-400/70 focus-visible:ring-1 focus-visible:ring-border-200 focus-visible:ring-inset transition-all"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-400 hover:text-text-100 text-[length:var(--fs-base)]"
-                aria-label={t('sidebar.clearSearch')}
-              >
-                ×
-              </button>
-            )}
-          </div>
-        </div>
-
         {/* Tab Bar: Recents / Active */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="flex items-center mx-2 gap-1 shrink-0">

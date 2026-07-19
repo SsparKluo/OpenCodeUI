@@ -224,8 +224,8 @@ export function SidebarFooter({
           <div className="relative p-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[length:var(--fs-sm)] font-medium text-text-200">{t('sidebar.contextUsage')}</span>
-              <div className="flex items-center gap-2">
-                <span className="text-[length:var(--fs-sm)] font-mono text-text-400">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-[length:var(--fs-sm)] leading-none text-text-400 tabular-nums">
                   {Math.round(stats.contextPercent)}%
                 </span>
                 <button
@@ -234,13 +234,7 @@ export function SidebarFooter({
                     closeMenu()
                     setContextDialogOpen(true)
                   }}
-                  className="
-                shrink-0 h-6 px-2
-                rounded-md border border-border-200/60
-                bg-bg-200/70 hover:bg-bg-300
-                text-[length:var(--fs-xxs)] font-medium text-text-200
-                transition-colors
-              "
+                  className="shrink-0 text-[length:var(--fs-sm)] leading-none text-text-400 hover:text-text-100 transition-colors"
                 >
                   {t('sidebar.viewDetails')}
                 </button>
