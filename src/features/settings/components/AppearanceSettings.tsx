@@ -5,6 +5,7 @@ import { DropdownMenu } from '../../../components/ui/DropdownMenu'
 import { MenuItem } from '../../../components/ui/MenuItem'
 import { SunIcon, MoonIcon, SystemIcon, CheckIcon, GlobeIcon, UndoIcon } from '../../../components/Icons'
 import { settingsFieldAreaClass, settingsFieldClass, Toggle, SegmentedControl, SettingRow, SettingField, SettingsSection } from './SettingsUI'
+import { CodeBlockThemeSettings } from './CodeBlockThemeSettings'
 import { useTheme } from '../../../hooks'
 import { getThemePreset } from '../../../themes'
 import type { CustomCSSSnippet } from '../../../store/themeStore'
@@ -851,6 +852,8 @@ export function AppearanceSettings() {
 
         <LanguagePicker current={i18n.language} onSelect={lang => void i18n.changeLanguage(lang)} t={t} />
       </SettingsSection>
+
+      <CodeBlockThemeSettings />
     </div>
   )
 }

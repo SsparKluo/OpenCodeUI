@@ -12,6 +12,16 @@ describe('getShikiTheme', () => {
     expect(getShikiTheme(true).key).toBe('github-dark-default')
     expect(getShikiTheme(false).key).toBe('github-light-default')
   })
+
+  it('respects user-configured light/dark themes', () => {
+    expect(getShikiTheme(false, 'one-light', 'one-dark-pro').theme).toBe('one-light')
+    expect(getShikiTheme(true, 'one-light', 'one-dark-pro').theme).toBe('one-dark-pro')
+  })
+
+  it('falls back to GitHub Default when given an unknown theme id', () => {
+    expect(getShikiTheme(false, 'not-a-real-theme', 'also-fake').theme).toBe('github-light-default')
+    expect(getShikiTheme(true, 'not-a-real-theme', 'also-fake').theme).toBe('github-dark-default')
+  })
 })
 
 describe('Shiki language metadata', () => {

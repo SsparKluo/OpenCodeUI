@@ -238,6 +238,14 @@ export function useTheme() {
     themeStore.setProcessCollapseEnabled(enabled)
   }, [])
 
+  const setCodeBlockThemeLight = useCallback((id: string) => {
+    themeStore.setCodeBlockThemeLight(id)
+  }, [])
+
+  const setCodeBlockThemeDark = useCallback((id: string) => {
+    themeStore.setCodeBlockThemeDark(id)
+  }, [])
+
   return {
     // 日夜模式（向后兼容）
     mode: state.colorMode,
@@ -352,5 +360,11 @@ export function useTheme() {
     // 过程折叠
     processCollapseEnabled: state.processCollapseEnabled,
     setProcessCollapseEnabled,
+
+    // 代码块主题（Shiki）
+    codeBlockThemeLight: state.codeBlockThemeLight,
+    codeBlockThemeDark: state.codeBlockThemeDark,
+    setCodeBlockThemeLight,
+    setCodeBlockThemeDark,
   }
 }

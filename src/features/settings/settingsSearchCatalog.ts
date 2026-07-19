@@ -93,6 +93,9 @@ export const SETTINGS_SEARCH_DEFINITIONS: SettingsSearchDefinition[] = [
     'appearance.uiFontScale',
     'appearance.codeFontScale',
     'appearance.language',
+    'appearance.codeBlockThemes',
+    'appearance.codeBlockThemeLight',
+    'appearance.codeBlockThemeDark',
   ]),
   {
     tab: 'notifications',

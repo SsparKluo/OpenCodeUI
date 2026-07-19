@@ -10,6 +10,11 @@
 
 import { getThemePreset, themeColorsToCSSVars, builtinThemes, DEFAULT_THEME_ID } from '../themes'
 import type { ThemePreset, ThemeColors } from '../themes'
+import {
+  DEFAULT_CODE_BLOCK_THEME_DARK,
+  DEFAULT_CODE_BLOCK_THEME_LIGHT,
+  normalizeCodeBlockTheme,
+} from '../lib/codeBlockThemes'
 
 // ============================================
 // Color Conversion Utility
@@ -194,6 +199,10 @@ export interface ThemeState {
   desktopCollapsedInputDock: boolean
   /** 过程折叠：用户发送后显示 Working 计时，结束后收成折叠块，最终回答留在外面 */
   processCollapseEnabled: boolean
+  /** 代码块语法高亮主题（亮色模式），Shiki theme id */
+  codeBlockThemeLight: string
+  /** 代码块语法高亮主题（暗色模式），Shiki theme id */
+  codeBlockThemeDark: string
 }
 
 export type ThemeBackup = ThemeState
@@ -230,6 +239,8 @@ const STORAGE_KEY_OUTLINE_CURRENT_HIGHLIGHT = 'outline-current-highlight'
 const STORAGE_KEY_ACTIONS_ON_LATEST_ASSISTANT_ONLY = 'actions-on-latest-assistant-only'
 const STORAGE_KEY_DESKTOP_COLLAPSED_INPUT_DOCK = 'desktop-collapsed-input-dock'
 const STORAGE_KEY_PROCESS_COLLAPSE_ENABLED = 'process-collapse-enabled'
+const STORAGE_KEY_CODE_BLOCK_THEME_LIGHT = 'code-block-theme-light'
+const STORAGE_KEY_CODE_BLOCK_THEME_DARK = 'code-block-theme-dark'
 
 // ============================================
 // DOM Style Element IDs
@@ -377,6 +388,15 @@ class ThemeStore {
         ? DEFAULT_PROCESS_COLLAPSE_ENABLED
         : savedProcessCollapseEnabled === 'true'
 
+    const codeBlockThemeLight = normalizeCodeBlockTheme(
+      localStorage.getItem(STORAGE_KEY_CODE_BLOCK_THEME_LIGHT) || DEFAULT_CODE_BLOCK_THEME_LIGHT,
+      DEFAULT_CODE_BLOCK_THEME_LIGHT,
+    )
+    const codeBlockThemeDark = normalizeCodeBlockTheme(
+      localStorage.getItem(STORAGE_KEY_CODE_BLOCK_THEME_DARK) || DEFAULT_CODE_BLOCK_THEME_DARK,
+      DEFAULT_CODE_BLOCK_THEME_DARK,
+    )
+
     this.state = {
       presetId: normalizedPreset,
       colorMode: savedMode,
@@ -406,6 +426,8 @@ class ThemeStore {
       actionsOnLatestAssistantOnly,
       desktopCollapsedInputDock,
       processCollapseEnabled,
+      codeBlockThemeLight,
+      codeBlockThemeDark,
     }
   }
 
@@ -501,6 +523,14 @@ class ThemeStore {
 
   get processCollapseEnabled() {
     return this.state.processCollapseEnabled
+  }
+
+  get codeBlockThemeLight() {
+    return this.state.codeBlockThemeLight
+  }
+
+  get codeBlockThemeDark() {
+    return this.state.codeBlockThemeDark
   }
 
   /** 获取当前主题预设（内置主题返回对象，自定义返回 undefined） */
@@ -804,6 +834,22 @@ class ThemeStore {
     this.emit()
   }
 
+  setCodeBlockThemeLight(id: string) {
+    const next = normalizeCodeBlockTheme(id, DEFAULT_CODE_BLOCK_THEME_LIGHT)
+    if (this.state.codeBlockThemeLight === next) return
+    this.state = { ...this.state, codeBlockThemeLight: next }
+    localStorage.setItem(STORAGE_KEY_CODE_BLOCK_THEME_LIGHT, next)
+    this.emit()
+  }
+
+  setCodeBlockThemeDark(id: string) {
+    const next = normalizeCodeBlockTheme(id, DEFAULT_CODE_BLOCK_THEME_DARK)
+    if (this.state.codeBlockThemeDark === next) return
+    this.state = { ...this.state, codeBlockThemeDark: next }
+    localStorage.setItem(STORAGE_KEY_CODE_BLOCK_THEME_DARK, next)
+    this.emit()
+  }
+
   // ---- Theme Application ----
 
   /** 初始化：应用当前主题到 DOM */
@@ -1063,6 +1109,14 @@ function normalizeThemeBackup(raw: unknown): ThemeBackup {
       typeof parsed?.processCollapseEnabled === 'boolean'
         ? parsed.processCollapseEnabled
         : DEFAULT_PROCESS_COLLAPSE_ENABLED,
+    codeBlockThemeLight: normalizeCodeBlockTheme(
+      typeof parsed?.codeBlockThemeLight === 'string' ? parsed.codeBlockThemeLight : DEFAULT_CODE_BLOCK_THEME_LIGHT,
+      DEFAULT_CODE_BLOCK_THEME_LIGHT,
+    ),
+    codeBlockThemeDark: normalizeCodeBlockTheme(
+      typeof parsed?.codeBlockThemeDark === 'string' ? parsed.codeBlockThemeDark : DEFAULT_CODE_BLOCK_THEME_DARK,
+      DEFAULT_CODE_BLOCK_THEME_DARK,
+    ),
   }
 }
 
@@ -1112,4 +1166,6 @@ export function importThemeBackup(raw: unknown): void {
   )
   localStorage.setItem(STORAGE_KEY_DESKTOP_COLLAPSED_INPUT_DOCK, String(backup.desktopCollapsedInputDock))
   localStorage.setItem(STORAGE_KEY_PROCESS_COLLAPSE_ENABLED, String(backup.processCollapseEnabled))
+  localStorage.setItem(STORAGE_KEY_CODE_BLOCK_THEME_LIGHT, backup.codeBlockThemeLight)
+  localStorage.setItem(STORAGE_KEY_CODE_BLOCK_THEME_DARK, backup.codeBlockThemeDark)
 }

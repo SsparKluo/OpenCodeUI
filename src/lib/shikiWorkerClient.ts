@@ -1,6 +1,11 @@
 import type { BundledTheme } from 'shiki/themes'
 import type { WorkerRequest, WorkerResponse, WorkerToken } from '../workers/shikiWorker'
 import type { HighlightTokens } from './highlightTypes'
+import {
+  DEFAULT_CODE_BLOCK_THEME_DARK,
+  DEFAULT_CODE_BLOCK_THEME_LIGHT,
+  normalizeCodeBlockTheme,
+} from './codeBlockThemes'
 
 type PendingRequest = {
   resolve: (response: WorkerResponse) => void
@@ -73,7 +78,18 @@ export function ensureShikiWorkerReady(): Promise<void> {
     workerReadyPromiseResolve = resolve
     workerReadyPromiseReject = reject
   })
-  getWorker().postMessage({ type: 'init', themes: ['github-dark-default', 'github-light-default'] } satisfies WorkerRequest)
+  // 预加载用户当前选择的主题；其他主题在第一次 highlight 时 lazy load。
+  // 用 localStorage 直接读避免循环依赖（themeStore 也会反向引用此模块树）。
+  const light = normalizeCodeBlockTheme(
+    typeof localStorage !== 'undefined' && localStorage.getItem('code-block-theme-light') || DEFAULT_CODE_BLOCK_THEME_LIGHT,
+    DEFAULT_CODE_BLOCK_THEME_LIGHT,
+  )
+  const dark = normalizeCodeBlockTheme(
+    typeof localStorage !== 'undefined' && localStorage.getItem('code-block-theme-dark') || DEFAULT_CODE_BLOCK_THEME_DARK,
+    DEFAULT_CODE_BLOCK_THEME_DARK,
+  )
+  const themes = Array.from(new Set<BundledTheme>([light, dark]))
+  getWorker().postMessage({ type: 'init', themes } satisfies WorkerRequest)
   return workerReady
 }
 
