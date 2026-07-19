@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   AlertCircleIcon,
@@ -17,6 +17,7 @@ import {
   CogIcon,
 } from '../../../components/Icons'
 import { Dialog } from '../../../components/ui/Dialog'
+import { SettingsSearch } from '../SettingsSearch'
 import { getConfig, getGlobalConfig, getProviderConfigs, listAvailableShells, updateGlobalConfig } from '../../../api'
 import type { Config } from '../../../types/api/config'
 import { useCurrentDirectory, useIsMobile } from '../../../hooks'
@@ -25,6 +26,7 @@ import { validateConfig, validationDrillTargetForError, type ValidationDrillTarg
 import { ValidationDrillTargetContext } from './configEditorDrillState'
 import { DraftErrorContext, DraftNavigationContext, JsonDraftErrorContext } from './configEditorJsonDraft'
 import { SECTION_IDS, SECTION_META } from './configEditorMeta'
+import { buildConfigEditorSearchItems, type ConfigEditorSearchItem } from './configEditorSearch'
 import { SectionRouter } from './configEditorSections'
 import type { Choice, JsonRecord, SectionID } from './configEditorTypes'
 import { clone, createMergePatch, getObject, isRecord, sameValue, tx } from './configEditorUtils'
@@ -47,6 +49,13 @@ const CONFIG_TAB_ICONS: Record<SectionID, React.ReactNode> = {
   compatibility: <QuestionIcon size={15} />,
   advanced: <CogIcon size={15} />,
 }
+
+const CONFIG_SECTION_GROUPS: { en: string; zh: string; sections: SectionID[] }[] = [
+  { en: 'Core', zh: '核心', sections: ['general', 'server'] },
+  { en: 'Extensions', zh: '扩展', sections: ['commands', 'skills', 'plugins', 'providers', 'agents', 'mcp'] },
+  { en: 'Tools', zh: '工具', sections: ['permissions', 'formatters', 'lsp'] },
+  { en: 'Advanced', zh: '高级', sections: ['attachments', 'runtime', 'experimental', 'compatibility', 'advanced'] },
+]
 
 function ConfigEditorDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { t, i18n } = useTranslation('settings')
@@ -72,8 +81,12 @@ function ConfigEditorDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
   const loadRequestRef = useRef(0)
   const saveRequestRef = useRef(0)
   const scrollRef = useRef<HTMLElement>(null)
+  const searchHighlightFrameRef = useRef<number | null>(null)
+  const searchHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const dirty = !sameValue(config, original)
   const busy = loading || validating || saving
+  const deferredConfig = useDeferredValue(config)
+  const searchItems = useMemo(() => buildConfigEditorSearchItems(deferredConfig as JsonRecord, lang), [deferredConfig, lang])
 
   const reportJsonDraftError = useCallback((id: string, invalid: boolean) => {
     setJsonDraftErrors(prev => {
@@ -199,6 +212,27 @@ function ConfigEditorDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
     }
   }, [isOpen, load])
 
+  useEffect(() => {
+    if (isOpen) return
+    if (searchHighlightFrameRef.current !== null) {
+      cancelAnimationFrame(searchHighlightFrameRef.current)
+      searchHighlightFrameRef.current = null
+    }
+    if (searchHighlightTimerRef.current) {
+      clearTimeout(searchHighlightTimerRef.current)
+      searchHighlightTimerRef.current = null
+    }
+    scrollRef.current?.querySelector('.settings-search-highlight')?.classList.remove('settings-search-highlight')
+  }, [isOpen])
+
+  useEffect(
+    () => () => {
+      if (searchHighlightFrameRef.current !== null) cancelAnimationFrame(searchHighlightFrameRef.current)
+      if (searchHighlightTimerRef.current) clearTimeout(searchHighlightTimerRef.current)
+    },
+    [],
+  )
+
   const save = async () => {
     const request = ++saveRequestRef.current
     setError(null)
@@ -277,6 +311,63 @@ function ConfigEditorDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
     setValidationDrillTarget({ ...target, key: `${error.path}:${Date.now()}` })
   }
 
+  const openSearchItem = (item: ConfigEditorSearchItem) => {
+    if (!canNavigate()) return false
+    setSection(item.section)
+    setValidationDrillTarget({
+      section: item.section,
+      stack: item.stack,
+      key: `search:${item.id}:${Date.now()}`,
+    })
+    if (searchHighlightFrameRef.current !== null) cancelAnimationFrame(searchHighlightFrameRef.current)
+    if (searchHighlightTimerRef.current) clearTimeout(searchHighlightTimerRef.current)
+
+    searchHighlightFrameRef.current = requestAnimationFrame(() => {
+      searchHighlightFrameRef.current = requestAnimationFrame(() => {
+        searchHighlightFrameRef.current = null
+        const fieldTargets = Array.from(scrollRef.current?.querySelectorAll<HTMLElement>('[data-config-field]') ?? [])
+        const matchingFields = item.fieldKey
+          ? fieldTargets.filter(candidate => candidate.dataset.configField === item.fieldKey)
+          : []
+        const fieldTarget = matchingFields[matchingFields.length - 1]
+        const target = fieldTarget ?? scrollRef.current?.querySelector<HTMLElement>(`[data-config-section="${item.section}"]`)
+        if (!target) return
+
+        scrollRef.current?.querySelector('.settings-search-highlight')?.classList.remove('settings-search-highlight')
+        target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        target.classList.add('settings-search-highlight')
+        if (fieldTarget) {
+          const focusTarget = Array.from(
+            fieldTarget.querySelectorAll<HTMLElement>(
+              'button:not(:disabled):not([tabindex="-1"]), input:not(:disabled):not([type="hidden"]):not([tabindex="-1"]), select:not(:disabled):not([tabindex="-1"]), textarea:not(:disabled):not([tabindex="-1"])',
+            ),
+          ).find(candidate => !candidate.closest('[hidden], .hidden, [aria-hidden="true"]'))
+          if (focusTarget) focusTarget.focus({ preventScroll: true })
+        }
+        if (!fieldTarget || !target.contains(document.activeElement)) {
+          target.tabIndex = -1
+          target.focus({ preventScroll: true })
+          target.addEventListener('blur', () => target.removeAttribute('tabindex'), { once: true })
+        }
+        searchHighlightTimerRef.current = setTimeout(() => {
+          target.classList.remove('settings-search-highlight')
+          searchHighlightTimerRef.current = null
+        }, 1800)
+      })
+    })
+    return true
+  }
+
+  const configSearch = (
+    <SettingsSearch
+      items={searchItems}
+      placeholder={t('config.searchPlaceholder')}
+      clearLabel={t('config.clearSearch')}
+      noResultsLabel={t('config.noResults')}
+      onSelect={openSearchItem}
+    />
+  )
+
   const statusBanner = (
     <>
       {error && (
@@ -354,6 +445,7 @@ function ConfigEditorDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
               <ValidationDrillTargetContext.Provider value={validationDrillTarget}>
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="shrink-0 pt-2">
+                <div className="px-3 pb-2">{configSearch}</div>
                 <div
                   role="tablist"
                   aria-label={t('config.editorTitle')}
@@ -456,34 +548,47 @@ function ConfigEditorDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
             </button>
 
             <nav
-              role="tablist"
-              aria-orientation="vertical"
               aria-label={t('config.editorTitle')}
-              onKeyDown={handleSectionKeyDown}
               className="flex min-h-0 w-[204px] shrink-0 flex-col pb-3 pl-6 pr-3 pt-10 xl:w-[228px] xl:pl-7"
             >
-              <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pb-2 scrollbar-none">
-                {SECTION_IDS.map(id => {
-                  const active = section === id
-                  return (
-                    <button
-                      key={id}
-                      id={`config-tab-${id}`}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      aria-controls={`config-panel-${id}`}
-                      tabIndex={active ? 0 : -1}
-                      onClick={() => switchSection(id)}
-                        className={`flex min-h-8 w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[length:var(--fs-md)] font-medium transition-colors ${
-                        active ? 'bg-bg-200/70 text-text-100' : 'text-text-300 hover:bg-bg-200/40 hover:text-text-100'
-                      }`}
-                    >
-                      <span className={active ? 'text-accent-main-100' : 'text-text-400'}>{CONFIG_TAB_ICONS[id]}</span>
-                      <span className="truncate">{tx(SECTION_META[id].en, SECTION_META[id].zh, lang)}</span>
-                    </button>
-                  )
-                })}
+              <div className="mb-3 shrink-0">{configSearch}</div>
+              <div
+                role="tablist"
+                aria-orientation="vertical"
+                aria-label={t('config.editorTitle')}
+                onKeyDown={handleSectionKeyDown}
+                className="min-h-0 flex-1 space-y-3.5 overflow-y-auto pb-2 scrollbar-none"
+              >
+                {CONFIG_SECTION_GROUPS.map(group => (
+                  <div key={group.en}>
+                    <div className="mb-1.5 px-2.5 text-[length:var(--fs-xxs)] font-semibold uppercase tracking-wider text-text-400/75">
+                      {tx(group.en, group.zh, lang)}
+                    </div>
+                    <div className="space-y-0.5">
+                      {group.sections.map(id => {
+                        const active = section === id
+                        return (
+                          <button
+                            key={id}
+                            id={`config-tab-${id}`}
+                            type="button"
+                            role="tab"
+                            aria-selected={active}
+                            aria-controls={`config-panel-${id}`}
+                            tabIndex={active ? 0 : -1}
+                            onClick={() => switchSection(id)}
+                            className={`flex min-h-8 w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[length:var(--fs-md)] font-medium transition-colors ${
+                              active ? 'bg-bg-200/70 text-text-100' : 'text-text-300 hover:bg-bg-200/40 hover:text-text-100'
+                            }`}
+                          >
+                            <span className={active ? 'text-accent-main-100' : 'text-text-400'}>{CONFIG_TAB_ICONS[id]}</span>
+                            <span className="truncate">{tx(SECTION_META[id].en, SECTION_META[id].zh, lang)}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </nav>
 

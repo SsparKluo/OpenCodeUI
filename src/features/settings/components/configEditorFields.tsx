@@ -91,27 +91,31 @@ function FieldRenderer({
   if (field.drill) {
     const d = field.drill
     return (
-      <DrillRow
-        label={field.label}
-        desc={field.desc}
-        badge={field.badge}
-        preview={d.preview}
-        onClick={() => onEnter(field)}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-      />
+      <div data-config-field={field.key}>
+        <DrillRow
+          label={field.label}
+          desc={field.desc}
+          badge={field.badge}
+          preview={d.preview}
+          onClick={() => onEnter(field)}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+        />
+      </div>
     )
   }
   return (
-    <FieldRow
-      label={field.label}
-      desc={field.desc}
-      badge={field.badge}
-      block={field.block}
-      control={field.control}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-    />
+    <div data-config-field={field.key}>
+      <FieldRow
+        label={field.label}
+        desc={field.desc}
+        badge={field.badge}
+        block={field.block}
+        control={field.control}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+      />
+    </div>
   )
 }
 
@@ -247,7 +251,13 @@ export function DrillFields({ fields, isConfigured, lang }: { fields: FieldDef[]
   const { activeChildId, enter, depth } = useDrillContainer()
   if (activeChildId) {
     const active = fields.find(field => field.drill && field.key === activeChildId)
-    if (active?.drill) return <DrillChild depth={depth}>{active.drill.render()}</DrillChild>
+    if (active?.drill) {
+      return (
+        <DrillChild depth={depth}>
+          <div data-config-field={active.key}>{active.drill.render()}</div>
+        </DrillChild>
+      )
+    }
   }
   return (
     <GroupedFields
@@ -278,7 +288,7 @@ export function SectionShell({ id, lang, drillKey, children }: { id: SectionID; 
   const title = tx(meta.en, meta.zh, lang)
   const description = tx(meta.descEn, meta.descZh, lang)
   return (
-    <section className="min-w-0">
+    <section data-config-section={id} className="min-w-0">
       <Drill rootTitle={title} rootKey={drillKey ?? id} targetKey={activeTarget?.key} targetStack={activeTarget?.stack}>
         <SectionHeading title={title} description={description} />
         {children}

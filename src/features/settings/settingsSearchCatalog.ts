@@ -8,11 +8,16 @@ export interface SettingsSearchDefinition {
   contextKey?: string
 }
 
-export interface SettingsSearchItem {
+export interface SearchMenuItem {
   id: string
-  tab: SettingsTab
   label: string
   tabLabel: string
+  description?: string
+  searchText?: string
+}
+
+export interface SettingsSearchItem extends SearchMenuItem {
+  tab: SettingsTab
   targetLabel: string
   fallbackLabel?: string
   targetContext?: string
@@ -173,7 +178,7 @@ function normalizeSearchText(value: string) {
   return value.trim().toLocaleLowerCase().replace(/\s+/g, ' ')
 }
 
-export function filterSettingsSearchItems(items: SettingsSearchItem[], query: string) {
+export function filterSettingsSearchItems<T extends SearchMenuItem>(items: T[], query: string): T[] {
   const normalizedQuery = normalizeSearchText(query)
   if (!normalizedQuery) return []
 
@@ -181,7 +186,9 @@ export function filterSettingsSearchItems(items: SettingsSearchItem[], query: st
     .map((item, index) => {
       const label = normalizeSearchText(item.label)
       const tabLabel = normalizeSearchText(item.tabLabel)
-      const rank = label === normalizedQuery ? 0 : label.startsWith(normalizedQuery) ? 1 : label.includes(normalizedQuery) ? 2 : tabLabel.includes(normalizedQuery) ? 3 : -1
+      const description = normalizeSearchText(item.description ?? '')
+      const extra = normalizeSearchText(item.searchText ?? '')
+      const rank = label === normalizedQuery ? 0 : label.startsWith(normalizedQuery) ? 1 : label.includes(normalizedQuery) ? 2 : tabLabel.includes(normalizedQuery) ? 3 : description.includes(normalizedQuery) ? 4 : extra.includes(normalizedQuery) ? 5 : -1
       return { item, index, rank }
     })
     .filter(result => result.rank >= 0)

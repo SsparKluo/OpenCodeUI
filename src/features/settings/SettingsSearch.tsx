@@ -1,29 +1,29 @@
-import { useMemo, useRef, useState } from 'react'
+import { useId, useMemo, useRef, useState } from 'react'
 import { CloseIcon, SearchIcon } from '../../components/Icons'
-import { filterSettingsSearchItems, type SettingsSearchItem } from './settingsSearchCatalog'
+import { filterSettingsSearchItems, type SearchMenuItem } from './settingsSearchCatalog'
 
-interface SettingsSearchProps {
-  items: SettingsSearchItem[]
+interface SettingsSearchProps<T extends SearchMenuItem> {
+  items: T[]
   placeholder: string
   clearLabel: string
   noResultsLabel: string
-  onSelect: (item: SettingsSearchItem) => void
+  onSelect: (item: T) => boolean | void
 }
 
-export function SettingsSearch({ items, placeholder, clearLabel, noResultsLabel, onSelect }: SettingsSearchProps) {
+export function SettingsSearch<T extends SearchMenuItem>({ items, placeholder, clearLabel, noResultsLabel, onSelect }: SettingsSearchProps<T>) {
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const [hasFocus, setHasFocus] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const results = useMemo(() => filterSettingsSearchItems(items, query).slice(0, 10), [items, query])
   const open = hasFocus && query.trim().length > 0
-  const listboxId = 'settings-search-results'
+  const listboxId = useId()
 
-  const select = (item: SettingsSearchItem) => {
+  const select = (item: T) => {
+    if (onSelect(item) === false) return
     setQuery('')
     setActiveIndex(0)
     inputRef.current?.blur()
-    onSelect(item)
   }
 
   return (
@@ -54,7 +54,7 @@ export function SettingsSearch({ items, placeholder, clearLabel, noResultsLabel,
         aria-label={placeholder}
         aria-expanded={open}
         aria-controls={listboxId}
-        aria-activedescendant={open && results.length > 0 ? `settings-search-result-${activeIndex}` : undefined}
+        aria-activedescendant={open && results.length > 0 ? `${listboxId}-result-${activeIndex}` : undefined}
         autoComplete="off"
         spellCheck={false}
         value={query}
@@ -107,7 +107,7 @@ export function SettingsSearch({ items, placeholder, clearLabel, noResultsLabel,
             results.map((item, index) => (
               <button
                 key={item.id}
-                id={`settings-search-result-${index}`}
+                id={`${listboxId}-result-${index}`}
                 type="button"
                 role="option"
                 tabIndex={-1}
@@ -119,7 +119,14 @@ export function SettingsSearch({ items, placeholder, clearLabel, noResultsLabel,
                   index === activeIndex ? 'bg-bg-200/80' : 'hover:bg-bg-200/50'
                 }`}
               >
-                <span className="min-w-0 truncate text-[length:var(--fs-sm)] text-text-100">{item.label}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[length:var(--fs-sm)] text-text-100">{item.label}</span>
+                  {item.description && (
+                    <span className="mt-0.5 block truncate font-mono text-[length:var(--fs-xs)] text-text-400">
+                      {item.description}
+                    </span>
+                  )}
+                </span>
                 <span className="max-w-[48%] shrink-0 truncate text-[length:var(--fs-xs)] text-text-400" title={item.tabLabel}>
                   {item.tabLabel}
                 </span>
