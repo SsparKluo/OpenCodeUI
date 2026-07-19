@@ -1023,8 +1023,10 @@ export const githubTheme: ThemePreset = {
 // One 主题 - Atom One Dark / Light
 // ============================================
 // 颜色来源：base16 one-light-scheme + onedark (verbatim base00–base0F)
-// - Light #fafafa 底 + 蓝 #4078f2，fg #383a42
-// - Dark  #282c34 底 + 蓝 #61afef，fg #abb2bf
+// - Light #fafafa 底，accent = base0B string green #50a14f（也是 inline code 色），fg #383a42
+// - Dark  #282c34 底，accent = base0B string green #98c379，fg #abb2bf
+// 注：OpenCodeUI 把 brand 与 inline code 都绑在 accent.main100 上，所以选了 Atom
+// 最具辨识度的 string green 当 brand；secondary 退回 base0D blue（function hue）。
 
 const oneLight: ThemeColors = {
   background: {
@@ -1044,11 +1046,11 @@ const oneLight: ThemeColors = {
     text600: '230 3% 90%',
   },
   accent: {
-    brand: '221 87% 60%', // base0D #4078f2
-    main000: '221 85% 55%',
-    main100: '221 87% 60%',
-    main200: '221 90% 67%',
-    secondary100: '301 63% 40%', // base0E #a626a4
+    brand: '119 34% 47%', // base0B #50a14f (string green)
+    main000: '119 35% 38%',
+    main100: '119 34% 47%',
+    main200: '119 38% 55%',
+    secondary100: '221 87% 60%', // base0D #4078f2 (function blue)
   },
   semantic: {
     success100: '119 34% 47%', // base0B #50a14f
@@ -1096,11 +1098,11 @@ const oneDark: ThemeColors = {
     text600: '220 5% 22%',
   },
   accent: {
-    brand: '207 82% 66%', // base0D #61afef
-    main000: '207 80% 60%',
-    main100: '207 82% 66%',
-    main200: '207 85% 72%',
-    secondary100: '286 60% 67%', // base0E #c678dd
+    brand: '95 38% 62%', // base0B #98c379 (string green)
+    main000: '95 38% 52%',
+    main100: '95 38% 62%',
+    main200: '95 42% 70%',
+    secondary100: '207 82% 66%', // base0D #61afef (function blue)
   },
   semantic: {
     success100: '95 38% 62%', // base0B #98c379
@@ -1133,7 +1135,7 @@ const oneDark: ThemeColors = {
 export const oneTheme: ThemePreset = {
   id: 'one',
   name: 'One',
-  description: 'Atom One palette, blue accent with five-color syntax tones',
+  description: 'Atom One palette, string-green accent with five-color syntax tones',
   light: oneLight,
   dark: oneDark,
 }
