@@ -903,55 +903,54 @@ export const obsidianTheme: ThemePreset = {
 // ============================================
 // GitHub 主题 - Primer 设计系统
 // ============================================
-// 设计理念：
-// - 复刻 GitHub Primer 颜色系统
-// - 日间：纯白底 + 经典 GitHub 蓝 (#0969da)，中性灰表面
-// - 夜间：深邃 canvas (#0d1117) + 高对比蓝 (#2f81f7)，类似 GitHub Dark Default
+// 颜色来源：primer/primitives + primer/github-vscode-theme
+// - Light canvas/inset #ffffff / #f6f8fa，accent #0969da，fg #1f2328
+// - Dark canvas #0d1117 / surface #21262d，accent #2f81f7，fg #e6edf3
 
 const githubLight: ThemeColors = {
   background: {
-    bg000: '0 0% 100%',
-    bg100: '210 17% 98%',
-    bg200: '210 20% 94%',
-    bg300: '213 16% 86%',
-    bg400: '213 8% 72%',
+    bg000: '0 0% 100%', // canvas.default #ffffff
+    bg100: '210 29% 97%', // canvas.inset #f6f8fa
+    bg200: '210 24% 93%', // neutral.subtle #eaeef2
+    bg300: '210 18% 84%', // border.default #d0d7de
+    bg400: '210 13% 72%', // neutral.emphasis #afb8c1
   },
   text: {
     text000: '0 0% 100%',
-    text100: '215 14% 15%',
-    text200: '215 8% 43%',
-    text300: '215 7% 47%',
-    text400: '215 8% 58%',
-    text500: '0 0% 68%',
-    text600: '213 16% 84%',
+    text100: '213 13% 14%', // fg.default #1f2328
+    text200: '212 8% 43%', // fg.muted #656d76
+    text300: '212 8% 47%', // fg.subtle #6e7781
+    text400: '215 8% 62%', // fg.disabled #8c959f
+    text500: '215 8% 75%',
+    text600: '215 8% 84%',
   },
   accent: {
-    brand: '212 92% 45%',
+    brand: '212 92% 45%', // accent.fg #0969da
     main000: '212 90% 40%',
     main100: '212 92% 45%',
-    main200: '211 100% 56%',
-    secondary100: '271 65% 56%',
+    main200: '211 100% 56%', // accent.bright #218bff
+    secondary100: '261 69% 59%', // done.fg #8250df
   },
   semantic: {
-    success100: '137 65% 30%',
-    success200: '137 55% 22%',
-    successBg: '137 50% 92%',
-    warning100: '38 100% 30%',
-    warning200: '35 90% 22%',
-    warningBg: '48 100% 90%',
-    danger000: '354 66% 50%',
-    danger100: '354 66% 50%',
-    danger200: '350 84% 35%',
-    dangerBg: '0 100% 95%',
-    danger900: '0 70% 90%',
+    success100: '137 66% 30%', // success.fg #1a7f37
+    success200: '137 63% 25%',
+    successBg: '133 80% 92%', // success.subtle #dafbe1
+    warning100: '40 100% 30%', // attention.fg #9a6700
+    warning200: '41 95% 25%',
+    warningBg: '53 100% 89%', // attention.subtle #fff8c5
+    danger000: '356 72% 47%', // danger.fg #cf222e
+    danger100: '356 72% 47%',
+    danger200: '356 70% 40%',
+    dangerBg: '5 100% 96%', // danger.subtle #ffebe9
+    danger900: '5 80% 92%',
     info100: '212 92% 45%',
     info200: '211 100% 56%',
-    infoBg: '205 100% 96%',
+    infoBg: '199 100% 93%', // accent.subtle #ddf4ff
   },
   border: {
-    border100: '213 16% 84%',
-    border200: '213 16% 86%',
-    border300: '213 8% 72%',
+    border100: '210 18% 84%', // border.default #d0d7de
+    border200: '210 18% 87%', // border.muted #d8dee4
+    border300: '210 13% 72%', // neutral #afb8c1
   },
   special: {
     alwaysBlack: '0 0% 0%',
@@ -962,48 +961,48 @@ const githubLight: ThemeColors = {
 
 const githubDark: ThemeColors = {
   background: {
-    bg000: '215 14% 18%',
-    bg100: '215 28% 11%',
-    bg200: '220 28% 7%',
-    bg300: '220 40% 4%',
-    bg400: '220 50% 2%',
+    bg000: '215 15% 15%', // surface #21262d
+    bg100: '215 21% 11%', // canvas.subtle #161b22
+    bg200: '216 28% 7%', // canvas.default #0d1117
+    bg300: '218 80% 4%',
+    bg400: '218 80% 2%', // canvas.inset #010409
   },
   text: {
     text000: '0 0% 100%',
-    text100: '213 30% 92%',
-    text200: '215 14% 60%',
-    text300: '215 11% 50%',
-    text400: '215 8% 40%',
-    text500: '215 6% 32%',
+    text100: '208 35% 93%', // fg.default #e6edf3
+    text200: '215 8% 53%', // fg.muted #7d8590
+    text300: '215 8% 43%',
+    text400: '215 7% 35%',
+    text500: '215 6% 28%',
     text600: '215 5% 22%',
   },
   accent: {
-    brand: '212 100% 57%',
-    main000: '212 90% 50%',
-    main100: '212 100% 57%',
-    main200: '212 100% 65%',
-    secondary100: '268 100% 78%',
+    brand: '215 93% 58%', // accent.fg #2f81f7
+    main000: '216 84% 52%', // accent.emphasis #1f6feb
+    main100: '215 93% 58%',
+    main200: '215 93% 67%',
+    secondary100: '262 89% 71%', // done.fg #a371f7
   },
   semantic: {
-    success100: '137 65% 50%',
-    success200: '137 55% 60%',
-    successBg: '137 50% 12%',
-    warning100: '41 100% 53%',
-    warning200: '41 90% 60%',
-    warningBg: '41 50% 12%',
-    danger000: '0 90% 63%',
-    danger100: '0 80% 60%',
-    danger200: '0 80% 65%',
-    dangerBg: '0 90% 15%',
-    danger900: '0 70% 22%',
-    info100: '212 100% 60%',
-    info200: '212 100% 70%',
-    infoBg: '212 50% 14%',
+    success100: '128 49% 49%', // success.fg #3fb950
+    success200: '128 50% 60%',
+    successBg: '141 90% 12%', // success.subtle #033a16
+    warning100: '41 72% 48%', // attention.fg #d29922
+    warning200: '41 75% 58%',
+    warningBg: '29 34% 17%', // attention.subtle
+    danger000: '3 93% 63%', // danger.fg #f85149
+    danger100: '3 90% 60%',
+    danger200: '3 90% 68%',
+    dangerBg: '352 70% 17%', // danger.subtle
+    danger900: '352 60% 25%',
+    info100: '215 93% 58%',
+    info200: '215 93% 68%',
+    infoBg: '219 80% 23%', // accent.subtle
   },
   border: {
-    border100: '215 14% 28%',
-    border200: '213 12% 24%',
-    border300: '215 8% 35%',
+    border100: '212 12% 21%', // border.default #30363d
+    border200: '215 15% 15%', // border.muted #21262d
+    border300: '212 12% 30%',
   },
   special: {
     alwaysBlack: '0 0% 0%',
@@ -1023,55 +1022,54 @@ export const githubTheme: ThemePreset = {
 // ============================================
 // One 主题 - Atom One Dark / Light
 // ============================================
-// 设计理念：
-// - 复刻 Atom One 经典配色
-// - 日间：#fafafa 浅底 + 蓝 (#4078f2) 主调，五色语法高亮（红/绿/黄/紫/青）
-// - 夜间：#282c34 深底 + 蓝 (#61afef) 主调，对比舒适，长时编码友好
+// 颜色来源：base16 one-light-scheme + onedark (verbatim base00–base0F)
+// - Light #fafafa 底 + 蓝 #4078f2，fg #383a42
+// - Dark  #282c34 底 + 蓝 #61afef，fg #abb2bf
 
 const oneLight: ThemeColors = {
   background: {
     bg000: '0 0% 100%',
-    bg100: '0 0% 98%',
-    bg200: '0 0% 95%',
-    bg300: '220 5% 90%',
-    bg400: '220 6% 84%',
+    bg100: '0 0% 98%', // base00 #fafafa
+    bg200: '240 3% 94%', // base01 #f0f0f1
+    bg300: '240 2% 90%', // base02 #e5e5e6
+    bg400: '231 4% 80%',
   },
   text: {
     text000: '0 0% 100%',
-    text100: '220 12% 24%',
-    text200: '218 7% 44%',
-    text300: '215 8% 55%',
-    text400: '210 8% 65%',
-    text500: '210 8% 75%',
-    text600: '210 8% 85%',
+    text100: '228 8% 24%', // base05 #383a42
+    text200: '227 6% 44%', // base04 #696c77
+    text300: '231 4% 64%', // base03 #a0a1a7
+    text400: '230 4% 75%',
+    text500: '230 3% 85%',
+    text600: '230 3% 90%',
   },
   accent: {
-    brand: '218 90% 60%',
-    main000: '218 85% 55%',
-    main100: '218 90% 60%',
-    main200: '218 90% 67%',
-    secondary100: '286 60% 45%',
+    brand: '221 87% 60%', // base0D #4078f2
+    main000: '221 85% 55%',
+    main100: '221 87% 60%',
+    main200: '221 90% 67%',
+    secondary100: '301 63% 40%', // base0E #a626a4
   },
   semantic: {
-    success100: '120 35% 40%',
-    success200: '120 30% 32%',
-    successBg: '120 35% 92%',
-    warning100: '40 100% 35%',
-    warning200: '40 90% 28%',
+    success100: '119 34% 47%', // base0B #50a14f
+    success200: '119 35% 35%',
+    successBg: '120 30% 92%',
+    warning100: '41 99% 38%', // base0A #c18401
+    warning200: '41 90% 30%',
     warningBg: '42 100% 92%',
-    danger000: '5 75% 50%',
-    danger100: '5 75% 55%',
-    danger200: '5 70% 62%',
-    dangerBg: '5 80% 95%',
-    danger900: '5 70% 92%',
-    info100: '200 100% 38%',
-    info200: '200 90% 48%',
-    infoBg: '200 80% 95%',
+    danger000: '344 84% 43%', // base08 #ca1243
+    danger100: '344 84% 43%',
+    danger200: '344 80% 50%',
+    dangerBg: '345 70% 95%',
+    danger900: '345 50% 92%',
+    info100: '198 99% 37%', // base0C #0184bc
+    info200: '198 90% 47%',
+    infoBg: '199 80% 95%',
   },
   border: {
-    border100: '220 8% 88%',
-    border200: '220 8% 85%',
-    border300: '220 8% 78%',
+    border100: '240 2% 90%', // base02 #e5e5e6
+    border200: '240 3% 94%', // base01 #f0f0f1
+    border300: '228 8% 80%',
   },
   special: {
     alwaysBlack: '0 0% 0%',
@@ -1082,48 +1080,48 @@ const oneLight: ThemeColors = {
 
 const oneDark: ThemeColors = {
   background: {
-    bg000: '222 14% 22%',
-    bg100: '220 13% 18%',
-    bg200: '222 14% 15%',
-    bg300: '220 14% 11%',
-    bg400: '220 14% 8%',
+    bg000: '218 13% 24%', // base01 #353b45
+    bg100: '220 13% 18%', // base00 #282c34
+    bg200: '220 14% 14%',
+    bg300: '220 14% 10%',
+    bg400: '220 14% 6%',
   },
   text: {
     text000: '0 0% 100%',
-    text100: '213 16% 75%',
-    text200: '218 8% 50%',
-    text300: '218 8% 42%',
-    text400: '218 7% 35%',
-    text500: '218 6% 28%',
-    text600: '218 5% 22%',
+    text100: '219 14% 71%', // base05 #abb2bf
+    text200: '219 12% 60%',
+    text300: '219 10% 50%',
+    text400: '223 8% 38%', // base04 #565c64
+    text500: '220 6% 30%',
+    text600: '220 5% 22%',
   },
   accent: {
-    brand: '210 80% 66%',
-    main000: '210 75% 60%',
-    main100: '210 80% 66%',
-    main200: '210 85% 72%',
-    secondary100: '286 55% 70%',
+    brand: '207 82% 66%', // base0D #61afef
+    main000: '207 80% 60%',
+    main100: '207 82% 66%',
+    main200: '207 85% 72%',
+    secondary100: '286 60% 67%', // base0E #c678dd
   },
   semantic: {
-    success100: '90 40% 60%',
-    success200: '90 35% 50%',
-    successBg: '90 30% 15%',
-    warning100: '42 65% 70%',
-    warning200: '42 60% 60%',
-    warningBg: '42 30% 15%',
-    danger000: '345 70% 62%',
-    danger100: '345 70% 65%',
-    danger200: '345 75% 72%',
-    dangerBg: '345 40% 15%',
-    danger900: '345 30% 22%',
-    info100: '195 60% 55%',
-    info200: '195 60% 65%',
-    infoBg: '195 40% 15%',
+    success100: '95 38% 62%', // base0B #98c379
+    success200: '95 35% 70%',
+    successBg: '95 30% 15%',
+    warning100: '39 67% 69%', // base0A #e5c07b
+    warning200: '39 65% 75%',
+    warningBg: '39 30% 15%',
+    danger000: '355 65% 65%', // base08 #e06c75
+    danger100: '355 65% 65%',
+    danger200: '355 60% 72%',
+    dangerBg: '355 40% 15%',
+    danger900: '355 30% 22%',
+    info100: '187 47% 55%', // base0C #56b6c2
+    info200: '187 50% 62%',
+    infoBg: '187 40% 15%',
   },
   border: {
-    border100: '220 12% 26%',
-    border200: '220 12% 22%',
-    border300: '220 10% 32%',
+    border100: '220 14% 24%',
+    border200: '220 13% 20%',
+    border300: '218 13% 28%', // base02 #3e4451
   },
   special: {
     alwaysBlack: '0 0% 0%',
