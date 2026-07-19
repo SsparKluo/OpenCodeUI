@@ -46,8 +46,8 @@ export const SECTION_META: Record<SectionID, { en: string; zh: string; descEn: s
   mcp: {
     en: 'MCP Servers',
     zh: 'MCP 服务',
-    descEn: 'Model Context Protocol servers, local (command) or remote (url).',
-    descZh: 'Model Context Protocol 服务，本地（命令）或远程（URL）。',
+    descEn: 'Configure MCP servers with a local command or remote URL.',
+    descZh: '配置本地命令或远程 URL 的 MCP 服务。',
   },
   permissions: {
     en: 'Permissions',
@@ -125,6 +125,7 @@ export const KNOWN_ROOT_KEYS = new Set([
   'server',
   'command',
   'skills',
+  'references',
   'reference',
   'watcher',
   'snapshot',
@@ -137,6 +138,7 @@ export const KNOWN_ROOT_KEYS = new Set([
   'model',
   'small_model',
   'default_agent',
+  'subagent_depth',
   'username',
   'mode',
   'agent',

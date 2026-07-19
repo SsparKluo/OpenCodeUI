@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { Button } from '../../../components/ui/Button'
-import { SunIcon, MoonIcon, SystemIcon, CheckIcon, ChevronDownIcon } from '../../../components/Icons'
-import { Toggle, SegmentedControl, SettingRow, SettingsSection } from './SettingsUI'
+import { DropdownMenu } from '../../../components/ui/DropdownMenu'
+import { MenuItem } from '../../../components/ui/MenuItem'
+import { SunIcon, MoonIcon, SystemIcon, CheckIcon, GlobeIcon, UndoIcon } from '../../../components/Icons'
+import { settingsFieldAreaClass, settingsFieldClass, Toggle, SegmentedControl, SettingRow, SettingField, SettingsSection } from './SettingsUI'
 import { useTheme } from '../../../hooks'
 import { getThemePreset } from '../../../themes'
 import type { CustomCSSSnippet } from '../../../store/themeStore'
@@ -175,18 +177,44 @@ function CustomCSSEditor({
   onClear: () => void
   t: (key: string) => string
 }) {
-  const [localValue, setLocalValue] = useState(value)
+  const [draft, setDraft] = useState(() => ({ source: value, value }))
+  const localValue = draft.source === value ? draft.value : value
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingValueRef = useRef<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    setLocalValue(value)
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+      debounceRef.current = null
+    }
+    pendingValueRef.current = null
   }, [value])
 
+  useEffect(
+    () => () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      if (pendingValueRef.current !== null) onChange(pendingValueRef.current)
+    },
+    [onChange],
+  )
+
+  const cancelPendingChange = () => {
+    if (!debounceRef.current) return
+    clearTimeout(debounceRef.current)
+    debounceRef.current = null
+    pendingValueRef.current = null
+  }
+
   const handleChange = (newVal: string) => {
-    setLocalValue(newVal)
+    setDraft({ source: value, value: newVal })
+    pendingValueRef.current = newVal
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => onChange(newVal), 400)
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null
+      pendingValueRef.current = null
+      onChange(newVal)
+    }, 400)
   }
 
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -195,7 +223,8 @@ function CustomCSSEditor({
     const reader = new FileReader()
     reader.onload = event => {
       const css = event.target?.result as string
-      setLocalValue(css)
+      cancelPendingChange()
+      setDraft({ source: value, value: css })
       onImportFile(css)
     }
     reader.readAsText(file)
@@ -371,8 +400,8 @@ function CustomCSSEditor({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="text-[length:var(--fs-xs)] text-text-400">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[length:var(--fs-xs)] text-text-400 min-w-0">
           <Trans
             i18nKey="settings:appearance.customCssSpecificityHelp"
             components={{
@@ -380,23 +409,36 @@ function CustomCSSEditor({
             }}
           />
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1 shrink-0">
           <input ref={fileInputRef} type="file" accept=".css" onChange={handleFileImport} className="hidden" />
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="text-[10px] text-accent-main-100 hover:text-accent-main-200 transition-colors px-1.5 py-0.5 rounded hover:bg-bg-200/50 shrink-0"
+            className="text-[length:var(--fs-xs)] text-accent-main-100 hover:text-accent-main-200 transition-colors px-2 py-1 rounded-md hover:bg-accent-main-100/10"
           >
             {t('appearance.importCss')}
           </button>
           {!localValue.trim() && (
             <button
               onClick={() => {
-                setLocalValue(template)
+                cancelPendingChange()
+                setDraft({ source: value, value: template })
                 onLoadTemplate(template)
               }}
-              className="text-[10px] text-accent-main-100 hover:text-accent-main-200 transition-colors px-1.5 py-0.5 rounded hover:bg-bg-200/50 shrink-0"
+              className="text-[length:var(--fs-xs)] text-accent-main-100 hover:text-accent-main-200 transition-colors px-2 py-1 rounded-md hover:bg-accent-main-100/10"
             >
               {t('appearance.loadTemplate')}
+            </button>
+          )}
+          {localValue.trim() && (
+            <button
+              onClick={() => {
+                cancelPendingChange()
+                setDraft({ source: value, value: '' })
+                onClear()
+              }}
+              className="text-[length:var(--fs-xs)] text-text-400 hover:text-danger-100 transition-colors px-2 py-1 rounded-md hover:bg-danger-100/10"
+            >
+              {t('common:clear')}
             </button>
           )}
         </div>
@@ -406,24 +448,8 @@ function CustomCSSEditor({
         onChange={e => handleChange(e.target.value)}
         placeholder={template}
         spellCheck={false}
-        className="w-full h-48 px-3 py-2 text-[length:var(--fs-sm)] font-mono bg-bg-200/50 border border-border-200 rounded-lg 
-          focus:outline-none focus:border-accent-main-100/50 text-text-100 placeholder:text-text-500 
-          resize-y custom-scrollbar leading-relaxed"
+        className={`${settingsFieldAreaClass} h-48 font-mono`}
       />
-      {localValue.trim() && (
-        <div className="flex justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setLocalValue('')
-              onClear()
-            }}
-          >
-            {t('common:clear')}
-          </Button>
-        </div>
-      )}
     </div>
   )
 }
@@ -446,16 +472,25 @@ function SavedSnippetItem({
   t: (key: string) => string
 }) {
   return (
-    <div className="rounded-lg border border-border-200/50 px-3 py-2.5 bg-bg-100/40">
-      <div className="flex items-start justify-between gap-3">
+    <div
+      className={`rounded-lg px-3 py-2.5 border transition-colors
+        ${
+          isActive
+            ? 'border-accent-main-100/40 bg-accent-main-100/[0.04]'
+            : 'border-border-200/50 bg-bg-100/40 hover:border-border-300/60 hover:bg-bg-100/60'
+        }`}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[length:var(--fs-sm)] font-medium text-text-100 truncate">{snippet.name}</span>
-            {isActive && (
-              <span className="px-1.5 py-0.5 rounded bg-accent-main-100/10 text-accent-main-100 text-[length:var(--fs-xxs)]">
-                {t('appearance.activeOverride')}
-              </span>
-            )}
+            <span
+              className={`text-[length:var(--fs-sm)] font-medium truncate ${
+                isActive ? 'text-accent-main-100' : 'text-text-100'
+              }`}
+            >
+              {snippet.name}
+            </span>
+            {isActive && !isDirty && <CheckIcon size={12} className="text-accent-main-100 shrink-0" />}
             {isDirty && (
               <span className="px-1.5 py-0.5 rounded bg-warning-bg text-warning-200 text-[length:var(--fs-xxs)]">
                 {t('appearance.modifiedOverride')}
@@ -467,9 +502,9 @@ function SavedSnippetItem({
           </div>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex flex-wrap items-center gap-1 shrink-0">
           <Button variant="ghost" size="sm" onClick={onApply} disabled={isActive && !isDirty}>
-            {isActive && !isDirty ? t('appearance.selectedOverride') : t('appearance.applyOverride')}
+            {t('appearance.applyOverride')}
           </Button>
           <Button variant="ghost" size="sm" onClick={onExport}>
             {t('common:download')}
@@ -480,6 +515,110 @@ function SavedSnippetItem({
         </div>
       </div>
     </div>
+  )
+}
+
+// ============================================
+// Language Picker (DropdownMenu based)
+// ============================================
+
+const LANGUAGE_OPTIONS = [
+  { value: 'en', labelKey: 'appearance.languages.en' },
+  { value: 'zh-CN', labelKey: 'appearance.languages.zh-CN' },
+] as const
+
+function LanguagePicker({
+  current,
+  onSelect,
+  t,
+}: {
+  current: string
+  onSelect: (lang: string) => void
+  t: (key: string) => string
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const activeLabel = LANGUAGE_OPTIONS.find(o => o.value === current)?.labelKey
+  const displayLabel = activeLabel ? t(activeLabel) : current
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    const frameId = requestAnimationFrame(() => {
+      menuRef.current?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.focus()
+    })
+
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return
+      setIsOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    return () => {
+      cancelAnimationFrame(frameId)
+      document.removeEventListener('mousedown', onPointerDown)
+    }
+  }, [isOpen])
+
+  return (
+    <SettingRow label={t('appearance.language')} description={t('appearance.languageDesc')}>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setIsOpen(v => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onKeyDown={event => {
+          if (event.key === 'Escape' && isOpen) {
+            event.preventDefault()
+            event.stopPropagation()
+            setIsOpen(false)
+          }
+        }}
+        className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-[length:var(--fs-sm)] text-text-300 hover:text-text-100 hover:bg-bg-200/60 transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent-main-100"
+      >
+        <GlobeIcon size={13} className="text-text-400" />
+        <span className="font-medium">{displayLabel}</span>
+      </button>
+      <DropdownMenu triggerRef={triggerRef} isOpen={isOpen} position="top" align="right" width="180px" zIndex={400}>
+        <div
+          ref={menuRef}
+          role="listbox"
+          aria-label={t('appearance.language')}
+          className="p-1"
+          onKeyDown={event => {
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              event.stopPropagation()
+              setIsOpen(false)
+              triggerRef.current?.focus()
+              return
+            }
+            if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+            event.preventDefault()
+            const options = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="option"]') ?? [])
+            const index = options.indexOf(document.activeElement as HTMLElement)
+            const direction = event.key === 'ArrowDown' ? 1 : -1
+            options[(index + direction + options.length) % options.length]?.focus()
+          }}
+        >
+          {LANGUAGE_OPTIONS.map(opt => (
+            <MenuItem
+              key={opt.value}
+              label={t(opt.labelKey)}
+              selected={opt.value === current}
+              selectionRole="option"
+              onClick={() => {
+                onSelect(opt.value)
+                setIsOpen(false)
+                requestAnimationFrame(() => triggerRef.current?.focus())
+              }}
+            />
+          ))}
+        </div>
+      </DropdownMenu>
+    </SettingRow>
   )
 }
 
@@ -559,8 +698,7 @@ export function AppearanceSettings() {
   return (
     <div>
       {availablePresets.length > 0 && (
-        <SettingsSection title={t('appearance.themePresets')}>
-          <p className="text-[length:var(--fs-sm)] text-text-400">{t('appearance.themePresetsDesc')}</p>
+        <SettingsSection title={t('appearance.themePresets')} description={t('appearance.themePresetsDesc')}>
           <div className="grid gap-2 sm:grid-cols-2">
             {availablePresets.map(p => (
               <PresetCard
@@ -577,99 +715,91 @@ export function AppearanceSettings() {
         </SettingsSection>
       )}
 
-      <SettingsSection title={t('appearance.customCss')}>
-        <p className="text-[length:var(--fs-sm)] text-text-400">{t('appearance.customCssDesc')}</p>
+      <SettingsSection title={t('appearance.customCss')} description={t('appearance.customCssDesc')}>
+        <CustomCSSEditor
+          value={customCSS}
+          onChange={setCustomCSS}
+          onImportFile={handleImportCSS}
+          onLoadTemplate={handleImportCSS}
+          onClear={() => {
+            clearActiveCustomCSSSnippet()
+            setCustomCSS('')
+          }}
+          t={t}
+        />
 
-        <div className="space-y-4">
-          <CustomCSSEditor
-            value={customCSS}
-            onChange={setCustomCSS}
-            onImportFile={handleImportCSS}
-            onLoadTemplate={handleImportCSS}
-            onClear={() => {
-              clearActiveCustomCSSSnippet()
-              setCustomCSS('')
-            }}
-            t={t}
-          />
+        <SettingField label={t('appearance.savedOverrides')} description={t('appearance.savedOverridesDesc')}>
+          <div className="flex flex-col gap-2 md:flex-row md:items-center">
+            <input
+              value={snippetName}
+              onChange={e => setSnippetDraft({ snippetId: activeSnippetId, name: e.target.value })}
+              placeholder={t('appearance.overrideNamePlaceholder')}
+              className={settingsFieldClass}
+            />
 
-          <div className="rounded-lg border border-border-200/50 bg-bg-100/30 p-3 space-y-3">
-            <div>
-              <p className="text-[length:var(--fs-md)] text-text-100 mb-1.5">{t('appearance.savedOverrides')}</p>
-              <p className="text-[length:var(--fs-sm)] text-text-400">{t('appearance.savedOverridesDesc')}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleSaveNewSnippet}
+                disabled={!snippetName.trim() || !customCSS.trim()}
+              >
+                {t('appearance.saveAsNewOverride')}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRenameSnippet}
+                disabled={!activeSnippet || !snippetName.trim() || snippetName.trim() === activeSnippet.name}
+              >
+                {t('appearance.renameOverride')}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleUpdateSnippet}
+                disabled={!activeSnippet || !hasUnsavedSnippetChanges}
+              >
+                {t('appearance.updateOverride')}
+              </Button>
             </div>
-
-            <div className="flex flex-col gap-2 md:flex-row md:items-center">
-                <input
-                  value={snippetName}
-                  onChange={e => setSnippetDraft({ snippetId: activeSnippetId, name: e.target.value })}
-                  placeholder={t('appearance.overrideNamePlaceholder')}
-                className="flex-1 min-w-0 px-3 py-2 text-[length:var(--fs-sm)] bg-bg-200/50 border border-border-200 rounded-lg text-text-100 placeholder:text-text-500 focus:outline-none focus:border-accent-main-100/50"
-              />
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleSaveNewSnippet}
-                  disabled={!snippetName.trim() || !customCSS.trim()}
-                >
-                  {t('appearance.saveAsNewOverride')}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleRenameSnippet}
-                  disabled={!activeSnippet || !snippetName.trim() || snippetName.trim() === activeSnippet.name}
-                >
-                  {t('appearance.renameOverride')}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleUpdateSnippet}
-                  disabled={!activeSnippet || !hasUnsavedSnippetChanges}
-                >
-                  {t('appearance.updateOverride')}
-                </Button>
-              </div>
-            </div>
-
-            {customCSSSnippets.length > 0 ? (
-              <div className="space-y-2">
-                {customCSSSnippets.map(snippet => (
-                  <SavedSnippetItem
-                    key={snippet.id}
-                    snippet={snippet}
-                    isActive={snippet.id === activeCustomCSSSnippetId}
-                    isDirty={snippet.id === activeCustomCSSSnippetId && hasUnsavedSnippetChanges}
-                    onApply={() => applyCustomCSSSnippet(snippet.id)}
-                    onExport={() => handleExportSnippet(snippet)}
-                    onDelete={() => handleDeleteSnippet(snippet)}
-                    t={t}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="text-[length:var(--fs-sm)] text-text-500">{t('appearance.noSavedOverrides')}</div>
-            )}
           </div>
-        </div>
+
+          {customCSSSnippets.length > 0 ? (
+            <div className="space-y-2 mt-2.5">
+              {customCSSSnippets.map(snippet => (
+                <SavedSnippetItem
+                  key={snippet.id}
+                  snippet={snippet}
+                  isActive={snippet.id === activeCustomCSSSnippetId}
+                  isDirty={snippet.id === activeCustomCSSSnippetId && hasUnsavedSnippetChanges}
+                  onApply={() => applyCustomCSSSnippet(snippet.id)}
+                  onExport={() => handleExportSnippet(snippet)}
+                  onDelete={() => handleDeleteSnippet(snippet)}
+                  t={t}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-[length:var(--fs-sm)] text-text-500 mt-2.5">{t('appearance.noSavedOverrides')}</div>
+          )}
+        </SettingField>
       </SettingsSection>
 
-      <SettingsSection title={t('appearance.display')}>
-        <div>
-          <p className="text-[length:var(--fs-md)] text-text-100 mb-1.5">{t('appearance.colorMode')}</p>
-          <SegmentedControl
-            value={themeMode}
-            options={[
-              { value: 'system', label: t('appearance.modeAuto'), icon: <SystemIcon size={14} /> },
-              { value: 'light', label: t('appearance.modeLight'), icon: <SunIcon size={14} /> },
-              { value: 'dark', label: t('appearance.modeDark'), icon: <MoonIcon size={14} /> },
-            ]}
-            onChange={(v, e) => setThemeWithAnimation(v, e)}
-          />
-        </div>
+      <SettingsSection title={t('appearance.display')} description={t('appearance.displayDesc')}>
+        <SettingField label={t('appearance.colorMode')}>
+          <div className="w-full max-w-[320px]">
+            <SegmentedControl
+              value={themeMode}
+              options={[
+                { value: 'system', label: t('appearance.modeAuto'), icon: <SystemIcon size={14} /> },
+                { value: 'light', label: t('appearance.modeLight'), icon: <SunIcon size={14} /> },
+                { value: 'dark', label: t('appearance.modeDark'), icon: <MoonIcon size={14} /> },
+              ]}
+              onChange={(v, e) => setThemeWithAnimation(v, e)}
+            />
+          </div>
+        </SettingField>
 
         <SettingRow
           label={t('appearance.glassEffect')}
@@ -679,52 +809,47 @@ export function AppearanceSettings() {
           <Toggle enabled={glassEffect} onChange={() => setGlassEffect(!glassEffect)} />
         </SettingRow>
 
-        <div>
-          <p className="text-[length:var(--fs-md)] text-text-100 mb-2">{t('appearance.uiFontScale')}</p>
+        <SettingField
+          label={t('appearance.uiFontScale')}
+          description={t('appearance.uiFontScaleDesc')}
+          actions={
+            uiFontScale !== 0 ? (
+              <button
+                type="button"
+                onClick={() => setUIFontScale(0)}
+                title={t('appearance.fontScaleReset')}
+                aria-label={t('appearance.fontScaleReset')}
+                className="p-1 rounded-md text-text-400 hover:text-text-200 hover:bg-bg-200/60 transition-colors"
+              >
+                <UndoIcon size={12} />
+              </button>
+            ) : undefined
+          }
+        >
           <FontScaleSlider value={uiFontScale} onChange={setUIFontScale} baseSize={14} />
-          <p className="text-[length:var(--fs-xs)] text-text-500 mt-1">{t('appearance.uiFontScaleDesc')}</p>
-        </div>
+        </SettingField>
 
-        <div>
-          <p className="text-[length:var(--fs-md)] text-text-100 mb-2">{t('appearance.codeFontScale')}</p>
+        <SettingField
+          label={t('appearance.codeFontScale')}
+          description={t('appearance.codeFontScaleDesc')}
+          actions={
+            codeFontScale !== 0 ? (
+              <button
+                type="button"
+                onClick={() => setCodeFontScale(0)}
+                title={t('appearance.fontScaleReset')}
+                aria-label={t('appearance.fontScaleReset')}
+                className="p-1 rounded-md text-text-400 hover:text-text-200 hover:bg-bg-200/60 transition-colors"
+              >
+                <UndoIcon size={12} />
+              </button>
+            ) : undefined
+          }
+        >
           <FontScaleSlider value={codeFontScale} onChange={setCodeFontScale} baseSize={13} />
-          <p className="text-[length:var(--fs-xs)] text-text-500 mt-1">{t('appearance.codeFontScaleDesc')}</p>
-        </div>
+        </SettingField>
 
-        {(uiFontScale !== 0 || codeFontScale !== 0) && (
-          <button
-            onClick={() => {
-              setUIFontScale(0)
-              setCodeFontScale(0)
-            }}
-            className="text-[length:var(--fs-sm)] text-accent-main-100 hover:text-accent-main-200 transition-colors px-2 py-1 rounded hover:bg-bg-200/50 self-start"
-          >
-            {t('appearance.fontScaleReset')}
-          </button>
-        )}
-
-        <SettingRow label={t('appearance.language')} description={t('appearance.languageDesc')}>
-          <div className="relative inline-flex">
-            <select
-              value={i18n.language}
-              onChange={e => i18n.changeLanguage(e.target.value)}
-              aria-label={t('appearance.language')}
-              style={{ colorScheme: resolvedTheme }}
-              className="appearance-none pl-2 pr-8 py-1 text-[length:var(--fs-sm)] bg-bg-200/50 border border-border-200 rounded-md text-text-100 focus:outline-none focus:border-accent-main-100/50 cursor-pointer"
-            >
-              <option className="bg-bg-100 text-text-100" value="en">
-                {t('appearance.languages.en')}
-              </option>
-              <option className="bg-bg-100 text-text-100" value="zh-CN">
-                {t('appearance.languages.zh-CN')}
-              </option>
-            </select>
-            <ChevronDownIcon
-              size={14}
-              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-text-300"
-            />
-          </div>
-        </SettingRow>
+        <LanguagePicker current={i18n.language} onSelect={lang => void i18n.changeLanguage(lang)} t={t} />
       </SettingsSection>
     </div>
   )

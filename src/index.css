@@ -137,6 +137,9 @@ body,
 
 .dialog-safe-region {
   top: calc(var(--desktop-titlebar-height, 0px) + var(--app-safe-top, 0px));
+  padding-right: max(1rem, var(--safe-area-inset-right));
+  padding-bottom: max(1rem, var(--safe-area-inset-bottom));
+  padding-left: max(1rem, var(--safe-area-inset-left));
 }
 
 .toast-safe-top {
