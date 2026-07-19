@@ -901,6 +901,246 @@ export const obsidianTheme: ThemePreset = {
 }
 
 // ============================================
+// GitHub 主题 - Primer 设计系统
+// ============================================
+// 设计理念：
+// - 复刻 GitHub Primer 颜色系统
+// - 日间：纯白底 + 经典 GitHub 蓝 (#0969da)，中性灰表面
+// - 夜间：深邃 canvas (#0d1117) + 高对比蓝 (#2f81f7)，类似 GitHub Dark Default
+
+const githubLight: ThemeColors = {
+  background: {
+    bg000: '0 0% 100%',
+    bg100: '210 17% 98%',
+    bg200: '210 20% 94%',
+    bg300: '213 16% 86%',
+    bg400: '213 8% 72%',
+  },
+  text: {
+    text000: '0 0% 100%',
+    text100: '215 14% 15%',
+    text200: '215 8% 43%',
+    text300: '215 7% 47%',
+    text400: '215 8% 58%',
+    text500: '0 0% 68%',
+    text600: '213 16% 84%',
+  },
+  accent: {
+    brand: '212 92% 45%',
+    main000: '212 90% 40%',
+    main100: '212 92% 45%',
+    main200: '211 100% 56%',
+    secondary100: '271 65% 56%',
+  },
+  semantic: {
+    success100: '137 65% 30%',
+    success200: '137 55% 22%',
+    successBg: '137 50% 92%',
+    warning100: '38 100% 30%',
+    warning200: '35 90% 22%',
+    warningBg: '48 100% 90%',
+    danger000: '354 66% 50%',
+    danger100: '354 66% 50%',
+    danger200: '350 84% 35%',
+    dangerBg: '0 100% 95%',
+    danger900: '0 70% 90%',
+    info100: '212 92% 45%',
+    info200: '211 100% 56%',
+    infoBg: '205 100% 96%',
+  },
+  border: {
+    border100: '213 16% 84%',
+    border200: '213 16% 86%',
+    border300: '213 8% 72%',
+  },
+  special: {
+    alwaysBlack: '0 0% 0%',
+    alwaysWhite: '0 0% 100%',
+    oncolor100: '0 0% 100%',
+  },
+}
+
+const githubDark: ThemeColors = {
+  background: {
+    bg000: '215 14% 18%',
+    bg100: '215 28% 11%',
+    bg200: '220 28% 7%',
+    bg300: '220 40% 4%',
+    bg400: '220 50% 2%',
+  },
+  text: {
+    text000: '0 0% 100%',
+    text100: '213 30% 92%',
+    text200: '215 14% 60%',
+    text300: '215 11% 50%',
+    text400: '215 8% 40%',
+    text500: '215 6% 32%',
+    text600: '215 5% 22%',
+  },
+  accent: {
+    brand: '212 100% 57%',
+    main000: '212 90% 50%',
+    main100: '212 100% 57%',
+    main200: '212 100% 65%',
+    secondary100: '268 100% 78%',
+  },
+  semantic: {
+    success100: '137 65% 50%',
+    success200: '137 55% 60%',
+    successBg: '137 50% 12%',
+    warning100: '41 100% 53%',
+    warning200: '41 90% 60%',
+    warningBg: '41 50% 12%',
+    danger000: '0 90% 63%',
+    danger100: '0 80% 60%',
+    danger200: '0 80% 65%',
+    dangerBg: '0 90% 15%',
+    danger900: '0 70% 22%',
+    info100: '212 100% 60%',
+    info200: '212 100% 70%',
+    infoBg: '212 50% 14%',
+  },
+  border: {
+    border100: '215 14% 28%',
+    border200: '213 12% 24%',
+    border300: '215 8% 35%',
+  },
+  special: {
+    alwaysBlack: '0 0% 0%',
+    alwaysWhite: '0 0% 100%',
+    oncolor100: '0 0% 100%',
+  },
+}
+
+export const githubTheme: ThemePreset = {
+  id: 'github',
+  name: 'GitHub',
+  description: 'Primer palette, signature GitHub blue on neutral canvas',
+  light: githubLight,
+  dark: githubDark,
+}
+
+// ============================================
+// One 主题 - Atom One Dark / Light
+// ============================================
+// 设计理念：
+// - 复刻 Atom One 经典配色
+// - 日间：#fafafa 浅底 + 蓝 (#4078f2) 主调，五色语法高亮（红/绿/黄/紫/青）
+// - 夜间：#282c34 深底 + 蓝 (#61afef) 主调，对比舒适，长时编码友好
+
+const oneLight: ThemeColors = {
+  background: {
+    bg000: '0 0% 100%',
+    bg100: '0 0% 98%',
+    bg200: '0 0% 95%',
+    bg300: '220 5% 90%',
+    bg400: '220 6% 84%',
+  },
+  text: {
+    text000: '0 0% 100%',
+    text100: '220 12% 24%',
+    text200: '218 7% 44%',
+    text300: '215 8% 55%',
+    text400: '210 8% 65%',
+    text500: '210 8% 75%',
+    text600: '210 8% 85%',
+  },
+  accent: {
+    brand: '218 90% 60%',
+    main000: '218 85% 55%',
+    main100: '218 90% 60%',
+    main200: '218 90% 67%',
+    secondary100: '286 60% 45%',
+  },
+  semantic: {
+    success100: '120 35% 40%',
+    success200: '120 30% 32%',
+    successBg: '120 35% 92%',
+    warning100: '40 100% 35%',
+    warning200: '40 90% 28%',
+    warningBg: '42 100% 92%',
+    danger000: '5 75% 50%',
+    danger100: '5 75% 55%',
+    danger200: '5 70% 62%',
+    dangerBg: '5 80% 95%',
+    danger900: '5 70% 92%',
+    info100: '200 100% 38%',
+    info200: '200 90% 48%',
+    infoBg: '200 80% 95%',
+  },
+  border: {
+    border100: '220 8% 88%',
+    border200: '220 8% 85%',
+    border300: '220 8% 78%',
+  },
+  special: {
+    alwaysBlack: '0 0% 0%',
+    alwaysWhite: '0 0% 100%',
+    oncolor100: '0 0% 100%',
+  },
+}
+
+const oneDark: ThemeColors = {
+  background: {
+    bg000: '222 14% 22%',
+    bg100: '220 13% 18%',
+    bg200: '222 14% 15%',
+    bg300: '220 14% 11%',
+    bg400: '220 14% 8%',
+  },
+  text: {
+    text000: '0 0% 100%',
+    text100: '213 16% 75%',
+    text200: '218 8% 50%',
+    text300: '218 8% 42%',
+    text400: '218 7% 35%',
+    text500: '218 6% 28%',
+    text600: '218 5% 22%',
+  },
+  accent: {
+    brand: '210 80% 66%',
+    main000: '210 75% 60%',
+    main100: '210 80% 66%',
+    main200: '210 85% 72%',
+    secondary100: '286 55% 70%',
+  },
+  semantic: {
+    success100: '90 40% 60%',
+    success200: '90 35% 50%',
+    successBg: '90 30% 15%',
+    warning100: '42 65% 70%',
+    warning200: '42 60% 60%',
+    warningBg: '42 30% 15%',
+    danger000: '345 70% 62%',
+    danger100: '345 70% 65%',
+    danger200: '345 75% 72%',
+    dangerBg: '345 40% 15%',
+    danger900: '345 30% 22%',
+    info100: '195 60% 55%',
+    info200: '195 60% 65%',
+    infoBg: '195 40% 15%',
+  },
+  border: {
+    border100: '220 12% 26%',
+    border200: '220 12% 22%',
+    border300: '220 10% 32%',
+  },
+  special: {
+    alwaysBlack: '0 0% 0%',
+    alwaysWhite: '0 0% 100%',
+    oncolor100: '0 0% 100%',
+  },
+}
+
+export const oneTheme: ThemePreset = {
+  id: 'one',
+  name: 'One',
+  description: 'Atom One palette, blue accent with five-color syntax tones',
+  light: oneLight,
+  dark: oneDark,
+}
+
+// ============================================
 // Theme Registry
 // ============================================
 
@@ -912,6 +1152,8 @@ export const builtinThemes: ThemePreset[] = [
   oceanTheme,
   draculaTheme,
   obsidianTheme,
+  githubTheme,
+  oneTheme,
 ]
 
 export function getThemePreset(id: string): ThemePreset | undefined {
