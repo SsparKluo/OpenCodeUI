@@ -1,5 +1,6 @@
-import { useId, useMemo, useRef, useState } from 'react'
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CloseIcon, SearchIcon } from '../../components/Icons'
+import { scrollItemIntoView } from '../../utils/scrollUtils'
 import { filterSettingsSearchItems, type SearchMenuItem } from './settingsSearchCatalog'
 
 interface SettingsSearchProps<T extends SearchMenuItem> {
@@ -14,10 +15,55 @@ export function SettingsSearch<T extends SearchMenuItem>({ items, placeholder, c
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const [hasFocus, setHasFocus] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const listboxRef = useRef<HTMLDivElement>(null)
+  const activeOptionRef = useRef<HTMLButtonElement>(null)
+  const keyboardNavigationRef = useRef(false)
   const results = useMemo(() => filterSettingsSearchItems(items, query).slice(0, 10), [items, query])
   const open = hasFocus && query.trim().length > 0
   const listboxId = useId()
+  const safeActiveIndex = Math.min(activeIndex, Math.max(0, results.length - 1))
+
+  useLayoutEffect(() => {
+    if (!open) return
+    const root = rootRef.current
+    const listbox = listboxRef.current
+    const dialog = root?.closest<HTMLElement>('[role="dialog"]')
+    if (!root || !listbox || !dialog) return
+
+    const updateWidth = () => {
+      const rootRect = root.getBoundingClientRect()
+      const dialogRect = dialog.getBoundingClientRect()
+      const edgeGap = 8
+      const roomOnRight = Math.max(rootRect.width, dialogRect.right - rootRect.left - edgeGap)
+      const roomOnLeft = Math.max(rootRect.width, rootRect.right - dialogRect.left - edgeGap)
+      const alignRight = roomOnLeft > roomOnRight
+      const maxWidth = Math.max(rootRect.width, alignRight ? roomOnLeft : roomOnRight)
+
+      listbox.style.width = 'max-content'
+      listbox.style.minWidth = `${Math.min(rootRect.width, maxWidth)}px`
+      listbox.style.maxWidth = `${maxWidth}px`
+      listbox.style.left = alignRight ? 'auto' : '0px'
+      listbox.style.right = alignRight ? '0px' : 'auto'
+    }
+
+    updateWidth()
+    window.addEventListener('resize', updateWidth)
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateWidth)
+    observer?.observe(root)
+    observer?.observe(dialog)
+    return () => {
+      window.removeEventListener('resize', updateWidth)
+      observer?.disconnect()
+    }
+  }, [open, results])
+
+  useLayoutEffect(() => {
+    if (!open || !keyboardNavigationRef.current || !listboxRef.current || !activeOptionRef.current) return
+    scrollItemIntoView(listboxRef.current, activeOptionRef.current)
+    keyboardNavigationRef.current = false
+  }, [open, safeActiveIndex])
 
   const select = (item: T) => {
     if (onSelect(item) === false) return
@@ -28,6 +74,7 @@ export function SettingsSearch<T extends SearchMenuItem>({ items, placeholder, c
 
   return (
     <div
+      ref={rootRef}
       className="relative z-30"
       onFocusCapture={() => setHasFocus(true)}
       onBlurCapture={event => {
@@ -54,11 +101,12 @@ export function SettingsSearch<T extends SearchMenuItem>({ items, placeholder, c
         aria-label={placeholder}
         aria-expanded={open}
         aria-controls={listboxId}
-        aria-activedescendant={open && results.length > 0 ? `${listboxId}-result-${activeIndex}` : undefined}
+        aria-activedescendant={open && results.length > 0 ? `${listboxId}-result-${safeActiveIndex}` : undefined}
         autoComplete="off"
         spellCheck={false}
         value={query}
         onChange={event => {
+          keyboardNavigationRef.current = false
           setQuery(event.target.value)
           setActiveIndex(0)
         }}
@@ -67,12 +115,13 @@ export function SettingsSearch<T extends SearchMenuItem>({ items, placeholder, c
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault()
             const direction = event.key === 'ArrowDown' ? 1 : -1
-            setActiveIndex(index => (index + direction + results.length) % results.length)
+            keyboardNavigationRef.current = true
+            setActiveIndex((safeActiveIndex + direction + results.length) % results.length)
             return
           }
           if (event.key === 'Enter') {
             event.preventDefault()
-            select(results[Math.min(activeIndex, results.length - 1)])
+            select(results[safeActiveIndex])
           }
         }}
         placeholder={placeholder}
@@ -95,9 +144,10 @@ export function SettingsSearch<T extends SearchMenuItem>({ items, placeholder, c
 
       {open && (
         <div
+          ref={listboxRef}
           id={listboxId}
           role="listbox"
-          className="absolute left-0 right-0 top-[calc(100%+6px)] max-h-72 min-w-[260px] overflow-y-auto rounded-md border border-border-200 bg-bg-000/95 p-1 shadow-xl backdrop-blur-xl custom-scrollbar"
+          className="absolute left-0 top-[calc(100%+6px)] max-h-72 min-w-full max-w-[calc(100vw-2rem)] overflow-y-auto rounded-md border border-border-200 bg-bg-000/95 p-1 shadow-xl backdrop-blur-xl custom-scrollbar"
         >
           {results.length === 0 ? (
             <div className="px-2.5 py-3 text-[length:var(--fs-xs)] text-text-400" role="status">
@@ -108,15 +158,19 @@ export function SettingsSearch<T extends SearchMenuItem>({ items, placeholder, c
               <button
                 key={item.id}
                 id={`${listboxId}-result-${index}`}
+                ref={index === safeActiveIndex ? activeOptionRef : undefined}
                 type="button"
                 role="option"
                 tabIndex={-1}
-                aria-selected={index === activeIndex}
-                onMouseEnter={() => setActiveIndex(index)}
+                aria-selected={index === safeActiveIndex}
+                onMouseEnter={() => {
+                  keyboardNavigationRef.current = false
+                  setActiveIndex(index)
+                }}
                 onMouseDown={event => event.preventDefault()}
                 onClick={() => select(item)}
                 className={`flex w-full min-w-0 items-center justify-between gap-3 rounded px-2.5 py-2 text-left transition-colors ${
-                  index === activeIndex ? 'bg-bg-200/80' : 'hover:bg-bg-200/50'
+                  index === safeActiveIndex ? 'bg-bg-200/80' : 'hover:bg-bg-200/50'
                 }`}
               >
                 <span className="min-w-0 flex-1">
