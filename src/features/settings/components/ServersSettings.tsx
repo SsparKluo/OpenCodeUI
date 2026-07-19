@@ -11,6 +11,8 @@ import {
   SpinnerIcon,
   KeyIcon,
   PencilIcon,
+  ShieldIcon,
+  ExternalLinkIcon,
 } from '../../../components/Icons'
 import { useServerStore, useRouter } from '../../../hooks'
 import { messageStore } from '../../../store'
@@ -50,12 +52,19 @@ function ServerItem({
   canDeleteDefault: boolean
   onSelect: () => void
   onDelete: () => void
-  onEdit: (updates: { name: string; url: string; username?: string; password?: string }) => void
+  onEdit: (updates: {
+    name: string
+    url: string
+    username?: string
+    password?: string
+    useCloudflareAccess?: boolean
+  }) => void
   onCheckHealth: () => void
 }) {
   const { t } = useTranslation(['settings', 'common'])
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const isAccessMode = server.authMode === 'cloudflare-access'
 
   const statusIcon = () => {
     if (!health || health.status === 'checking') return <SpinnerIcon size={12} className="animate-spin text-text-400" />
@@ -122,6 +131,15 @@ function ServerItem({
                   {t('servers.current')}
                 </span>
               )}
+              {isAccessMode && (
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[length:var(--fs-xxs)] font-medium text-accent-main-100 bg-accent-main-100/10 shrink-0"
+                  title={t('servers.accessBadge')}
+                >
+                  <ShieldIcon size={10} />
+                  Access
+                </span>
+              )}
             </div>
             <div className="text-[length:var(--fs-xs)] text-text-400 truncate font-mono flex items-center gap-1">
               {server.url}
@@ -129,6 +147,19 @@ function ServerItem({
             </div>
           </div>
         </button>
+        {isAccessMode && (
+          <a
+            href={server.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className="p-2 rounded text-text-400 hover:text-accent-main-100 hover:bg-accent-main-100/10 transition-all"
+            title={t('servers.accessLogin')}
+            aria-label={t('servers.accessLogin')}
+          >
+            <ExternalLinkIcon size={12} />
+          </a>
+        )}
         <button
           type="button"
           className="p-2 rounded hover:bg-bg-200 transition-colors"
@@ -198,7 +229,13 @@ function EditServerForm({
   onCancel,
 }: {
   server: ServerConfig
-  onSave: (updates: { name: string; url: string; username?: string; password?: string }) => void
+  onSave: (updates: {
+    name: string
+    url: string
+    username?: string
+    password?: string
+    useCloudflareAccess?: boolean
+  }) => void
   onCancel: () => void
 }) {
   const { t } = useTranslation(['settings', 'common'])
@@ -207,6 +244,7 @@ function EditServerForm({
   const [username, setUsername] = useState(server.auth?.username || '')
   const [password, setPassword] = useState(server.auth?.password || '')
   const [showAuth, setShowAuth] = useState(!!server.auth?.password)
+  const [useCloudflareAccess, setUseCloudflareAccess] = useState(server.authMode === 'cloudflare-access')
   const [error, setError] = useState('')
   const showHttpsIpWarning = isHttpsIpUrl(url)
 
@@ -231,6 +269,7 @@ function EditServerForm({
       url: url.trim(),
       username: password.trim() ? username.trim() || 'opencode' : undefined,
       password: password.trim() || undefined,
+      useCloudflareAccess,
     })
   }
 
@@ -310,6 +349,22 @@ function EditServerForm({
         </>
       )}
 
+      <label className="flex items-start gap-2 text-[length:var(--fs-xs)] text-text-300 cursor-pointer leading-relaxed">
+        <input
+          type="checkbox"
+          checked={useCloudflareAccess}
+          onChange={e => setUseCloudflareAccess(e.target.checked)}
+          className="mt-0.5 accent-accent-main-100"
+        />
+        <span>{t('servers.useCloudflareAccess')}</span>
+      </label>
+
+      {useCloudflareAccess && (
+        <div className="text-[length:var(--fs-xs)] text-accent-main-100 bg-accent-main-100/5 border border-accent-main-100/20 rounded-md px-2.5 py-2 leading-relaxed">
+          {t('servers.accessDescription')}
+        </div>
+      )}
+
       {showHttpsIpWarning && (
         <div className="text-[length:var(--fs-xs)] text-warning-100 bg-warning-bg border border-warning-100/20 rounded-md px-2.5 py-2 leading-relaxed">
           {t('servers.httpsIpWarning')}
@@ -337,7 +392,13 @@ function AddServerForm({
   onAdd,
   onCancel,
 }: {
-  onAdd: (name: string, url: string, username?: string, password?: string) => void
+  onAdd: (
+    name: string,
+    url: string,
+    username?: string,
+    password?: string,
+    useCloudflareAccess?: boolean,
+  ) => void
   onCancel: () => void
 }) {
   const { t } = useTranslation(['settings', 'common'])
@@ -346,6 +407,7 @@ function AddServerForm({
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showAuth, setShowAuth] = useState(false)
+  const [useCloudflareAccess, setUseCloudflareAccess] = useState(false)
   const [error, setError] = useState('')
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -370,6 +432,7 @@ function AddServerForm({
       url.trim(),
       password.trim() ? username.trim() || 'opencode' : undefined,
       password.trim() || undefined,
+      useCloudflareAccess,
     )
   }
 
@@ -471,6 +534,22 @@ function AddServerForm({
 
           <div className="text-[length:var(--fs-xs)] text-text-400 leading-relaxed">{t('servers.credentialsStorage')}</div>
         </>
+      )}
+
+      <label className="flex items-start gap-2 text-[length:var(--fs-xs)] text-text-300 cursor-pointer leading-relaxed">
+        <input
+          type="checkbox"
+          checked={useCloudflareAccess}
+          onChange={e => setUseCloudflareAccess(e.target.checked)}
+          className="mt-0.5 accent-accent-main-100"
+        />
+        <span>{t('servers.useCloudflareAccess')}</span>
+      </label>
+
+      {useCloudflareAccess && (
+        <div className="text-[length:var(--fs-xs)] text-accent-main-100 bg-accent-main-100/5 border border-accent-main-100/20 rounded-md px-2.5 py-2 leading-relaxed">
+          {t('servers.accessDescription')}
+        </div>
       )}
 
       {showHttpsIpWarning && (
@@ -578,7 +657,12 @@ export function ServersSettings() {
                 const auth = updates.password
                   ? { username: updates.username || 'opencode', password: updates.password }
                   : undefined
-                updateServer(s.id, { name: updates.name, url: updates.url, auth })
+                updateServer(s.id, {
+                  name: updates.name,
+                  url: updates.url,
+                  auth,
+                  authMode: updates.useCloudflareAccess ? 'cloudflare-access' : 'basic',
+                })
                 void checkHealth(s.id)
               }}
               onCheckHealth={() => void checkHealth(s.id)}
@@ -587,9 +671,14 @@ export function ServersSettings() {
 
           {addingServer && (
             <AddServerForm
-              onAdd={(n, u, user, pass) => {
+              onAdd={(n, u, user, pass, useAccess) => {
                 const auth = pass ? { username: user || 'opencode', password: pass } : undefined
-                const s = addServer({ name: n, url: u, auth })
+                const s = addServer({
+                  name: n,
+                  url: u,
+                  auth,
+                  authMode: useAccess ? 'cloudflare-access' : 'basic',
+                })
                 setAddingServer(false)
                 void checkHealth(s.id)
               }}

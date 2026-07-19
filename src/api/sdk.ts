@@ -8,7 +8,7 @@
 // ============================================
 
 import { createOpencodeClient, type OpencodeClient } from '@opencode-ai/sdk/v2/client'
-import { serverStore, makeBasicAuthHeader } from '../store/serverStore'
+import { serverStore, makeBasicAuthHeader, usesCookieAuth } from '../store/serverStore'
 import { isTauri } from '../utils/tauri'
 
 // Tauri fetch 缓存
@@ -53,9 +53,15 @@ async function trackedFetch(input: RequestInfo | URL, init: RequestInit | undefi
       throw createAbortError('Stale API request')
     }
 
+    // Cloudflare Access 模式：让浏览器携带目标 hostname 的 CF_Authorization cookie。
+    // basic/none 模式保持 same-origin，避免无谓的 cookie 泄漏给跨域 endpoint。
+    const activeAuthMode = serverStore.getActiveAuthMode()
+    const credentials: RequestCredentials = usesCookieAuth(activeAuthMode) ? 'include' : 'same-origin'
+
     return await getFetchImpl()(input, {
       ...init,
       signal: controller.signal,
+      credentials,
     })
   } finally {
     externalSignal?.removeEventListener('abort', abortFromExternal)
@@ -78,12 +84,17 @@ let _cachedKey = ''
 function buildCacheKey(): string {
   const baseUrl = serverStore.getActiveBaseUrl()
   const auth = serverStore.getActiveAuth()
+  const authMode = serverStore.getActiveAuthMode()
   const authPart = auth?.password ? `${auth.username}:${auth.password}` : ''
-  return `${baseUrl}|${authPart}`
+  // authMode 必须进 cache key：切换 access ↔ access+basic 时即使 auth 不变，
+  // 也需要重建 client 决定是否注入 Authorization。
+  return `${baseUrl}|${authMode}|${authPart}`
 }
 
 function buildHeaders(): Record<string, string> {
   const headers: Record<string, string> = {}
+  // 只要填了 Basic 凭据就发 Authorization header，与 authMode 无关。
+  // cloudflare-access 模式下 Access cookie 也会同时被浏览器发送（见 trackedFetch）。
   const auth = serverStore.getActiveAuth()
   if (auth?.password) {
     headers['Authorization'] = makeBasicAuthHeader(auth)

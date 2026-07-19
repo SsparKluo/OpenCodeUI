@@ -110,6 +110,14 @@ export function getPtyConnectUrl(ptyId: string, directory?: string, options?: Pt
     return `${wsBase}/pty/${ptyId}/connect${buildQueryString({ directory: formatted, cursor })}`
   }
 
+  // cloudflare-access 模式且未填 Basic 凭据：WebSocket handshake 由浏览器自动携带
+  // CF_Authorization cookie，不在 URL 里嵌入任何凭据（避免 query string 泄漏到日志）。
+  // 如果同时填了 Basic 凭据，浏览器 WebSocket 无法设置 Authorization header，
+  // Basic 凭据只能走 URL（userinfo + auth_token）；CF_Authorization cookie 同时自动携带。
+  if (serverStore.getActiveAuthMode() === 'cloudflare-access' && !auth?.password) {
+    return `${wsBase}/pty/${ptyId}/connect${buildQueryString({ directory: formatted, cursor })}`
+  }
+
   // 浏览器原生 WebSocket：
   // 跨域时用 auth_token query parameter + userinfo fallback
   // 同源时浏览器会自动复用 Basic auth

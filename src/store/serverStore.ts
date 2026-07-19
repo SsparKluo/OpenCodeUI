@@ -21,6 +21,17 @@ async function getUnifiedFetch(): Promise<typeof globalThis.fetch> {
 }
 
 /**
+ * 服务器认证模式
+ * - basic: 普通 HTTP Basic Auth 或无认证（取决于 auth 是否填写），credentials: 'same-origin'。
+ * - cloudflare-access: 由 Cloudflare Access 保护，浏览器通过 CF_Authorization cookie 鉴权，
+ *   credentials: 'include'。如果同时填了 auth，会额外注入 Basic header（纵深防御）。
+ *
+ * 桌面端 Tauri fetch 没有 cookie jar，cloudflare-access 模式下 Access cookie 部分不可用；
+ * 如果同时填了 Basic 凭据，等价于纯 basic。
+ */
+export type AuthMode = 'basic' | 'cloudflare-access'
+
+/**
  * 服务器认证信息
  */
 export interface ServerAuth {
@@ -36,7 +47,27 @@ export interface ServerConfig {
   name: string // 显示名称
   url: string // 服务器 URL (不含尾部斜杠)
   isDefault?: boolean // 是否为默认服务器
-  auth?: ServerAuth // 认证信息 (可选)
+  auth?: ServerAuth // Basic 凭据（可选；填了就发 Authorization header，不填就不发）
+  authMode?: AuthMode // 认证模式 (可选，缺省视为 basic)
+}
+
+/**
+ * 模式是否依赖浏览器 cookie 鉴权（fetch credentials: 'include'）。
+ */
+export function usesCookieAuth(mode: AuthMode): boolean {
+  return mode === 'cloudflare-access'
+}
+
+/**
+ * 根据服务器配置推断有效认证模式：
+ * - 显式 authMode 优先
+ * - 'none' / 'cloudflare-access+basic' 等历史值会被归一化
+ * - 未设置时默认 basic
+ */
+export function getEffectiveAuthMode(server: ServerConfig | null | undefined): AuthMode {
+  if (!server) return 'basic'
+  if (server.authMode === 'cloudflare-access') return 'cloudflare-access'
+  return 'basic'
 }
 
 /**
@@ -327,6 +358,21 @@ class ServerStore {
   }
 
   /**
+   * 获取当前活动服务器的有效认证模式
+   */
+  getActiveAuthMode(): AuthMode {
+    return getEffectiveAuthMode(this.getActiveServer())
+  }
+
+  /**
+   * 获取指定服务器的有效认证模式
+   */
+  getServerAuthMode(serverId: string): AuthMode {
+    const server = this.servers.find(s => s.id === serverId)
+    return getEffectiveAuthMode(server)
+  }
+
+  /**
    * 获取指定服务器的认证信息
    */
   getServerAuth(serverId: string): ServerAuth | null {
@@ -500,6 +546,9 @@ class ServerStore {
 
     try {
       const headers: Record<string, string> = {}
+      const authMode = getEffectiveAuthMode(server)
+      // Basic 凭据在两种模式下都可能存在：basic 模式下作为唯一认证，
+      // cloudflare-access 模式下作为纵深防御。只要填了就发 Authorization header。
       if (server.auth?.password) {
         headers['Authorization'] = makeBasicAuthHeader(server.auth)
       }
@@ -509,6 +558,9 @@ class ServerStore {
         method: 'GET',
         signal: controller.signal,
         headers,
+        // cloudflare-access 模式必须 include，浏览器才会带 CF_Authorization cookie；
+        // basic 模式保持 same-origin，避免无谓的 cookie 泄漏。
+        credentials: usesCookieAuth(authMode) ? 'include' : 'same-origin',
       })
 
       const latency = Date.now() - startTime
@@ -619,19 +671,30 @@ function normalizeServerBackup(raw: unknown): ServerSettingsBackup {
             typeof (item as Record<string, unknown>).name === 'string' &&
             typeof (item as Record<string, unknown>).url === 'string',
         )
-        .map(item => ({
-          id: item.id,
-          name: item.name,
-          url: item.url.replace(/\/+$/, ''),
-          isDefault: item.isDefault === true,
-          auth:
-            item.auth &&
-            typeof item.auth === 'object' &&
-            typeof item.auth.username === 'string' &&
-            typeof item.auth.password === 'string'
-              ? { username: item.auth.username, password: item.auth.password }
-              : undefined,
-        }))
+        .map(item => {
+          const raw = item as unknown as Record<string, unknown>
+          const rawAuthMode = raw.authMode
+          // 历史值归一化：
+          // - 'none' → 'basic'（无凭据时即"无认证"）
+          // - 'cloudflare-access+basic' → 'cloudflare-access'（凭据由 auth 字段决定是否使用）
+          // - 未设置 → 'basic'
+          const authMode: AuthMode =
+            rawAuthMode === 'cloudflare-access' ? 'cloudflare-access' : 'basic'
+          return {
+            id: item.id,
+            name: item.name,
+            url: item.url.replace(/\/+$/, ''),
+            isDefault: item.isDefault === true,
+            auth:
+              item.auth &&
+              typeof item.auth === 'object' &&
+              typeof item.auth.username === 'string' &&
+              typeof item.auth.password === 'string'
+                ? { username: item.auth.username, password: item.auth.password }
+                : undefined,
+            authMode,
+          }
+        })
     : []
 
   const normalizedServers = servers.length

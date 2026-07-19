@@ -2,7 +2,7 @@
 // Global Event Subscription (SSE) - Singleton Pattern
 // ============================================
 
-import { getApiBaseUrl, getAuthHeader } from './http'
+import { getApiBaseUrl, getAuthHeader, isActiveAccessMode } from './http'
 import { createSseTextParser } from './sse'
 import { normalizeTodoItems } from './todo'
 import { isTauri } from '../utils/tauri'
@@ -420,6 +420,8 @@ function connectViaBrowser() {
       Accept: 'text/event-stream',
       ...getAuthHeader(),
     },
+    // Cloudflare Access 模式需要 CF_Authorization cookie；其它模式保持 same-origin。
+    credentials: isActiveAccessMode() ? 'include' : 'same-origin',
   })
     .then(async response => {
       if (myGeneration !== connectionGeneration) {

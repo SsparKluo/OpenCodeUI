@@ -1,0 +1,65 @@
+name: Deploy to Cloudflare Pages
+
+# Builds the static SPA from the deploy/cloudflare branch and deploys to
+# Cloudflare Pages using the wrangler pages deploy command.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN   — token with "Cloudflare Pages: Edit" + "Account: Read"
+#   CLOUDFLARE_ACCOUNT_ID  — account ID shown on the account sidebar
+#
+# Optional repository variables (Settings → Secrets and variables → Actions → Variables):
+#   CF_PAGES_PROJECT_NAME  — Pages project name (defaults to opencodeui)
+#   CF_PAGES_VITE_API_BASE_URL — optional default backend URL baked into the SPA
+#                                 (see docs/cloudflare-pages.md before setting this)
+
+on:
+  push:
+    branches: [deploy/cloudflare]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'tsconfig*.json'
+      - '.github/workflows/deploy-cloudflare.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cf-pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build SPA
+        run: npm run build
+        env:
+          # Optional: bake a default backend URL into the SPA. Leave empty to
+          # default to http://127.0.0.1:4096 so the SPA is server-agnostic.
+          VITE_API_BASE_URL: ${{ vars.CF_PAGES_VITE_API_BASE_URL }}
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: ${{ vars.CF_PAGES_PROJECT_NAME || 'opencodeui' }}
+          directory: dist
+          branch: deploy/cloudflare

@@ -3,7 +3,7 @@
 // 仅保留给 SSE / PTY WebSocket 使用的 URL 与 auth 辅助函数
 // ============================================
 
-import { serverStore, makeBasicAuthHeader } from '../store/serverStore'
+import { serverStore, makeBasicAuthHeader, usesCookieAuth } from '../store/serverStore'
 
 /**
  * 获取当前 API Base URL
@@ -14,8 +14,8 @@ export function getApiBaseUrl(): string {
 }
 
 /**
- * 获取当前活动服务器的 Authorization header
- * 如果服务器配置了密码则返回 Basic Auth header，否则返回 undefined
+ * 获取当前活动服务器需要手动注入的 Authorization header。
+ * 只要填了 Basic 凭据就返回（与 authMode 无关）。
  */
 export function getAuthHeader(): Record<string, string> {
   const auth = serverStore.getActiveAuth()
@@ -23,6 +23,14 @@ export function getAuthHeader(): Record<string, string> {
     return { Authorization: makeBasicAuthHeader(auth) }
   }
   return {}
+}
+
+/**
+ * 当前活动服务器是否依赖浏览器 cookie 鉴权（cloudflare-access 模式）。
+ * 调用方据此决定是否使用 credentials: 'include'。
+ */
+export function isActiveAccessMode(): boolean {
+  return usesCookieAuth(serverStore.getActiveAuthMode())
 }
 
 type QueryValue = string | number | boolean | undefined

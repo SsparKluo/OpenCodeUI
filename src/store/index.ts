@@ -36,8 +36,15 @@ export type { PaneControllerState } from './paneControllerStore'
 export { autoApproveStore } from './autoApproveStore'
 export type { AutoApproveRule } from './autoApproveStore'
 
-export { serverStore, makeBasicAuthHeader, exportServerSettingsBackup, importServerSettingsBackup } from './serverStore'
-export type { ServerConfig, ServerHealth, ServerAuth, ServerSettingsBackup } from './serverStore'
+export {
+  serverStore,
+  makeBasicAuthHeader,
+  exportServerSettingsBackup,
+  importServerSettingsBackup,
+  getEffectiveAuthMode,
+  usesCookieAuth,
+} from './serverStore'
+export type { ServerConfig, ServerHealth, ServerAuth, ServerSettingsBackup, AuthMode } from './serverStore'
 
 export {
   keybindingStore,

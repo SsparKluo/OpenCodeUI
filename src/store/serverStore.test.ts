@@ -242,3 +242,54 @@ describe('serverStore health check', () => {
     expect(serverStore.getHealth('local')?.status).toBe('online')
   })
 })
+
+describe('serverStore cloudflare-access mode', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.stubGlobal('fetch', vi.fn())
+    localStorage.clear()
+    sessionStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('uses credentials: include and no Authorization header for access-mode servers', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ healthy: true, version: '1.16.0' }))
+    const { serverStore } = await import('./serverStore')
+
+    const access = serverStore.addServer({
+      name: 'Access',
+      url: 'https://api.example.com',
+      authMode: 'cloudflare-access',
+    })
+
+    const health = await serverStore.checkHealth(access.id)
+    expect(health.status).toBe('online')
+
+    const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit
+    expect(init.credentials).toBe('include')
+    expect((init.headers as Record<string, string>).Authorization).toBeUndefined()
+  })
+
+  it('auto-detects basic mode when a server without authMode has auth.password', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ healthy: true, version: '1.16.0' }))
+    const { serverStore } = await import('./serverStore')
+
+    const basic = serverStore.addServer({
+      name: 'Basic',
+      url: 'https://api.example.com',
+      auth: { username: 'opencode', password: 'secret' },
+    })
+
+    expect(serverStore.getServerAuthMode(basic.id)).toBe('basic')
+
+    await serverStore.checkHealth(basic.id)
+    const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit
+    expect(init.credentials).toBe('same-origin')
+    expect((init.headers as Record<string, string>).Authorization).toBe(
+      'Basic ' + btoa('opencode:secret'),
+    )
+  })
+})

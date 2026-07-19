@@ -13,6 +13,8 @@ dist-ssr
 *.local
 yarn.lock
 .yarn
+# Package manager switched from pnpm to npm; only package-lock.json is tracked
+pnpm-lock.yaml
 
 # Environment variables
 .env

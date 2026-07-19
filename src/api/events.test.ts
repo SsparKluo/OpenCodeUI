@@ -4,6 +4,7 @@ import { EventTypes } from '../types/api/event'
 vi.mock('./http', () => ({
   getApiBaseUrl: () => 'http://example.test',
   getAuthHeader: () => ({}),
+  isActiveAccessMode: () => false,
 }))
 
 vi.mock('../utils/tauri', () => ({
