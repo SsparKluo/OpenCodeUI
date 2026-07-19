@@ -14,6 +14,7 @@ import {
 } from '../../../components/Icons'
 import { useServerStore, useRouter } from '../../../hooks'
 import { messageStore } from '../../../store'
+import { isTauri } from '../../../utils/tauri'
 import { SettingsCard } from './SettingsUI'
 import type { ServerConfig, ServerHealth } from '../../../store/serverStore'
 
@@ -37,6 +38,7 @@ function ServerItem({
   server,
   health,
   isActive,
+  canDeleteDefault,
   onSelect,
   onDelete,
   onEdit,
@@ -45,6 +47,7 @@ function ServerItem({
   server: ServerConfig
   health: ServerHealth | null
   isActive: boolean
+  canDeleteDefault: boolean
   onSelect: () => void
   onDelete: () => void
   onEdit: (updates: { name: string; url: string; username?: string; password?: string }) => void
@@ -139,32 +142,32 @@ function ServerItem({
           {statusIcon()}
         </button>
         {!server.isDefault && (
-          <>
-            <button
-              type="button"
-              className="p-2 rounded text-text-400 hover:text-accent-main-100 hover:bg-accent-main-100/10 transition-all"
-              onClick={e => {
-                e.stopPropagation()
-                setEditing(true)
-              }}
-              title={t('servers.editServer')}
-              aria-label={t('servers.editServer')}
-            >
-              <PencilIcon size={12} />
-            </button>
-            <button
-              type="button"
-              className="p-2 rounded text-text-400 hover:text-danger-100 hover:bg-danger-100/10 transition-all"
-              onClick={e => {
-                e.stopPropagation()
-                setConfirmDelete(true)
-              }}
-              title={t('common:remove')}
-              aria-label={t('common:remove')}
-            >
-              <TrashIcon size={12} />
-            </button>
-          </>
+          <button
+            type="button"
+            className="p-2 rounded text-text-400 hover:text-accent-main-100 hover:bg-accent-main-100/10 transition-all"
+            onClick={e => {
+              e.stopPropagation()
+              setEditing(true)
+            }}
+            title={t('servers.editServer')}
+            aria-label={t('servers.editServer')}
+          >
+            <PencilIcon size={12} />
+          </button>
+        )}
+        {(!server.isDefault || canDeleteDefault) && (
+          <button
+            type="button"
+            className="p-2 rounded text-text-400 hover:text-danger-100 hover:bg-danger-100/10 transition-all"
+            onClick={e => {
+              e.stopPropagation()
+              setConfirmDelete(true)
+            }}
+            title={t('common:remove')}
+            aria-label={t('common:remove')}
+          >
+            <TrashIcon size={12} />
+          </button>
         )}
       </div>
 
@@ -508,6 +511,7 @@ export function ServersSettings() {
     getHealth,
   } = useServerStore()
   const { navigateHome, sessionId: routeSessionId } = useRouter()
+  const canDeleteDefault = !isTauri() && servers.length > 1
   const orderedServers = useMemo(() => {
     if (!activeServer) return servers
     const active = servers.find(s => s.id === activeServer.id)
@@ -567,6 +571,7 @@ export function ServersSettings() {
               server={s}
               health={getHealth(s.id)}
               isActive={activeServer?.id === s.id}
+              canDeleteDefault={canDeleteDefault}
               onSelect={() => handleSelectServer(s.id)}
               onDelete={() => removeServer(s.id)}
               onEdit={updates => {

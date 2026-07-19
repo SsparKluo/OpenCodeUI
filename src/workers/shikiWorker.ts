@@ -9,7 +9,7 @@ import {
 import { createOnigurumaEngine } from 'shiki/engine/oniguruma'
 import onigWasmUrl from 'shiki/onig.wasm?url'
 import { bundledLanguagesAlias, bundledLanguagesBase } from 'shiki/langs'
-import type { BundledTheme } from 'shiki/themes'
+import { bundledThemesInfo, type BundledTheme } from 'shiki/themes'
 
 export type WorkerToken = [content: string, color: string]
 
@@ -82,6 +82,38 @@ async function ensureLang(instance: HighlighterCore, lang: string): Promise<bool
   return true
 }
 
+/**
+ * 主题加载：利用 shiki/themes 的 bundledThemesInfo（每个条目的 import 字段是
+ * 独立的 `import("@shikijs/themes/<id>")` 静态字面量），让 Vite 为每个主题
+ * 生成独立 chunk，按需 lazy-load。预加载过的主题记录在 loadedThemes 里。
+ */
+const themeImporters = new Map<string, () => Promise<{ default: unknown }>>(
+  bundledThemesInfo.map(t => [t.id, t.import as () => Promise<{ default: unknown }>]),
+)
+const loadedThemes = new Set<string>()
+const pendingThemeLoads = new Map<string, Promise<void>>()
+
+async function ensureTheme(instance: HighlighterCore, theme: string): Promise<void> {
+  if (loadedThemes.has(theme)) return
+  const existing = pendingThemeLoads.get(theme)
+  if (existing) return existing
+
+  const importer = themeImporters.get(theme)
+  if (!importer) throw new Error(`Unknown Shiki theme: ${theme}`)
+
+  const promise = (async () => {
+    const mod = await importer()
+    await instance.loadTheme(mod.default as Parameters<HighlighterCore['loadTheme']>[0])
+    loadedThemes.add(theme)
+  })()
+  pendingThemeLoads.set(theme, promise)
+  try {
+    await promise
+  } finally {
+    pendingThemeLoads.delete(theme)
+  }
+}
+
 function toWorkerToken(value: ThemedToken): WorkerToken {
   return [value.content, value.color ?? '']
 }
@@ -103,6 +135,9 @@ async function highlight(request: Extract<WorkerRequest, { type: 'highlight' }>)
   try {
     const instance = await highlighter
     if (!instance) throw new Error('Shiki worker not initialized')
+
+    // 主题按需加载（init 时只预加载了用户当前选择；切换主题后第一次 highlight 触发 lazy load）
+    await ensureTheme(instance, request.theme)
 
     const requestedLanguage = request.language.toLowerCase()
     const language = plainLanguages.has(requestedLanguage) || findLangLoader(requestedLanguage) ? requestedLanguage : 'text'
@@ -216,13 +251,26 @@ const themeLoaders: Record<string, () => Promise<unknown>> = {
 self.onmessage = (event: MessageEvent<WorkerRequest>) => {
   const msg = event.data
   if (msg.type === 'init') {
+    // 用 bundledThemesInfo 解析 init 传入的主题 id（来自用户当前选择），用静态字面量
+    // import 让 Vite 把它们打成独立 chunk。未知 id 回退到 github-dark-default。
+    const resolvedThemeSpecs = msg.themes.map(t => {
+      const info = bundledThemesInfo.find(b => b.id === t)
+      return info ? info.import : themeLoaders['github-dark-default']!
+    })
     highlighter ??= createHighlighterCore({
       engine: createOnigurumaEngine(loadOnigWasm),
-      themes: msg.themes.map(t => themeLoaders[t]?.() ?? themeLoaders['github-dark-default']!()) as Parameters<typeof createHighlighterCore>[0]['themes'],
+      themes: resolvedThemeSpecs as Parameters<typeof createHighlighterCore>[0]['themes'],
       langs: [],
     })
     void highlighter
-      .then(() => post({ type: 'ready' }))
+      .then(async instance => {
+        // 标记 init 预加载的主题为已加载，避免重复 ensureTheme
+        msg.themes.forEach(t => {
+          if (bundledThemesInfo.some(b => b.id === t)) loadedThemes.add(t)
+        })
+        await instance
+        post({ type: 'ready' })
+      })
       .catch(error => post({ type: 'init-error', message: error instanceof Error ? error.message : String(error) }))
     return
   }

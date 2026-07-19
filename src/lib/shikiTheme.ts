@@ -1,10 +1,25 @@
 import { useState, useEffect } from 'react'
 import type { BundledTheme } from 'shiki/themes'
+import {
+  DEFAULT_CODE_BLOCK_THEME_DARK,
+  DEFAULT_CODE_BLOCK_THEME_LIGHT,
+  normalizeCodeBlockTheme,
+} from './codeBlockThemes'
 
 export type ShikiThemeInput = BundledTheme
 
-export function getShikiTheme(isDark: boolean): { theme: ShikiThemeInput; key: string } {
-  const theme = isDark ? 'github-dark-default' : 'github-light-default'
+/**
+ * 根据 isDark + 用户在设置里选择的代码块主题解析出实际使用的 Shiki 主题。
+ * 入参为空字符串/无效值时回退到 GitHub Default。
+ */
+export function getShikiTheme(
+  isDark: boolean,
+  codeBlockThemeLight: string = DEFAULT_CODE_BLOCK_THEME_LIGHT,
+  codeBlockThemeDark: string = DEFAULT_CODE_BLOCK_THEME_DARK,
+): { theme: ShikiThemeInput; key: string } {
+  const fallback = isDark ? DEFAULT_CODE_BLOCK_THEME_DARK : DEFAULT_CODE_BLOCK_THEME_LIGHT
+  const requested = isDark ? codeBlockThemeDark : codeBlockThemeLight
+  const theme = normalizeCodeBlockTheme(requested, fallback)
   return { theme, key: theme }
 }
 

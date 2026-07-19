@@ -3,6 +3,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import { Button } from '../../../components/ui/Button'
 import { SunIcon, MoonIcon, SystemIcon, CheckIcon, ChevronDownIcon } from '../../../components/Icons'
 import { Toggle, SegmentedControl, SettingRow, SettingsSection } from './SettingsUI'
+import { CodeBlockThemeSettings } from './CodeBlockThemeSettings'
 import { useTheme } from '../../../hooks'
 import { getThemePreset } from '../../../themes'
 import type { CustomCSSSnippet } from '../../../store/themeStore'
@@ -726,6 +727,8 @@ export function AppearanceSettings() {
           </div>
         </SettingRow>
       </SettingsSection>
+
+      <CodeBlockThemeSettings />
     </div>
   )
 }
