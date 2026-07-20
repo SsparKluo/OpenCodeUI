@@ -111,6 +111,28 @@ describe('Dialog', () => {
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
   })
 
+  it('traps focus using enabled roving-tabindex controls only', async () => {
+    render(
+      <Dialog isOpen={true} onClose={vi.fn()} ariaLabel="Settings" rawContent showCloseButton={false}>
+        <button type="button">First</button>
+        <button type="button" tabIndex={-1}>Inactive tab</button>
+        <button type="button">Last</button>
+        <button type="button" disabled>Disabled action</button>
+      </Dialog>,
+    )
+
+    await act(async () => {
+      vi.runAllTimers()
+      await Promise.resolve()
+    })
+
+    const first = screen.getByRole('button', { name: 'First' })
+    const last = screen.getByRole('button', { name: 'Last' })
+    last.focus()
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(first).toHaveFocus()
+  })
+
   it('does not steal focus back when another dialog opens during close', async () => {
     function Harness() {
       const [isFirstOpen, setIsFirstOpen] = useState(true)

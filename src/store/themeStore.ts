@@ -10,6 +10,11 @@
 
 import { getThemePreset, themeColorsToCSSVars, builtinThemes, DEFAULT_THEME_ID } from '../themes'
 import type { ThemePreset, ThemeColors } from '../themes'
+import {
+  DEFAULT_CODE_BLOCK_THEME_DARK,
+  DEFAULT_CODE_BLOCK_THEME_LIGHT,
+  normalizeCodeBlockTheme,
+} from '../lib/codeBlockThemes'
 
 // ============================================
 // Color Conversion Utility
@@ -111,26 +116,23 @@ const DEFAULT_STEP_FINISH_DISPLAY: StepFinishDisplay = {
 
 const DEFAULT_COMPLETED_AT_FORMAT: CompletedAtFormat = 'time'
 
-const DEFAULT_REASONING_DISPLAY_MODE: ReasoningDisplayMode = 'capsule'
+const DEFAULT_REASONING_DISPLAY_MODE: ReasoningDisplayMode = 'markdown'
 const DEFAULT_RENDER_USER_MARKDOWN = false
 const DEFAULT_DIFF_STYLE: DiffStyle = 'markers'
-const DEFAULT_DESCRIPTIVE_TOOL_STEPS = false
-const DEFAULT_INLINE_TOOL_REQUESTS = false
+const DEFAULT_DESCRIPTIVE_TOOL_STEPS = true
+const DEFAULT_INLINE_TOOL_REQUESTS = true
 const DEFAULT_CODE_WORD_WRAP = false
 const DEFAULT_UI_FONT_SCALE = 0
 const DEFAULT_CODE_FONT_SCALE = 0
 
 /** 工具输出渲染风格：classic = 经典（input+output 分离），compact = 精简（只展示 output，header 更矮） */
 export type ToolCardStyle = 'classic' | 'compact'
-const DEFAULT_TOOL_CARD_STYLE: ToolCardStyle = 'classic'
-const DEFAULT_IMMERSIVE_MODE = false
-const DEFAULT_COMPACT_INLINE_PERMISSION = false
+const DEFAULT_TOOL_CARD_STYLE: ToolCardStyle = 'compact'
+const DEFAULT_IMMERSIVE_MODE = true
+const DEFAULT_COMPACT_INLINE_PERMISSION = true
 const DEFAULT_GLASS_EFFECT = true
 const DEFAULT_QUEUE_FOLLOWUP_MESSAGES = false
 const DEFAULT_MANUAL_TERMINAL_TITLES = false
-/** Shiki 代码块主题：默认 GitHub，保留现有行为 */
-const DEFAULT_CODE_BLOCK_THEME_LIGHT = 'github-light-default'
-const DEFAULT_CODE_BLOCK_THEME_DARK = 'github-dark-default'
 const DEFAULT_EXTERNAL_FILE_DROP_MODE: ExternalFileDropMode = 'upload-first'
 const DEFAULT_OUTLINE_CURRENT_HIGHLIGHT = true
 /** 连续助手消息时，仅在回合末尾显示分叉/复制按钮 */
@@ -339,7 +341,7 @@ class ThemeStore {
         : DEFAULT_TOOL_CARD_STYLE
 
     const savedImmersiveMode = localStorage.getItem(STORAGE_KEY_IMMERSIVE_MODE)
-    const immersiveMode = savedImmersiveMode === 'true' ? true : DEFAULT_IMMERSIVE_MODE
+    const immersiveMode = savedImmersiveMode === null ? DEFAULT_IMMERSIVE_MODE : savedImmersiveMode === 'true'
 
     const savedCompactInlinePermission = localStorage.getItem(STORAGE_KEY_COMPACT_INLINE_PERMISSION)
     const compactInlinePermission =
@@ -386,10 +388,14 @@ class ThemeStore {
         ? DEFAULT_PROCESS_COLLAPSE_ENABLED
         : savedProcessCollapseEnabled === 'true'
 
-    const savedCodeBlockThemeLight = localStorage.getItem(STORAGE_KEY_CODE_BLOCK_THEME_LIGHT)
-    const codeBlockThemeLight = savedCodeBlockThemeLight || DEFAULT_CODE_BLOCK_THEME_LIGHT
-    const savedCodeBlockThemeDark = localStorage.getItem(STORAGE_KEY_CODE_BLOCK_THEME_DARK)
-    const codeBlockThemeDark = savedCodeBlockThemeDark || DEFAULT_CODE_BLOCK_THEME_DARK
+    const codeBlockThemeLight = normalizeCodeBlockTheme(
+      localStorage.getItem(STORAGE_KEY_CODE_BLOCK_THEME_LIGHT) || DEFAULT_CODE_BLOCK_THEME_LIGHT,
+      DEFAULT_CODE_BLOCK_THEME_LIGHT,
+    )
+    const codeBlockThemeDark = normalizeCodeBlockTheme(
+      localStorage.getItem(STORAGE_KEY_CODE_BLOCK_THEME_DARK) || DEFAULT_CODE_BLOCK_THEME_DARK,
+      DEFAULT_CODE_BLOCK_THEME_DARK,
+    )
 
     this.state = {
       presetId: normalizedPreset,
@@ -829,16 +835,18 @@ class ThemeStore {
   }
 
   setCodeBlockThemeLight(id: string) {
-    if (this.state.codeBlockThemeLight === id) return
-    this.state = { ...this.state, codeBlockThemeLight: id }
-    localStorage.setItem(STORAGE_KEY_CODE_BLOCK_THEME_LIGHT, id)
+    const next = normalizeCodeBlockTheme(id, DEFAULT_CODE_BLOCK_THEME_LIGHT)
+    if (this.state.codeBlockThemeLight === next) return
+    this.state = { ...this.state, codeBlockThemeLight: next }
+    localStorage.setItem(STORAGE_KEY_CODE_BLOCK_THEME_LIGHT, next)
     this.emit()
   }
 
   setCodeBlockThemeDark(id: string) {
-    if (this.state.codeBlockThemeDark === id) return
-    this.state = { ...this.state, codeBlockThemeDark: id }
-    localStorage.setItem(STORAGE_KEY_CODE_BLOCK_THEME_DARK, id)
+    const next = normalizeCodeBlockTheme(id, DEFAULT_CODE_BLOCK_THEME_DARK)
+    if (this.state.codeBlockThemeDark === next) return
+    this.state = { ...this.state, codeBlockThemeDark: next }
+    localStorage.setItem(STORAGE_KEY_CODE_BLOCK_THEME_DARK, next)
     this.emit()
   }
 
@@ -1101,14 +1109,14 @@ function normalizeThemeBackup(raw: unknown): ThemeBackup {
       typeof parsed?.processCollapseEnabled === 'boolean'
         ? parsed.processCollapseEnabled
         : DEFAULT_PROCESS_COLLAPSE_ENABLED,
-    codeBlockThemeLight:
-      typeof parsed?.codeBlockThemeLight === 'string' && parsed.codeBlockThemeLight
-        ? parsed.codeBlockThemeLight
-        : DEFAULT_CODE_BLOCK_THEME_LIGHT,
-    codeBlockThemeDark:
-      typeof parsed?.codeBlockThemeDark === 'string' && parsed.codeBlockThemeDark
-        ? parsed.codeBlockThemeDark
-        : DEFAULT_CODE_BLOCK_THEME_DARK,
+    codeBlockThemeLight: normalizeCodeBlockTheme(
+      typeof parsed?.codeBlockThemeLight === 'string' ? parsed.codeBlockThemeLight : DEFAULT_CODE_BLOCK_THEME_LIGHT,
+      DEFAULT_CODE_BLOCK_THEME_LIGHT,
+    ),
+    codeBlockThemeDark: normalizeCodeBlockTheme(
+      typeof parsed?.codeBlockThemeDark === 'string' ? parsed.codeBlockThemeDark : DEFAULT_CODE_BLOCK_THEME_DARK,
+      DEFAULT_CODE_BLOCK_THEME_DARK,
+    ),
   }
 }
 

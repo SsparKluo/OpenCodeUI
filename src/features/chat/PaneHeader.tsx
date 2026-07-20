@@ -207,7 +207,7 @@ export function PaneHeader({
                 e.stopPropagation()
                 handleClose()
               }}
-              className="text-text-400 hover:text-red-400 hover:bg-bg-200/50"
+              className="text-text-300 hover:text-red-400 hover:bg-bg-200/50"
             >
               <CloseIcon size={14} />
             </IconButton>
@@ -224,7 +224,7 @@ export function PaneHeader({
               className={`transition-colors ${
                 isPaneFullscreen
                   ? 'text-accent-main-100 bg-bg-200/50'
-                  : 'text-text-400 hover:text-text-100 hover:bg-bg-200/50'
+                  : 'text-text-300 hover:text-text-100 hover:bg-bg-200/50'
               }`}
             >
               {isPaneFullscreen ? <MinimizeIcon size={14} /> : <MaximizeIcon size={14} />}
@@ -240,7 +240,7 @@ export function PaneHeader({
                   e.stopPropagation()
                   handleSplitH()
                 }}
-                className="text-text-400 hover:text-text-100 hover:bg-bg-200/50"
+                className="text-text-300 hover:text-text-100 hover:bg-bg-200/50"
               >
                 <SplitHorizontalIcon size={14} />
               </IconButton>
@@ -252,7 +252,7 @@ export function PaneHeader({
                   e.stopPropagation()
                   handleSplitV()
                 }}
-                className="text-text-400 hover:text-text-100 hover:bg-bg-200/50"
+                className="text-text-300 hover:text-text-100 hover:bg-bg-200/50"
               >
                 <SplitVerticalIcon size={14} />
               </IconButton>
@@ -261,7 +261,7 @@ export function PaneHeader({
         </div>
 
         {isFocused && (
-          <div className="flex items-center gap-0.5 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
             {showSidebarButton && onOpenSidebar && (
               <IconButton
                 size="sm"
@@ -270,7 +270,7 @@ export function PaneHeader({
                   e.stopPropagation()
                   onOpenSidebar()
                 }}
-                className="text-text-400 hover:text-text-100 hover:bg-bg-200/50"
+                className="text-text-300 hover:text-text-100 hover:bg-bg-200/50"
               >
                 <SidebarIcon size={14} />
               </IconButton>
@@ -286,7 +286,7 @@ export function PaneHeader({
               className={`transition-colors ${
                 bottomPanelOpen
                   ? 'text-accent-main-100 bg-bg-200/50'
-                  : 'text-text-400 hover:text-text-100 hover:bg-bg-200/50'
+                  : 'text-text-300 hover:text-text-100 hover:bg-bg-200/50'
               }`}
             >
               <PanelBottomIcon size={14} />
@@ -306,7 +306,7 @@ export function PaneHeader({
               className={`transition-colors ${
                 rightPanelOpen
                   ? 'text-accent-main-100 bg-bg-200/50'
-                  : 'text-text-400 hover:text-text-100 hover:bg-bg-200/50'
+                  : 'text-text-300 hover:text-text-100 hover:bg-bg-200/50'
               }`}
             >
               <PanelRightIcon size={14} />

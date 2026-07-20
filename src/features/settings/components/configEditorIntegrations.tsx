@@ -1,11 +1,11 @@
 import type { Config } from '../../../types/api/config'
 import { DrillChild } from './configEditorDrill'
-import { useDrillContainer } from './configEditorDrillState'
+import { useDrillContainer, useDrillState } from './configEditorDrillState'
 import { BoolField, KeyValueField, PortField, PositiveIntegerField, Select, StringListField, StringMapField, TextField } from './configEditorControls'
-import { DrillFields, FieldRow, NamedDrillList, SectionShell, type FieldDef } from './configEditorFields'
+import { DrillFields, DuplicateIdField, FieldRow, NamedDrillList, SectionShell, type FieldDef } from './configEditorFields'
 import type { SectionProps } from './configEditorSectionTypes'
 import type { JsonRecord, Lang } from './configEditorTypes'
-import { getObject, isRecord, previewValue, setNested, setRoot, tx } from './configEditorUtils'
+import { clone, getObject, isRecord, previewValue, setNested, setRoot, tx } from './configEditorUtils'
 
 export function McpSection(props: SectionProps) {
   return (
@@ -46,7 +46,10 @@ function McpHome({ config, setConfig, lang }: SectionProps) {
 }
 
 function McpDetail({ config, setConfig, lang, name }: { config: Config; setConfig: (config: Config) => void; lang: Lang; name: string }) {
-  const item = getObject(config, 'mcp')[name]
+  const drill = useDrillState()
+  const { activeChildId } = useDrillContainer()
+  const map = getObject(config, 'mcp')
+  const item = map[name]
   const value = isRecord(item) ? item : {}
   const set = (next: JsonRecord) => setConfig(setNested(config, ['mcp', name], next))
   const type = value.type === 'remote' ? 'remote' : value.type === 'local' ? 'local' : 'enabled-only'
@@ -55,7 +58,7 @@ function McpDetail({ config, setConfig, lang, name }: { config: Config; setConfi
     {
       key: 'type',
       label: 'type',
-      desc: tx('Local runs a command; remote connects to a URL; enabled-only only toggles a built-in/default server.', 'local 运行命令；remote 连接 URL；enabled-only 只切换内置/默认服务启用状态。', lang),
+      desc: tx('Choose a local command, remote URL, or a built-in server toggle.', '选择本地命令、远程 URL 或内置服务开关。', lang),
       control: (
         <Select
           value={type}
@@ -77,6 +80,7 @@ function McpDetail({ config, setConfig, lang, name }: { config: Config; setConfi
       : type === 'local'
       ? [
           { key: 'command', label: 'command', badge: tx('required', '必填', lang), block: true, desc: tx('Command and arguments, one per line.', '命令和参数，每行一个。', lang), control: <StringListField value={value.command} onChange={v => set({ ...value, command: v })} mono placeholder="npx" /> },
+          { key: 'cwd', label: 'cwd', desc: tx('Working directory for the MCP process.', 'MCP 进程的工作目录。', lang), control: <TextField value={value.cwd} onChange={v => set({ ...value, cwd: v })} mono /> },
           { key: 'environment', label: 'environment', desc: tx('Environment variables for the server process.', '服务进程的环境变量。', lang), drill: { title: 'environment', preview: previewValue(value.environment, lang), render: () => <StringMapField value={value.environment} onChange={v => set({ ...value, environment: v })} /> } },
         ]
       : [
@@ -119,7 +123,22 @@ function McpDetail({ config, setConfig, lang, name }: { config: Config; setConfi
       : [{ key: 'timeout', label: 'timeout', desc: tx('Request timeout in ms (default 5000).', '请求超时（毫秒，默认 5000）。', lang), control: <PositiveIntegerField value={value.timeout} onChange={v => set({ ...value, timeout: v })} /> }]),
   ]
 
-  return <DrillFields fields={fields} isConfigured={key => key in value} lang={lang} />
+  return (
+    <div className="space-y-6">
+      {!activeChildId && (
+        <DuplicateIdField
+          sourceId={name}
+          existing={map}
+          lang={lang}
+          onCopy={targetId => {
+            setConfig(setNested(config, ['mcp', targetId], clone(value)))
+            drill.replace(0, { id: `mcp:${targetId}`, title: targetId })
+          }}
+        />
+      )}
+      <DrillFields fields={fields} isConfigured={key => key in value} lang={lang} />
+    </div>
+  )
 }
 
 export function FormatterSection(props: SectionProps) {
@@ -160,6 +179,7 @@ function FormatterHome({ config, setConfig, lang }: SectionProps) {
               { value: 'custom', label: tx('custom entries', '自定义条目', lang) },
             ]}
             onChange={next => {
+              if (mode === 'custom' && names.length > 0 && next !== 'custom' && !window.confirm(tx('Changing formatter mode will replace all custom entries. Continue?', '切换 formatter 模式会替换全部自定义条目，是否继续？', lang))) return
               if (next === 'on') setConfig(setRoot(config, 'formatter', true))
               else if (next === 'off') setConfig(setRoot(config, 'formatter', false))
               else if (next === 'custom') setConfig(setRoot(config, 'formatter', isRecord(value) ? value : {}))
@@ -173,7 +193,7 @@ function FormatterHome({ config, setConfig, lang }: SectionProps) {
           items={names}
           addPlaceholder={tx('formatter name', '格式化器名', lang)}
           onOpen={name => enter({ id: `formatter:${name}`, title: name })}
-          onAdd={name => setConfig(setNested(config, ['formatter', name], {}))}
+          onAdd={name => setConfig(setNested(config, ['formatter', name], { disabled: false }))}
           emptyText={tx('Add a formatter entry.', '添加一个格式化器配置。', lang)}
         />
       )}
@@ -182,6 +202,8 @@ function FormatterHome({ config, setConfig, lang }: SectionProps) {
 }
 
 function FormatterEntry({ config, setConfig, lang, name }: { config: Config; setConfig: (config: Config) => void; lang: Lang; name: string }) {
+  const drill = useDrillState()
+  const { activeChildId } = useDrillContainer()
   const record = getObject(config, 'formatter')
   const entry = isRecord(record[name]) ? (record[name] as JsonRecord) : {}
   const setEntry = (next: JsonRecord) => setConfig(setNested(config, ['formatter', name], next))
@@ -191,7 +213,22 @@ function FormatterEntry({ config, setConfig, lang, name }: { config: Config; set
     { key: 'environment', label: 'environment', desc: tx('Environment variables for the formatter.', '格式化器的环境变量。', lang), drill: { title: 'environment', preview: previewValue(entry.environment, lang), render: () => <StringMapField value={entry.environment} onChange={v => setEntry({ ...entry, environment: v })} /> } },
     { key: 'disabled', label: 'disabled', desc: tx('Disable this formatter.', '禁用该格式化器。', lang), control: <BoolField value={entry.disabled} onChange={v => setEntry({ ...entry, disabled: v })} /> },
   ]
-  return <DrillFields fields={fields} isConfigured={key => key in entry} lang={lang} />
+  return (
+    <div className="space-y-6">
+      {!activeChildId && (
+        <DuplicateIdField
+          sourceId={name}
+          existing={record}
+          lang={lang}
+          onCopy={targetId => {
+            setConfig(setNested(config, ['formatter', targetId], clone(entry)))
+            drill.replace(0, { id: `formatter:${targetId}`, title: targetId })
+          }}
+        />
+      )}
+      <DrillFields fields={fields} isConfigured={key => key in entry} lang={lang} />
+    </div>
+  )
 }
 
 export function LspSection(props: SectionProps) {
@@ -232,6 +269,7 @@ function LspHome({ config, setConfig, lang }: SectionProps) {
               { value: 'custom', label: tx('custom servers', '自定义服务器', lang) },
             ]}
             onChange={next => {
+              if (mode === 'custom' && names.length > 0 && next !== 'custom' && !window.confirm(tx('Changing LSP mode will replace all custom servers. Continue?', '切换 LSP 模式会替换全部自定义服务，是否继续？', lang))) return
               if (next === 'on') setConfig(setRoot(config, 'lsp', true))
               else if (next === 'off') setConfig(setRoot(config, 'lsp', false))
               else if (next === 'custom') setConfig(setRoot(config, 'lsp', isRecord(value) ? value : {}))
@@ -254,9 +292,22 @@ function LspHome({ config, setConfig, lang }: SectionProps) {
 }
 
 function LspEntry({ config, setConfig, lang, name }: { config: Config; setConfig: (config: Config) => void; lang: Lang; name: string }) {
+  const drill = useDrillState()
+  const { activeChildId } = useDrillContainer()
   const record = getObject(config, 'lsp')
   const entry = isRecord(record[name]) ? (record[name] as JsonRecord) : {}
   const setEntry = (next: JsonRecord) => setConfig(setNested(config, ['lsp', name], next))
+  const copyField = (
+    <DuplicateIdField
+      sourceId={name}
+      existing={record}
+      lang={lang}
+      onCopy={targetId => {
+        setConfig(setNested(config, ['lsp', targetId], clone(entry)))
+        drill.replace(0, { id: `lsp:${targetId}`, title: targetId })
+      }}
+    />
+  )
   const entryMode = entry.disabled === true && !('command' in entry) ? 'disabled-only' : 'custom'
   if (entryMode === 'disabled-only') {
     const fields: FieldDef[] = [
@@ -267,7 +318,12 @@ function LspEntry({ config, setConfig, lang, name }: { config: Config; setConfig
         control: <Select value="disabled-only" options={[{ value: 'disabled-only', label: tx('disabled-only', '仅禁用', lang) }, { value: 'custom', label: tx('custom command', '自定义命令', lang) }]} onChange={v => setEntry(v === 'disabled-only' ? { disabled: true } : { disabled: false, command: [] })} />,
       },
     ]
-    return <DrillFields fields={fields} isConfigured={() => true} lang={lang} />
+    return (
+      <div className="space-y-6">
+        {!activeChildId && copyField}
+        <DrillFields fields={fields} isConfigured={() => true} lang={lang} />
+      </div>
+    )
   }
   const fields: FieldDef[] = [
     {
@@ -282,5 +338,10 @@ function LspEntry({ config, setConfig, lang, name }: { config: Config; setConfig
     { key: 'initialization', label: 'initialization', desc: tx('LSP initialization options object.', 'LSP 初始化选项对象。', lang), drill: { title: 'initialization', preview: previewValue(entry.initialization, lang), render: () => <KeyValueField value={entry.initialization} onChange={v => setEntry({ ...entry, initialization: v })} /> } },
     { key: 'disabled', label: 'disabled', desc: tx('Disable this LSP server.', '禁用该 LSP 服务器。', lang), control: <BoolField value={entry.disabled} onChange={v => setEntry({ ...entry, disabled: v })} /> },
   ]
-  return <DrillFields fields={fields} isConfigured={key => key in entry} lang={lang} />
+  return (
+    <div className="space-y-6">
+      {!activeChildId && copyField}
+      <DrillFields fields={fields} isConfigured={key => key in entry} lang={lang} />
+    </div>
+  )
 }

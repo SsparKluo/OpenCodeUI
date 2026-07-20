@@ -15,6 +15,10 @@ export function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+export function hasOwn(value: unknown, key: string): boolean {
+  return isRecord(value) && Object.prototype.hasOwnProperty.call(value, key)
+}
+
 export function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value ?? {})) as T
 }
@@ -29,13 +33,13 @@ export function getObject(source: unknown, key: string): JsonRecord {
 }
 
 export function hasRoot(config: Config, key: string) {
-  return key in (config as JsonRecord)
+  return hasOwn(config, key)
 }
 
 export function hasNested(config: Config, path: string[]) {
   let current: unknown = config
   for (const key of path) {
-    if (!isRecord(current) || !(key in current)) return false
+    if (!isRecord(current) || !hasOwn(current, key)) return false
     current = current[key]
   }
   return true
@@ -50,15 +54,39 @@ export function setNested(config: Config, path: string[], value: unknown): Confi
   let current = next
   for (let i = 0; i < path.length - 1; i++) {
     const key = path[i]
-    if (!isRecord(current[key])) current[key] = {}
+    if (!hasOwn(current, key) || !isRecord(current[key])) setOwn(current, key, {})
     current = current[key] as JsonRecord
   }
-  current[path[path.length - 1]] = value
+  setOwn(current, path[path.length - 1], value)
   return next as Config
 }
 
+function setOwn(record: JsonRecord, key: string, value: unknown) {
+  Object.defineProperty(record, key, { value, enumerable: true, configurable: true, writable: true })
+}
+
+export function createMergePatch(before: unknown, after: unknown): JsonRecord {
+  const previous = isRecord(before) ? before : {}
+  const next = isRecord(after) ? after : {}
+  const patch: JsonRecord = {}
+  for (const [key, value] of Object.entries(next)) {
+    if (!hasOwn(previous, key)) {
+      setOwn(patch, key, clone(value))
+      continue
+    }
+    const oldValue = previous[key]
+    if (isRecord(oldValue) && isRecord(value)) {
+      const child = createMergePatch(oldValue, value)
+      if (Object.keys(child).length > 0) setOwn(patch, key, child)
+    } else if (!sameValue(oldValue, value)) {
+      setOwn(patch, key, clone(value))
+    }
+  }
+  return patch
+}
+
 export function asStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.map(item => String(item)) : []
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 }
 
 export function previewValue(value: unknown, lang: Lang): string {
@@ -75,11 +103,12 @@ export function previewValue(value: unknown, lang: Lang): string {
 }
 
 export function suggestCopyId(id: string, existing: JsonRecord) {
-  const base = `${id}-copy`
-  if (!(base in existing)) return base
+  const copyMatch = id.match(/^(.*)-copy(?:-\d+)?$/)
+  const base = copyMatch ? `${copyMatch[1]}-copy` : `${id}-copy`
+  if (!hasOwn(existing, base)) return base
   for (let i = 2; i < 1000; i++) {
     const next = `${base}-${i}`
-    if (!(next in existing)) return next
+    if (!hasOwn(existing, next)) return next
   }
   return `${base}-${Date.now()}`
 }

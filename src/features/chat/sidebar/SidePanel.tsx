@@ -11,9 +11,8 @@ import { buildActiveSessionTree } from './activeSessionTree'
 import {
   SidebarIcon,
   FolderIcon,
-  PlusIcon,
+  NewChatIcon,
   TrashIcon,
-  SearchIcon,
   ListFilterIcon,
   FolderMinusIcon,
   CheckIcon,
@@ -864,16 +863,16 @@ export function SidePanel({
             <button
               onClick={onToggleSidebar}
               aria-label={isExpanded ? t('sidebar.collapseSidebar') : t('sidebar.expandSidebar')}
-              className="h-8 w-8 flex items-center justify-center rounded-lg text-text-400 hover:text-text-100 hover:bg-bg-200 active:scale-[0.98] transition-all duration-200"
+              className="h-8 w-8 flex items-center justify-center rounded-lg text-text-300 hover:text-text-100 hover:bg-bg-200 active:scale-[0.98] transition-all duration-200"
             >
-              <SidebarIcon size={18} />
+              <SidebarIcon size={16} />
             </button>
           </div>
         )}
       </div>
 
-      {/* ===== Navigation - 图标位置固定 ===== */}
-      <div className="flex flex-col gap-0.5 mx-2">
+      {/* ===== Navigation - 图标位置固定；间距与 Header 面板按钮对齐 ===== */}
+      <div className="flex flex-col gap-0.5 mx-2 -mt-2.5">
         {/* New Chat - 图标始终在 padding-left: 6px 位置，收起时刚好居中 */}
         <button
           type="button"
@@ -888,7 +887,7 @@ export function SidePanel({
           title={t('sidebar.newChat')}
         >
           <span className="size-5 flex items-center justify-center shrink-0">
-            <PlusIcon size={16} />
+            <NewChatIcon size={16} />
           </span>
           <span
             className="ml-2 text-[length:var(--fs-base)] whitespace-nowrap transition-opacity duration-300"
@@ -937,33 +936,6 @@ export function SidePanel({
           visibility: showLabels ? 'visible' : 'hidden',
         }}
       >
-        {/* Search */}
-        <div className="px-3 pt-1.5 pb-2">
-          <div className="relative group">
-            <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-400 w-3.5 h-3.5 group-focus-within:text-accent-main-100 transition-colors" />
-            <input
-              type="text"
-              name="sidebar-chat-search"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={t('sidebar.searchChats')}
-              aria-label={t('sidebar.searchChats')}
-              autoComplete="off"
-              className="w-full bg-bg-200/40 hover:bg-bg-200/60 focus:bg-bg-000 border border-transparent focus:border-border-200 rounded-lg py-1.5 pl-[30px] pr-8 text-[length:var(--fs-sm)] text-text-100 placeholder:text-text-400/70 focus-visible:ring-1 focus-visible:ring-border-200 focus-visible:ring-inset transition-all"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-400 hover:text-text-100 text-[length:var(--fs-base)]"
-                aria-label={t('sidebar.clearSearch')}
-              >
-                ×
-              </button>
-            )}
-          </div>
-        </div>
-
         {/* Tab Bar: Recents / Active */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="flex items-center mx-2 gap-1 shrink-0">

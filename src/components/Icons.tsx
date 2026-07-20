@@ -41,6 +41,7 @@ import {
   Trash2,
   CornerDownLeft,
   Eye,
+  EyeOff,
   Maximize,
   Minimize,
   Share,
@@ -149,6 +150,7 @@ export const PencilIcon = wrap(Pencil)
 export const TrashIcon = wrap(Trash2)
 export const ReturnIcon = wrap(CornerDownLeft)
 export const EyeIcon = wrap(Eye)
+export const EyeOffIcon = wrap(EyeOff)
 export const MaximizeIcon = wrap(Maximize)
 export const MinimizeIcon = wrap(Minimize)
 export const ShareIcon = wrap(Share)

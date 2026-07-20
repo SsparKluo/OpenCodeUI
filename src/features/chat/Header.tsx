@@ -216,9 +216,9 @@ export function Header({
           <IconButton
             aria-label={t('header.openSidebar')}
             onClick={onOpenSidebar}
-            className="hover:bg-bg-200/50 text-text-400 hover:text-text-100"
+            className="hover:bg-bg-200/50 text-text-300 hover:text-text-100"
           >
-            <SidebarIcon size={18} />
+            <SidebarIcon size={16} />
           </IconButton>
         )}
 
@@ -236,10 +236,10 @@ export function Header({
               className={`transition-colors ${
                 isPaneFullscreen
                   ? 'text-accent-main-100 bg-bg-200/50'
-                  : 'text-text-400 hover:text-text-100 hover:bg-bg-200/50'
+                  : 'text-text-300 hover:text-text-100 hover:bg-bg-200/50'
               }`}
             >
-              {isPaneFullscreen ? <MinimizeIcon size={18} /> : <MaximizeIcon size={18} />}
+              {isPaneFullscreen ? <MinimizeIcon size={16} /> : <MaximizeIcon size={16} />}
             </IconButton>
           )}
 
@@ -247,26 +247,26 @@ export function Header({
             <IconButton
               aria-label="Split pane"
               onClick={onSplitPane}
-              className="transition-colors text-text-400 hover:text-text-100 hover:bg-bg-200/50"
+              className="transition-colors text-text-300 hover:text-text-100 hover:bg-bg-200/50"
             >
-              <SplitHorizontalIcon size={18} />
+              <SplitHorizontalIcon size={16} />
             </IconButton>
           )}
 
           <IconButton
             aria-label={bottomPanelOpen ? t('header.closeBottomPanel') : t('header.openBottomPanel')}
             onClick={() => layoutStore.toggleBottomPanel()}
-            className={`transition-colors ${bottomPanelOpen ? 'text-accent-main-100 bg-bg-200/50' : 'text-text-400 hover:text-text-100 hover:bg-bg-200/50'}`}
+            className={`transition-colors ${bottomPanelOpen ? 'text-accent-main-100 bg-bg-200/50' : 'text-text-300 hover:text-text-100 hover:bg-bg-200/50'}`}
           >
-            <PanelBottomIcon size={18} />
+            <PanelBottomIcon size={16} />
           </IconButton>
 
           <IconButton
             aria-label={rightPanelOpen ? t('header.closePanel') : t('header.openPanel')}
             onClick={onToggleRightPanel ?? (() => layoutStore.toggleRightPanel())}
-            className={`transition-colors ${rightPanelOpen ? 'text-accent-main-100 bg-bg-200/50' : 'text-text-400 hover:text-text-100 hover:bg-bg-200/50'}`}
+            className={`transition-colors ${rightPanelOpen ? 'text-accent-main-100 bg-bg-200/50' : 'text-text-300 hover:text-text-100 hover:bg-bg-200/50'}`}
           >
-            <PanelRightIcon size={18} />
+            <PanelRightIcon size={16} />
           </IconButton>
         </div>
       </div>

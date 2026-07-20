@@ -23,6 +23,7 @@ import { useTheme } from '../hooks'
 import { uiErrorHandler } from '../utils'
 import { getInternalDragSnapshot, startInternalDrag, subscribeInternalDrag, subscribeInternalDrop } from '../lib/internalDragCore'
 import { useDragEdgeAutoScroll } from '../hooks/useDragEdgeAutoScroll'
+import { IconButton } from './ui/IconButton'
 
 // ============================================
 // Types
@@ -364,15 +365,17 @@ export const PanelContainer = memo(function PanelContainer({
           )}
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-1 shrink-0 ml-2 border-l border-border-200/30 pl-2">
-          <button
-            onClick={handleCollapse}
-            className="p-2 text-text-400 hover:text-text-100 hover:bg-bg-200/50 rounded-md transition-colors"
+        {/* Actions — 与 Header 侧栏按钮同尺寸，短分隔线 */}
+        <div className="flex items-center shrink-0 ml-1">
+          <span className="w-px h-4 bg-border-200/30 mx-1.5" aria-hidden="true" />
+          <IconButton
+            aria-label={t('terminal.hidePanel')}
             title={t('terminal.hidePanel')}
+            onClick={handleCollapse}
+            className="hover:bg-bg-200/50 text-text-400 hover:text-text-100"
           >
             {position === 'bottom' ? <ChevronDownIcon size={16} /> : <ChevronRightIcon size={16} />}
-          </button>
+          </IconButton>
         </div>
 
         {/* Smooth gradient transition to content - REMOVED */}
@@ -563,6 +566,16 @@ const PanelTabButton = memo(function PanelTabButton({
     [isEditing, position, tab.id],
   )
 
+  const handleMiddleClose = useCallback(
+    (event: React.MouseEvent) => {
+      if (event.button !== 1 || !onClose) return
+      event.preventDefault()
+      event.stopPropagation()
+      onClose(event)
+    },
+    [onClose],
+  )
+
   return (
     <div
       data-tab-id={tab.id}
@@ -570,6 +583,7 @@ const PanelTabButton = memo(function PanelTabButton({
       title={tab.type === 'terminal' ? label : undefined}
       aria-label={tab.type === 'terminal' ? label : undefined}
       onPointerDown={handlePointerDragStart}
+      onMouseDown={handleMiddleClose}
       onClick={onClick}
       onContextMenu={onContextMenu}
       onDoubleClick={canRename ? onDoubleClick : undefined}

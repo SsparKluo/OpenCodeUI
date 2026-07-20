@@ -137,6 +137,33 @@ body,
 
 .dialog-safe-region {
   top: calc(var(--desktop-titlebar-height, 0px) + var(--app-safe-top, 0px));
+  padding-right: max(1rem, var(--safe-area-inset-right));
+  padding-bottom: max(1rem, var(--safe-area-inset-bottom));
+  padding-left: max(1rem, var(--safe-area-inset-left));
+}
+
+.settings-search-highlight {
+  border-radius: 0.5rem;
+  animation: settings-search-highlight 1.8s ease-out;
+}
+
+@keyframes settings-search-highlight {
+  0%, 24% {
+    background-color: hsl(var(--accent-main-100) / 0.14);
+    box-shadow: 0 0 0 1px hsl(var(--accent-main-100) / 0.38);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 1px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-search-highlight {
+    animation: none;
+    background-color: hsl(var(--accent-main-100) / 0.14);
+    box-shadow: 0 0 0 1px hsl(var(--accent-main-100) / 0.38);
+  }
 }
 
 .toast-safe-top {
