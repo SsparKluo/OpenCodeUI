@@ -75,19 +75,7 @@ UI 上沿用 dev 原有的"Add authentication"展开/折叠用户名密码框，
    - 环境变量（可选）：`VITE_API_BASE_URL` 留空（默认 `http://127.0.0.1:4096`，让 SPA 对所有 backend 中立）
 4. 绑定 production branch：`deploy/cloudflare`
 
-如果选 A，可以删除 `.github/workflows/deploy-cloudflare.yml`，不需要 GitHub Action。
-
-**选项 B：GitHub Action**
-
-保留 `.github/workflows/deploy-cloudflare.yml`，并在仓库 Settings → Secrets → Actions 添加：
-
-- `CLOUDFLARE_API_TOKEN`：权限 `Cloudflare Pages: Edit` + `Account: Read`
-- `CLOUDFLARE_ACCOUNT_ID`：账户首页右侧
-
-可选 Variables：
-
-- `CF_PAGES_PROJECT_NAME`：默认 `opencodeui`
-- `CF_PAGES_VITE_API_BASE_URL`：如果想让 SPA 首次打开就指向某个 backend
+选项 A 是**唯一**的部署方式——GitHub Action workflow 已从仓库移除（见下方关键文件表），不再支持 CI 触发部署。
 
 ### 2. 绑定 UI 自定义域名
 
@@ -287,7 +275,6 @@ npm run dev
 | --- | --- |
 | `public/_redirects` | SPA fallback：`/* /index.html 200` |
 | `public/_headers` | 静态资源缓存策略 |
-| `.github/workflows/deploy-cloudflare.yml` | 可选的 Pages 部署 workflow |
 | `src/store/serverStore.ts` | `authMode` 类型、`getEffectiveAuthMode`、health check |
 | `src/api/sdk.ts` | SDK fetch 根据 authMode 决定 credentials 和 Authorization header |
 | `src/api/events.ts` | SSE 浏览器路径使用 `credentials: 'include'`（access 模式） |
