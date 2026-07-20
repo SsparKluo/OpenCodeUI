@@ -78,6 +78,31 @@ describe('ReasoningPartView', () => {
     expect(screen.getByTestId('markdown-content')).toHaveTextContent('Use **bold** and `code` here')
   })
 
+  it('renders collapsed markdown preview for multiline content', () => {
+    mockReasoningDisplayMode = 'markdown'
+
+    const part = {
+      id: 'reason-2b',
+      sessionID: 'session-1',
+      messageID: 'message-1',
+      type: 'reasoning',
+      text: 'First line with **bold**\nSecond line with `code`',
+      time: { start: 1, end: 100 },
+    } as unknown as ReasoningPart
+
+    render(<ReasoningPartView part={part} isStreaming={false} />)
+
+    act(() => {
+      vi.advanceTimersByTime(32)
+    })
+
+    expect(screen.getByRole('button', { expanded: false })).toBeInTheDocument()
+    // 折叠时也走 Markdown 渲染，而不是纯文本摘要
+    expect(screen.getByTestId('markdown-content')).toHaveTextContent(
+      'First line with **bold** Second line with `code`',
+    )
+  })
+
   it('renders single-line content without toggle button', () => {
     const part = {
       id: 'reason-3',

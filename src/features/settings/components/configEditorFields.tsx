@@ -1,12 +1,12 @@
-import { useContext, useState } from 'react'
+import { useContext, useId, useState } from 'react'
 import type React from 'react'
-import { ChevronRightIcon, PlusIcon } from '../../../components/Icons'
+import { ChevronRightIcon, CopyIcon, PlusIcon } from '../../../components/Icons'
 import { Drill, DrillChild, DrillRow } from './configEditorDrill'
-import { useDrillContainer, ValidationDrillTargetContext } from './configEditorDrillState'
+import { DrillContext, useDrillContainer, ValidationDrillTargetContext } from './configEditorDrillState'
 import { SECTION_META } from './configEditorMeta'
-import type { Lang, SectionID } from './configEditorTypes'
+import type { JsonRecord, Lang, SectionID } from './configEditorTypes'
 import { fieldClass } from './configEditorControls'
-import { tx } from './configEditorUtils'
+import { hasOwn, suggestCopyId, tx } from './configEditorUtils'
 
 export type FieldDef = {
   key: string
@@ -18,6 +18,12 @@ export type FieldDef = {
   control?: React.ReactNode
 }
 
+/**
+ * 表单行布局（Apple / Linear 列表感）：
+ * - 左：标题 + 描述纵向叠
+ * - 右：控件垂直居中，宽度固定但不夸张
+ * - 行与行之间用细分割线，不用大间距/卡片
+ */
 export function FieldRow({
   label,
   desc,
@@ -32,42 +38,41 @@ export function FieldRow({
 }) {
   if (block) {
     return (
-      <div className="border-b border-border-200/35 py-3.5 last:border-b-0" onFocus={onFocus} onBlur={onBlur}>
-        <div className="mb-2 min-w-0">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="min-w-0 break-all font-mono text-[length:var(--fs-sm)] font-medium text-text-100">{label}</span>
-            {badge && (
-              <span className="rounded bg-warning-100/15 px-1.5 py-0.5 text-[10px] font-medium uppercase text-warning-100">{badge}</span>
-            )}
-          </div>
-          {desc && <div className="mt-1 text-[length:var(--fs-xs)] leading-relaxed text-text-400">{desc}</div>}
+      <div className="py-3" onFocus={onFocus} onBlur={onBlur}>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="min-w-0 break-all text-[length:var(--fs-sm)] font-medium text-text-100">{label}</span>
+          {badge && (
+            <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-warning-100">
+              {badge}
+            </span>
+          )}
         </div>
-        <div className="min-w-0">{control}</div>
+        {desc && <p className="mt-0.5 text-[length:var(--fs-xs)] leading-relaxed text-text-300">{desc}</p>}
+        <div className="mt-2 min-w-0 max-w-lg">{control}</div>
       </div>
     )
   }
+
   return (
-    <div className="grid gap-2 border-b border-border-200/35 py-3.5 last:border-b-0 md:grid-cols-[minmax(0,1fr)_minmax(240px,340px)] md:items-start md:gap-5" onFocus={onFocus} onBlur={onBlur}>
+    <div className="grid grid-cols-1 gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_200px] sm:items-center sm:gap-6" onFocus={onFocus} onBlur={onBlur}>
       <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="min-w-0 break-all font-mono text-[length:var(--fs-sm)] font-medium text-text-100">{label}</span>
+          <span className="min-w-0 break-all text-[length:var(--fs-sm)] font-medium text-text-100">{label}</span>
           {badge && (
-            <span className="rounded bg-warning-100/15 px-1.5 py-0.5 text-[10px] font-medium uppercase text-warning-100">{badge}</span>
+            <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-warning-100">
+              {badge}
+            </span>
           )}
         </div>
-        {desc && <div className="mt-1 text-[length:var(--fs-xs)] leading-relaxed text-text-400">{desc}</div>}
+        {desc && <p className="mt-0.5 text-[length:var(--fs-xs)] leading-relaxed text-text-300">{desc}</p>}
       </div>
-      <div className="min-w-0">{control}</div>
+      <div className="min-w-0 sm:justify-self-end sm:w-full">{control}</div>
     </div>
   )
 }
 
 export function EmptyHint({ text }: { text: string }) {
-  return (
-    <div className="rounded-lg border border-dashed border-border-200/50 bg-bg-000/30 px-3 py-5 text-center text-[length:var(--fs-sm)] text-text-500">
-      {text}
-    </div>
-  )
+  return <div className="py-2 text-[length:var(--fs-sm)] text-text-400">{text}</div>
 }
 
 function FieldRenderer({
@@ -85,9 +90,33 @@ function FieldRenderer({
   const handleBlur = (event: React.FocusEvent<HTMLElement>) => onFieldBlur?.(field.key, event.currentTarget, event.relatedTarget)
   if (field.drill) {
     const d = field.drill
-    return <DrillRow label={field.label} desc={field.desc} badge={field.badge} preview={d.preview} onClick={() => onEnter(field)} onFocus={handleFocus} onBlur={handleBlur} />
+    return (
+      <div data-config-field={field.key}>
+        <DrillRow
+          label={field.label}
+          desc={field.desc}
+          badge={field.badge}
+          preview={d.preview}
+          onClick={() => onEnter(field)}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+        />
+      </div>
+    )
   }
-  return <FieldRow label={field.label} desc={field.desc} badge={field.badge} block={field.block} control={field.control} onFocus={handleFocus} onBlur={handleBlur} />
+  return (
+    <div data-config-field={field.key}>
+      <FieldRow
+        label={field.label}
+        desc={field.desc}
+        badge={field.badge}
+        block={field.block}
+        control={field.control}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+      />
+    </div>
+  )
 }
 
 export function GroupedFields({
@@ -106,6 +135,7 @@ export function GroupedFields({
   const focusedAvailableKey = focusedField?.group === 'available' ? focusedField.key : null
   const configured = fields.filter(field => isConfigured(field.key) && field.key !== focusedAvailableKey)
   const available = fields.filter(field => !isConfigured(field.key) || field.key === focusedAvailableKey)
+
   const handleFieldFocus = (field: FieldDef) => {
     const group = isConfigured(field.key) ? 'configured' : 'available'
     setFocusedField(prev => (prev?.key === field.key && prev.group === group ? prev : { key: field.key, group }))
@@ -114,43 +144,105 @@ export function GroupedFields({
     if (relatedTarget instanceof Node && currentTarget.contains(relatedTarget)) return
     setFocusedField(prev => (prev?.key === fieldKey ? null : prev))
   }
+
   return (
-    <div className="space-y-5">
-      <div>
+    <div className="flex flex-col gap-6">
+      <section>
         <GroupHeader text={tx('Configured', '已配置', lang)} count={configured.length} accent />
         {configured.length === 0 ? (
           <EmptyHint text={tx('No fields configured yet.', '还没有配置任何字段。', lang)} />
         ) : (
-          <div className="rounded-xl border border-border-200/45 bg-bg-000/25 px-3.5">
+          <div className="divide-y divide-border-200/35">
             {configured.map(field => (
-              <FieldRenderer key={field.key} field={field} onEnter={handleEnter} onFieldFocus={handleFieldFocus} onFieldBlur={handleFieldBlur} />
+              <FieldRenderer
+                key={field.key}
+                field={field}
+                onEnter={handleEnter}
+                onFieldFocus={handleFieldFocus}
+                onFieldBlur={handleFieldBlur}
+              />
             ))}
           </div>
         )}
-      </div>
-      <div>
-        <GroupHeader text={tx('Available', '可配置', lang)} count={available.length} />
-        {available.length === 0 ? (
-          <EmptyHint text={tx('All fields are configured.', '全部字段都已配置。', lang)} />
-        ) : (
-          <div className="rounded-xl border border-border-200/45 bg-bg-000/15 px-3.5">
+      </section>
+
+      {available.length > 0 && (
+        <section>
+          <GroupHeader text={tx('Available', '可配置', lang)} count={available.length} />
+          <div className="divide-y divide-border-200/25">
             {available.map(field => (
-              <FieldRenderer key={field.key} field={field} onEnter={handleEnter} onFieldFocus={handleFieldFocus} onFieldBlur={handleFieldBlur} />
+              <FieldRenderer
+                key={field.key}
+                field={field}
+                onEnter={handleEnter}
+                onFieldFocus={handleFieldFocus}
+                onFieldBlur={handleFieldBlur}
+              />
             ))}
           </div>
-        )}
-      </div>
+        </section>
+      )}
     </div>
   )
 }
 
 export function GroupHeader({ text, count, accent }: { text: string; count: number; accent?: boolean }) {
   return (
-    <div className="mb-2 flex items-center gap-2">
-      <span className={`text-[length:var(--fs-xs)] font-semibold uppercase tracking-wide ${accent ? 'text-accent-main-100' : 'text-text-500'}`}>
-        {text}
-      </span>
-      <span className="rounded-full bg-bg-100 px-1.5 text-[10px] text-text-500">{count}</span>
+    <div className="mb-2 flex items-baseline gap-2">
+      <span className={`text-[length:var(--fs-sm)] font-medium ${accent ? 'text-text-100' : 'text-text-300'}`}>{text}</span>
+      <span className="text-[length:var(--fs-xs)] tabular-nums text-text-400">{count}</span>
+    </div>
+  )
+}
+
+export function DuplicateIdField({
+  sourceId,
+  existing,
+  lang,
+  onCopy,
+}: {
+  sourceId: string
+  existing: JsonRecord
+  lang: Lang
+  onCopy: (targetId: string) => void
+}) {
+  const inputId = useId()
+  const suggestion = suggestCopyId(sourceId, existing)
+  const [draft, setDraft] = useState(() => ({ sourceId, targetId: suggestion }))
+  const targetId = draft.sourceId === sourceId ? draft.targetId : suggestion
+
+  const target = targetId.trim()
+  const exists = hasOwn(existing, target)
+  const copy = () => {
+    if (!target || exists) return
+    onCopy(target)
+  }
+
+  return (
+    <div className="space-y-2 pb-3">
+      <label htmlFor={inputId} className="text-[length:var(--fs-sm)] font-medium text-text-100">{tx('Copy as…', '复制为…', lang)}</label>
+      <div className="flex min-w-0 items-center gap-2">
+        <input
+          id={inputId}
+          value={targetId}
+          onChange={event => setDraft({ sourceId, targetId: event.target.value })}
+          onKeyDown={event => {
+            if (event.key === 'Enter') copy()
+          }}
+          placeholder={tx('new id', '新 id', lang)}
+          className={`${fieldClass} min-w-0 flex-1 font-mono`}
+        />
+        <button
+          type="button"
+          disabled={!target || exists}
+          onClick={copy}
+          className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border-200 px-2.5 text-[length:var(--fs-sm)] font-medium text-text-100 transition-colors hover:border-border-300 disabled:opacity-40"
+        >
+          <CopyIcon size={13} />
+          {tx('Copy', '复制', lang)}
+        </button>
+      </div>
+      {exists && <div className="text-[length:var(--fs-xs)] text-warning-100">{tx('This id already exists.', '该 id 已存在。', lang)}</div>}
     </div>
   )
 }
@@ -159,7 +251,13 @@ export function DrillFields({ fields, isConfigured, lang }: { fields: FieldDef[]
   const { activeChildId, enter, depth } = useDrillContainer()
   if (activeChildId) {
     const active = fields.find(field => field.drill && field.key === activeChildId)
-    if (active?.drill) return <DrillChild depth={depth}>{active.drill.render()}</DrillChild>
+    if (active?.drill) {
+      return (
+        <DrillChild depth={depth}>
+          <div data-config-field={active.key}>{active.drill.render()}</div>
+        </DrillChild>
+      )
+    }
   }
   return (
     <GroupedFields
@@ -171,20 +269,31 @@ export function DrillFields({ fields, isConfigured, lang }: { fields: FieldDef[]
   )
 }
 
+function SectionHeading({ title, description }: { title: string; description: string }) {
+  const drill = useContext(DrillContext)
+  // 下钻后隐藏分区标题，避免和面包屑重复
+  if (drill && drill.stack.length > 0) return null
+  return (
+    <div className="mb-4">
+      <h2 className="text-[length:var(--fs-md)] font-semibold text-text-100">{title}</h2>
+      <p className="mt-1 max-w-[52ch] text-[length:var(--fs-xs)] leading-relaxed text-text-300">{description}</p>
+    </div>
+  )
+}
+
 export function SectionShell({ id, lang, drillKey, children }: { id: SectionID; lang: Lang; drillKey?: string; children: React.ReactNode }) {
   const meta = SECTION_META[id]
   const target = useContext(ValidationDrillTargetContext)
   const activeTarget = target?.section === id ? target : null
+  const title = tx(meta.en, meta.zh, lang)
+  const description = tx(meta.descEn, meta.descZh, lang)
   return (
-    <div className="min-w-0">
-      <div className="mb-4">
-        <h3 className="text-[length:var(--fs-heading-2)] font-semibold text-text-100">{tx(meta.en, meta.zh, lang)}</h3>
-        <p className="mt-1 text-[length:var(--fs-sm)] leading-relaxed text-text-400">{tx(meta.descEn, meta.descZh, lang)}</p>
-      </div>
-      <Drill rootTitle={tx(meta.en, meta.zh, lang)} rootKey={drillKey ?? id} targetKey={activeTarget?.key} targetStack={activeTarget?.stack}>
+    <section data-config-section={id} className="min-w-0">
+      <Drill rootTitle={title} rootKey={drillKey ?? id} targetKey={activeTarget?.key} targetStack={activeTarget?.stack}>
+        <SectionHeading title={title} description={description} />
         {children}
       </Drill>
-    </div>
+    </section>
   )
 }
 
@@ -208,38 +317,45 @@ export function NamedDrillList({
   emptyText?: string
 }) {
   const [newName, setNewName] = useState('')
+  const targetName = newName.trim()
+  const nameExists = items.includes(targetName)
   const add = () => {
-    const name = newName.trim()
-    if (!name) return
-    onAdd(name)
-    onOpen(name)
+    if (!targetName || nameExists) return
+    onAdd(targetName)
+    onOpen(targetName)
     setNewName('')
   }
+
   return (
     <div className="space-y-3">
       {items.length === 0 ? (
         <EmptyHint text={emptyText ?? tx('No items yet.', '还没有条目。', lang)} />
       ) : (
-        <div className="rounded-xl border border-border-200/45 bg-bg-000/25 px-3.5">
+        <div className="divide-y divide-border-200/35">
           {items.map(name => (
-            <div key={name} className="group flex items-center gap-2 border-b border-border-200/35 last:border-b-0">
-              <button type="button" onClick={() => onOpen(name)} className="flex min-w-0 flex-1 items-center gap-3 py-3.5 text-left">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-mono text-[length:var(--fs-sm)] font-medium text-text-100">
-                    {name}
-                    {builtins?.includes(name) && (
-                      <span className="ml-1.5 text-[10px] uppercase text-text-500">{tx('built-in', '内置', lang)}</span>
-                    )}
-                  </div>
-                  {renderPreview && <div className="truncate text-[length:var(--fs-xs)] text-text-500">{renderPreview(name)}</div>}
+            <button
+              key={name}
+              type="button"
+              onClick={() => onOpen(name)}
+              className="group grid w-full grid-cols-[minmax(0,1fr)_14px] items-center gap-3 py-3 text-left"
+            >
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="truncate text-[length:var(--fs-sm)] font-medium text-text-100">{name}</span>
+                  {builtins?.includes(name) && (
+                    <span className="shrink-0 text-[length:var(--fs-xs)] text-text-400">
+                      {tx('built-in', '内置', lang)}
+                    </span>
+                  )}
                 </div>
-                <ChevronRightIcon size={15} className="shrink-0 text-text-500 transition-transform group-hover:translate-x-0.5" />
-              </button>
-            </div>
+                {renderPreview && <div className="mt-0.5 truncate text-[length:var(--fs-xs)] text-text-400">{renderPreview(name)}</div>}
+              </div>
+              <ChevronRightIcon size={14} className="shrink-0 text-text-300" />
+            </button>
           ))}
         </div>
       )}
-      <div className="flex min-w-0 gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <input
           value={newName}
           onChange={event => setNewName(event.target.value)}
@@ -251,14 +367,15 @@ export function NamedDrillList({
         />
         <button
           type="button"
-          disabled={!newName.trim()}
+          disabled={!targetName || nameExists}
           onClick={add}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border-200/60 px-3 text-[length:var(--fs-xs)] text-text-300 hover:bg-bg-100 disabled:opacity-40"
+          className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-border-200 px-2.5 text-[length:var(--fs-sm)] font-medium text-text-100 transition-colors hover:border-border-300 disabled:opacity-40"
         >
           <PlusIcon size={14} />
           {tx('Add', '添加', lang)}
         </button>
       </div>
+      {nameExists && <div className="text-[length:var(--fs-xs)] text-warning-100">{tx('This id already exists.', '该 id 已存在。', lang)}</div>}
     </div>
   )
 }

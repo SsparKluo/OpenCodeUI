@@ -1,13 +1,13 @@
 import { useState } from 'react'
-import { ChevronRightIcon, CopyIcon, PlusIcon } from '../../../components/Icons'
+import { ChevronRightIcon, PlusIcon } from '../../../components/Icons'
 import { DrillChild, DrillRow } from './configEditorDrill'
 import { useDrillContainer, useDrillState } from './configEditorDrillState'
 import { BoolField, fieldClass, KeyValueField, NumberField, NumberOrFalseField, PositiveIntegerField, Select, StringListField, StringMapField, TextField } from './configEditorControls'
-import { DrillFields, EmptyHint, FieldRow, GroupedFields, GroupHeader, SectionShell, type FieldDef } from './configEditorFields'
+import { DrillFields, DuplicateIdField, EmptyHint, FieldRow, GroupedFields, GroupHeader, SectionShell, type FieldDef } from './configEditorFields'
 import { MODALITIES, MODEL_STATUS } from './configEditorMeta'
 import { enumChoices, type SectionProps } from './configEditorSectionTypes'
 import type { JsonRecord, Lang } from './configEditorTypes'
-import { asStringArray, clone, getObject, isRecord, previewValue, setNested, suggestCopyId, tx } from './configEditorUtils'
+import { asStringArray, clone, getObject, hasOwn, isRecord, previewValue, setNested, tx } from './configEditorUtils'
 
 export function ProvidersSection({ config, setConfig, lang, providerCatalog }: SectionProps) {
   return (
@@ -23,15 +23,15 @@ function ProvidersHome({ config, setConfig, lang, providerCatalog }: ProviderVie
   const { activeChildId, enter, depth } = useDrillContainer()
   const providerMap = getObject(config, 'provider')
   const configured = Object.keys(providerMap).sort()
-  const available = Object.keys(providerCatalog).filter(id => !(id in providerMap)).sort()
+  const available = Object.keys(providerCatalog).filter(id => !hasOwn(providerMap, id)).sort()
   const [newProvider, setNewProvider] = useState('')
   const [availQuery, setAvailQuery] = useState('')
 
   const openProvider = (id: string) => enter({ id: `provider:${id}`, title: id })
 
   const addProvider = (id: string) => {
-    if (!id || id in providerMap) return
-    setConfig(setNested(config, ['provider', id], {}))
+    if (!id || hasOwn(providerMap, id)) return
+    setConfig(setNested(config, ['provider', id], { id }))
     openProvider(id)
   }
 
@@ -45,37 +45,42 @@ function ProvidersHome({ config, setConfig, lang, providerCatalog }: ProviderVie
   }
 
   return (
-    <div className="space-y-5">
-      <div>
+    <div className="space-y-8">
+      <section>
         <GroupHeader text={tx('Configured', '已配置', lang)} count={configured.length} accent />
         {configured.length === 0 ? (
           <EmptyHint text={tx('No custom providers. Add one below or pick from Available.', '没有自定义渠道。可在下方添加，或从可配置里选。', lang)} />
         ) : (
-          <div className="rounded-xl border border-border-200/45 bg-bg-000/25 px-3.5">
+          <div className="divide-y divide-border-200/35">
             {configured.map(id => {
               const pv = getObject(providerMap, id)
               const modelCount = Object.keys(getObject(pv, 'models')).length
               return (
-                <div key={id} className="group flex items-center gap-2 border-b border-border-200/35 last:border-b-0">
-                  <button type="button" onClick={() => openProvider(id)} className="flex min-w-0 flex-1 items-center gap-3 py-3.5 text-left">
-                    <span className="min-w-0 flex-1 truncate font-mono text-[length:var(--fs-sm)] font-medium text-text-100">{id}</span>
-                    <span className="max-w-[45%] shrink-0 truncate text-[length:var(--fs-xs)] text-text-500">
-                      {modelCount > 0 ? tx(`${modelCount} model override(s)`, `${modelCount} 个模型覆盖`, lang) : tx('provider config', '渠道配置', lang)}
-                    </span>
-                    <ChevronRightIcon size={15} className="shrink-0 text-text-500 transition-transform group-hover:translate-x-0.5" />
-                  </button>
-                </div>
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => openProvider(id)}
+                  className="group grid w-full grid-cols-[minmax(0,1fr)_auto_14px] items-center gap-3 py-3 text-left"
+                >
+                  <span className="min-w-0 truncate text-[length:var(--fs-sm)] font-medium text-text-100">{id}</span>
+                  <span className="shrink-0 truncate text-[length:var(--fs-xs)] text-text-400">
+                    {modelCount > 0
+                      ? tx(`${modelCount} model override(s)`, `${modelCount} 个模型覆盖`, lang)
+                      : tx('provider config', '渠道配置', lang)}
+                  </span>
+                  <ChevronRightIcon size={14} className="shrink-0 text-text-300" />
+                </button>
               )
             })}
           </div>
         )}
-        <div className="mt-2 flex min-w-0 gap-2">
+        <div className="mt-3 flex min-w-0 items-center gap-2">
           <input
             value={newProvider}
             onChange={event => setNewProvider(event.target.value)}
             placeholder={tx('custom provider id', '自定义渠道 id', lang)}
             onKeyDown={event => {
-              if (event.key === 'Enter') {
+              if (event.key === 'Enter' && newProvider.trim() && !hasOwn(providerMap, newProvider.trim())) {
                 addProvider(newProvider.trim())
                 setNewProvider('')
               }
@@ -84,22 +89,27 @@ function ProvidersHome({ config, setConfig, lang, providerCatalog }: ProviderVie
           />
           <button
             type="button"
-            disabled={!newProvider.trim() || newProvider.trim() in providerMap}
+            disabled={!newProvider.trim() || hasOwn(providerMap, newProvider.trim())}
             onClick={() => {
               addProvider(newProvider.trim())
               setNewProvider('')
             }}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border-200/60 px-3 text-[length:var(--fs-xs)] text-text-300 hover:bg-bg-100 disabled:opacity-40"
+            className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border-200 px-2.5 text-[length:var(--fs-sm)] font-medium text-text-100 transition-colors hover:border-border-300 disabled:opacity-40"
           >
             <PlusIcon size={14} />
             {tx('Add', '添加', lang)}
           </button>
         </div>
-        <div className="mt-2 text-[length:var(--fs-xs)] leading-relaxed text-text-500">
-          {tx('Provider keys cannot be reliably deleted through the official merge API. Use enabled_providers/disabled_providers when you need to control availability.', '官方 merge API 不能可靠删除已保存的 provider key。需要控制可用性时请使用 enabled_providers/disabled_providers。', lang)}
+        <div className="mt-2 text-[length:var(--fs-xs)] leading-relaxed text-text-400">
+          {tx(
+            'Provider keys cannot be reliably deleted through the official merge API. Use enabled_providers/disabled_providers when you need to control availability.',
+            '官方 merge API 不能可靠删除已保存的 provider key。需要控制可用性时请使用 enabled_providers/disabled_providers。',
+            lang,
+          )}
         </div>
-      </div>
-      <div>
+      </section>
+
+      <section>
         <GroupHeader text={tx('Available', '可配置', lang)} count={available.length} />
         <input
           value={availQuery}
@@ -107,18 +117,23 @@ function ProvidersHome({ config, setConfig, lang, providerCatalog }: ProviderVie
           placeholder={tx('search providers…', '搜索渠道…', lang)}
           className={`${fieldClass} mb-2`}
         />
-        <div className="max-h-72 space-y-1 overflow-y-auto custom-scrollbar rounded-xl border border-border-200/45 bg-bg-000/15 p-1.5">
+        <div className="max-h-72 divide-y divide-border-200/25 overflow-y-auto custom-scrollbar">
           {available
             .filter(id => !availQuery || id.toLowerCase().includes(availQuery.toLowerCase()))
             .slice(0, 80)
             .map(id => (
-              <button key={id} type="button" onClick={() => addProvider(id)} className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left hover:bg-bg-100">
-                <span className="min-w-0 truncate font-mono text-[length:var(--fs-sm)] text-text-300">{id}</span>
-                <PlusIcon size={13} className="shrink-0 text-text-500" />
+              <button
+                key={id}
+                type="button"
+                onClick={() => addProvider(id)}
+                className="flex w-full items-center justify-between gap-3 py-2.5 text-left"
+              >
+                <span className="min-w-0 truncate text-[length:var(--fs-sm)] text-text-200">{id}</span>
+                <PlusIcon size={14} className="shrink-0 text-text-300" />
               </button>
             ))}
         </div>
-      </div>
+      </section>
     </div>
   )
 }
@@ -137,21 +152,7 @@ function ProviderDetail({
   const catalog = getObject(providerCatalog, providerId)
   const configuredModels = getObject(providerValue, 'models')
   const catalogModelCount = Object.keys(getObject(catalog, 'models')).length
-  const copySuggestion = suggestCopyId(providerId, providerMap)
-  const [copySourceId, setCopySourceId] = useState(providerId)
-  const [copyId, setCopyId] = useState(copySuggestion)
-  if (copySourceId !== providerId) {
-    setCopySourceId(providerId)
-    setCopyId(copySuggestion)
-  }
-  const targetCopyId = copyId.trim()
-  const copyIdExists = targetCopyId in providerMap
   const setProvider = (next: JsonRecord) => setConfig(setNested(config, ['provider', providerId], next))
-  const duplicateProvider = () => {
-    if (!targetCopyId || copyIdExists) return
-    setConfig(setNested(config, ['provider', targetCopyId], clone(providerValue)))
-    drill.replace(0, { id: `provider:${targetCopyId}`, title: targetCopyId })
-  }
 
   const fields: FieldDef[] = [
     { key: 'name', label: 'name', desc: tx('Display name for this provider.', '此渠道的显示名称。', lang), control: <TextField value={providerValue.name} onChange={v => setProvider({ ...providerValue, name: v })} /> },
@@ -177,15 +178,25 @@ function ProviderDetail({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
+      <DuplicateIdField
+        sourceId={providerId}
+        existing={{ ...providerCatalog, ...providerMap }}
+        lang={lang}
+        onCopy={targetId => {
+          setConfig(setNested(config, ['provider', targetId], { ...clone(providerValue), id: providerValue.id ?? providerId }))
+          drill.replace(0, { id: `provider:${targetId}`, title: targetId })
+        }}
+      />
+
       <button
         type="button"
         onClick={() => enter({ id: 'models', title: tx('models', '模型', lang) })}
-        className="group flex w-full items-center gap-3 rounded-xl border border-border-200/55 bg-bg-050/55 px-3.5 py-3 text-left transition-colors hover:bg-bg-100/50"
+        className="group grid w-full grid-cols-[minmax(0,1fr)_14px] items-center gap-3 py-3 text-left"
       >
-        <div className="min-w-0 flex-1">
-          <div className="font-mono text-[length:var(--fs-sm)] font-medium text-text-100">models</div>
-          <div className="mt-0.5 text-[length:var(--fs-xs)] text-text-400">
+        <div className="min-w-0">
+          <div className="text-[length:var(--fs-sm)] font-medium text-text-100">models</div>
+          <div className="mt-0.5 text-[length:var(--fs-xs)] text-text-300">
             {tx(
               `${Object.keys(configuredModels).length} configured / ${catalogModelCount} available`,
               `已配置 ${Object.keys(configuredModels).length} 个 / 可选 ${catalogModelCount} 个`,
@@ -193,40 +204,9 @@ function ProviderDetail({
             )}
           </div>
         </div>
-        <ChevronRightIcon size={16} className="shrink-0 text-text-500 transition-transform group-hover:translate-x-0.5" />
+        <ChevronRightIcon size={14} className="shrink-0 text-text-300" />
       </button>
-      <div className="rounded-xl border border-border-200/45 bg-bg-000/20 p-3">
-        <div className="mb-2 flex min-w-0 items-start gap-2">
-          <CopyIcon size={14} className="mt-0.5 shrink-0 text-text-500" />
-          <div className="min-w-0">
-            <div className="text-[length:var(--fs-sm)] font-medium text-text-100">{tx('Copy provider', '复制渠道', lang)}</div>
-            <div className="mt-0.5 text-[length:var(--fs-xs)] leading-relaxed text-text-500">
-              {tx('Create a provider copy under a new id, then edit it independently before saving.', '用新的 id 创建当前渠道副本，然后独立修改并保存。', lang)}
-            </div>
-          </div>
-        </div>
-        <div className="flex min-w-0 gap-2">
-          <input
-            value={copyId}
-            onChange={event => setCopyId(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === 'Enter') duplicateProvider()
-            }}
-            placeholder={tx('new provider id', '新渠道 id', lang)}
-            className={`${fieldClass} min-w-0 flex-1 font-mono`}
-          />
-          <button
-            type="button"
-            disabled={!targetCopyId || copyIdExists}
-            onClick={duplicateProvider}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border-200/60 px-3 text-[length:var(--fs-xs)] text-text-300 hover:bg-bg-100 disabled:opacity-40"
-          >
-            <CopyIcon size={13} />
-            {tx('Copy', '复制', lang)}
-          </button>
-        </div>
-        {copyIdExists && <div className="mt-1 text-[length:var(--fs-xs)] text-warning-100">{tx('This provider id already exists.', '这个渠道 id 已存在。', lang)}</div>}
-      </div>
+
       <GroupedFields
         fields={fields}
         isConfigured={key => key in providerValue}
@@ -245,6 +225,7 @@ function ProviderModels({
   providerId,
 }: ProviderViewProps & { providerId: string }) {
   const { activeChildId, enter, depth } = useDrillContainer()
+  const drill = useDrillState()
   const providerMap = getObject(config, 'provider')
   const providerValue = getObject(providerMap, providerId)
   const catalog = getObject(providerCatalog, providerId)
@@ -257,20 +238,35 @@ function ProviderModels({
   const openModel = (id: string) => enter({ id: `model:${id}`, title: id })
 
   const addModel = (id: string) => {
-    if (!id) return
-    setConfig(setNested(config, ['provider', providerId, 'models', id], {}))
+    if (!id || hasOwn(configuredModels, id)) return
+    setConfig(setNested(config, ['provider', providerId, 'models', id], { id }))
     openModel(id)
   }
 
   if (activeChildId?.startsWith('model:')) {
     const id = activeChildId.slice('model:'.length)
+    const modelValue = isRecord(configuredModels[id]) ? (configuredModels[id] as JsonRecord) : {}
+    const existingModels = Object.fromEntries(modelIDs.map(modelId => [modelId, true]))
     return (
       <DrillChild depth={depth}>
-        <ModelEditor
-          value={isRecord(configuredModels[id]) ? (configuredModels[id] as JsonRecord) : {}}
-          onChange={next => setConfig(setNested(config, ['provider', providerId, 'models', id], next))}
-          lang={lang}
-        />
+        <div className="space-y-6">
+          {drill.stack.length === depth + 1 && (
+            <DuplicateIdField
+              sourceId={id}
+              existing={existingModels}
+              lang={lang}
+              onCopy={targetId => {
+                setConfig(setNested(config, ['provider', providerId, 'models', targetId], { ...clone(modelValue), id: modelValue.id ?? id }))
+                drill.replace(depth, { id: `model:${targetId}`, title: targetId })
+              }}
+            />
+          )}
+          <ModelEditor
+            value={modelValue}
+            onChange={next => setConfig(setNested(config, ['provider', providerId, 'models', id], next))}
+            lang={lang}
+          />
+        </div>
       </DrillChild>
     )
   }
@@ -280,20 +276,23 @@ function ProviderModels({
   return (
     <div className="space-y-3">
       <input value={query} onChange={event => setQuery(event.target.value)} placeholder={tx('search models…', '搜索模型…', lang)} className={fieldClass} />
-      <div className="max-h-[440px] space-y-1 overflow-y-auto custom-scrollbar rounded-xl border border-border-200/45 bg-bg-000/20 p-1.5">
+      <div className="max-h-[440px] divide-y divide-border-200/35 overflow-y-auto custom-scrollbar">
         {filtered.length === 0 && <EmptyHint text={tx('No models. Add one below.', '没有模型，可在下方添加。', lang)} />}
         {filtered.map(id => {
-          const isConfigured = id in configuredModels
+          const isConfigured = hasOwn(configuredModels, id)
           return (
-            <div key={id} className="group flex items-center gap-2">
-              <button type="button" onClick={() => openModel(id)} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-bg-100">
-                <span className="min-w-0 flex-1 truncate font-mono text-[length:var(--fs-sm)] text-text-200">{id}</span>
-                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase ${isConfigured ? 'bg-accent-main-100/12 text-accent-main-100' : 'text-text-500'}`}>
-                  {isConfigured ? tx('configured', '已配置', lang) : tx('available', '可配置', lang)}
-                </span>
-                <ChevronRightIcon size={14} className="shrink-0 text-text-500 transition-transform group-hover:translate-x-0.5" />
-              </button>
-            </div>
+            <button
+              key={id}
+              type="button"
+              onClick={() => openModel(id)}
+              className="group grid w-full grid-cols-[minmax(0,1fr)_auto_14px] items-center gap-3 py-3 text-left"
+            >
+              <span className="min-w-0 truncate text-[length:var(--fs-sm)] font-medium text-text-100">{id}</span>
+              <span className={`shrink-0 text-[length:var(--fs-xs)] ${isConfigured ? 'text-text-300' : 'text-text-400'}`}>
+                {isConfigured ? tx('configured', '已配置', lang) : tx('available', '可配置', lang)}
+              </span>
+              <ChevronRightIcon size={14} className="shrink-0 text-text-300" />
+            </button>
           )
         })}
       </div>
@@ -303,19 +302,27 @@ function ProviderModels({
           onChange={event => setNewModel(event.target.value)}
           placeholder={tx('new model id', '新模型 id', lang)}
           onKeyDown={event => {
-            if (event.key === 'Enter') {
+            if (event.key === 'Enter' && newModel.trim() && !hasOwn(configuredModels, newModel.trim())) {
               addModel(newModel.trim())
               setNewModel('')
             }
           }}
           className={`${fieldClass} min-w-0 flex-1 font-mono`}
         />
-        <button type="button" disabled={!newModel.trim()} onClick={() => { addModel(newModel.trim()); setNewModel('') }} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border-200/60 px-3 text-[length:var(--fs-xs)] text-text-300 hover:bg-bg-100 disabled:opacity-40">
+        <button
+          type="button"
+          disabled={!newModel.trim() || hasOwn(configuredModels, newModel.trim())}
+          onClick={() => {
+            addModel(newModel.trim())
+            setNewModel('')
+          }}
+          className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md px-3 text-[length:var(--fs-sm)] font-medium text-accent-main-100 transition-colors hover:bg-accent-main-100/10 disabled:opacity-40"
+        >
           <PlusIcon size={14} />
           {tx('Add', '添加', lang)}
         </button>
       </div>
-      <div className="text-[length:var(--fs-xs)] leading-relaxed text-text-500">
+      <div className="text-[length:var(--fs-xs)] leading-relaxed text-text-400">
         {tx('Model override keys cannot be reliably deleted through the official merge API. Edit fields instead, or Reset before saving newly added model ids.', '官方 merge API 不能可靠删除已保存的模型覆盖 key。请改字段，刚新增的模型 id 可在保存前 Reset。', lang)}
       </div>
     </div>
@@ -454,6 +461,7 @@ function ModelEditor({ value, onChange, lang }: { value: JsonRecord; onChange: (
           value={value.interleaved === true ? 'true' : isRecord(value.interleaved) ? String((value.interleaved as JsonRecord).field) : ''}
           options={[
             { value: 'true', label: 'true' },
+            { value: 'reasoning', label: 'field: reasoning' },
             { value: 'reasoning_content', label: 'field: reasoning_content' },
             { value: 'reasoning_details', label: 'field: reasoning_details' },
           ]}
@@ -480,6 +488,7 @@ function ModelProviderOverride({ value, onChange, lang }: { value: unknown; onCh
 
 function ModelVariantsEditor({ value, onChange, lang }: { value: unknown; onChange: (value: JsonRecord) => void; lang: Lang }) {
   const { activeChildId, enter, depth } = useDrillContainer()
+  const drill = useDrillState()
   const rec = isRecord(value) ? value : {}
   const [newName, setNewName] = useState('')
   if (activeChildId?.startsWith('variant:')) {
@@ -488,12 +497,27 @@ function ModelVariantsEditor({ value, onChange, lang }: { value: unknown; onChan
     const fields: FieldDef[] = [
       { key: 'disabled', label: 'disabled', desc: tx('Disable this variant for the model.', '禁用该模型的这个 variant。', lang), control: <BoolField value={variant.disabled} onChange={v => onChange({ ...rec, [name]: { ...variant, disabled: v } })} /> },
     ]
-    return <DrillChild depth={depth}><DrillFields fields={fields} isConfigured={key => key in variant} lang={lang} /></DrillChild>
+    return (
+      <DrillChild depth={depth}>
+        <div className="space-y-6">
+          <DuplicateIdField
+            sourceId={name}
+            existing={rec}
+            lang={lang}
+            onCopy={targetId => {
+              onChange({ ...rec, [targetId]: clone(variant) })
+              drill.replace(depth, { id: `variant:${targetId}`, title: targetId })
+            }}
+          />
+          <DrillFields fields={fields} isConfigured={key => key in variant} lang={lang} />
+        </div>
+      </DrillChild>
+    )
   }
   return (
     <div className="space-y-3">
       {Object.keys(rec).length === 0 ? <EmptyHint text={tx('No variants configured.', '还没有配置 variant。', lang)} /> : (
-        <div className="rounded-xl border border-border-200/45 bg-bg-000/25 px-3.5">
+        <div className="space-y-0.5">
           {Object.keys(rec).sort().map(name => (
             <DrillRow key={name} label={name} preview={previewValue(rec[name], lang)} onClick={() => enter({ id: `variant:${name}`, title: name })} />
           ))}
@@ -501,7 +525,7 @@ function ModelVariantsEditor({ value, onChange, lang }: { value: unknown; onChan
       )}
       <div className="flex min-w-0 gap-2">
         <input value={newName} onChange={event => setNewName(event.target.value)} placeholder={tx('variant name', 'variant 名称', lang)} className={`${fieldClass} min-w-0 flex-1 font-mono`} />
-        <button type="button" disabled={!newName.trim() || newName in rec} onClick={() => { onChange({ ...rec, [newName.trim()]: { disabled: false } }); setNewName('') }} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border-200/60 px-3 py-2 text-[length:var(--fs-xs)] text-text-300 hover:bg-bg-100 disabled:opacity-40">
+        <button type="button" disabled={!newName.trim() || hasOwn(rec, newName.trim())} onClick={() => { onChange({ ...rec, [newName.trim()]: { disabled: false } }); setNewName('') }} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border-200/60 px-3 py-2 text-[length:var(--fs-xs)] text-text-300 hover:bg-bg-100 disabled:opacity-40">
           <PlusIcon size={13} />
           {tx('Add', '添加', lang)}
         </button>
@@ -512,7 +536,7 @@ function ModelVariantsEditor({ value, onChange, lang }: { value: unknown; onChan
 
 function MultiToggle({ options, value, onChange }: { options: string[]; value: string[]; onChange: (value: string[]) => void }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-1.5 pt-1">
       {options.map(option => {
         const active = value.includes(option)
         return (
@@ -520,7 +544,11 @@ function MultiToggle({ options, value, onChange }: { options: string[]; value: s
             key={option}
             type="button"
             onClick={() => onChange(active ? value.filter(v => v !== option) : [...value, option])}
-            className={`rounded-lg border px-2.5 py-1 text-[length:var(--fs-xs)] transition-colors ${active ? 'border-accent-main-100/50 bg-accent-main-100/12 text-accent-main-100' : 'border-border-200/60 text-text-400 hover:bg-bg-100'}`}
+            className={`rounded-md border px-2.5 py-1 text-[length:var(--fs-xs)] transition-all duration-150 ${
+              active
+                ? 'border-accent-main-100/20 bg-accent-main-100/10 text-accent-main-100 font-medium'
+                : 'border-border-200/60 text-text-400 hover:bg-bg-100/50 hover:text-text-200'
+            }`}
           >
             {option}
           </button>

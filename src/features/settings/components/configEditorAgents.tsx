@@ -1,10 +1,10 @@
 import { DrillChild } from './configEditorDrill'
-import { useDrillContainer } from './configEditorDrillState'
+import { useDrillContainer, useDrillState } from './configEditorDrillState'
 import { buildAgentConfigFields } from './configEditorAgentFields'
-import { DrillFields, NamedDrillList, SectionShell } from './configEditorFields'
+import { DrillFields, DuplicateIdField, NamedDrillList, SectionShell } from './configEditorFields'
 import type { SectionProps } from './configEditorSectionTypes'
 import type { JsonRecord } from './configEditorTypes'
-import { getObject, isRecord, setNested, tx } from './configEditorUtils'
+import { clone, getObject, isRecord, setNested, tx } from './configEditorUtils'
 
 export function AgentsSection(props: SectionProps) {
   return (
@@ -16,6 +16,7 @@ export function AgentsSection(props: SectionProps) {
 
 function AgentsHome({ config, setConfig, lang, models }: SectionProps) {
   const { activeChildId, enter, depth } = useDrillContainer()
+  const drill = useDrillState()
   const builtins = ['build', 'plan', 'general', 'explore', 'title', 'summary', 'compaction']
   const map = getObject(config, 'agent')
   const names = Array.from(new Set([...Object.keys(map)])).sort()
@@ -28,7 +29,20 @@ function AgentsHome({ config, setConfig, lang, models }: SectionProps) {
   if (selected) {
     return (
       <DrillChild depth={depth}>
-        <DrillFields fields={fields} isConfigured={key => key in value} lang={lang} />
+        <div className="space-y-6">
+          {drill.stack.length === depth + 1 && (
+            <DuplicateIdField
+              sourceId={selected}
+              existing={map}
+              lang={lang}
+              onCopy={targetId => {
+                setConfig(setNested(config, ['agent', targetId], clone(value)))
+                drill.replace(0, { id: `agent:${targetId}`, title: targetId })
+              }}
+            />
+          )}
+          <DrillFields fields={fields} isConfigured={key => key in value} lang={lang} />
+        </div>
       </DrillChild>
     )
   }
@@ -39,7 +53,7 @@ function AgentsHome({ config, setConfig, lang, models }: SectionProps) {
       items={names}
       addPlaceholder={tx('agent name', 'agent 名称', lang)}
       onOpen={name => enter({ id: `agent:${name}`, title: name })}
-      onAdd={name => setConfig(setNested(config, ['agent', name], {}))}
+      onAdd={name => setConfig(setNested(config, ['agent', name], { description: '' }))}
       builtins={builtins}
       renderPreview={name => (isRecord(map[name]) ? String((map[name] as JsonRecord).description ?? '') : '')}
       emptyText={tx('Add an agent name (e.g. build) to override it.', '添加一个 agent 名称（如 build）即可覆盖。', lang)}

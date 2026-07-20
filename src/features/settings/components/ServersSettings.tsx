@@ -3,8 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '../../../components/ui/Button'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 import {
-  GlobeIcon,
-  PlusIcon,
   TrashIcon,
   WifiIcon,
   WifiOffIcon,
@@ -13,14 +11,17 @@ import {
   PencilIcon,
   ShieldIcon,
   ExternalLinkIcon,
+  RetryIcon,
 } from '../../../components/Icons'
 import { useServerStore, useRouter } from '../../../hooks'
 import { messageStore } from '../../../store'
 import { isTauri } from '../../../utils/tauri'
-import { SettingsCard } from './SettingsUI'
+import { settingsFieldClass, SettingsSection } from './SettingsUI'
 import type { ServerConfig, ServerHealth } from '../../../store/serverStore'
 
 const IPV4_PATTERN = /^(?:\d{1,3}\.){3}\d{1,3}$/
+/** 显示名长度上限，避免列表项把右侧操作按钮挤穿 */
+const SERVER_NAME_MAX_LENGTH = 40
 
 function isHttpsIpUrl(url: string): boolean {
   try {
@@ -108,7 +109,7 @@ function ServerItem({
     <>
       <div
         onClick={onSelect}
-        className={`group flex items-center gap-3 p-2.5 rounded-lg border transition-colors
+        className={`group flex items-center gap-1.5 p-2.5 rounded-lg border transition-colors min-w-0
           ${
             isActive ? 'border-accent-main-100/40 bg-accent-main-100/5' : 'border-border-200/40 hover:border-border-300'
           }`}
@@ -120,12 +121,14 @@ function ServerItem({
             onSelect()
           }}
           aria-current={isActive ? 'true' : undefined}
-          className="min-w-0 flex flex-1 items-center gap-3 bg-transparent border-none p-0 text-left"
+          className="min-w-0 flex-1 overflow-hidden bg-transparent border-none p-0 text-left"
         >
-          <GlobeIcon size={14} className={isActive ? 'text-accent-main-100' : 'text-text-400'} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[length:var(--fs-md)] font-medium text-text-100 truncate">{server.name}</span>
+          <div className="min-w-0">
+            <div
+              className="text-[length:var(--fs-md)] font-medium text-text-100 truncate flex items-center gap-1.5"
+              title={server.name}
+            >
+              <span className="truncate">{server.name}</span>
               {isActive && (
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[length:var(--fs-xxs)] font-medium text-accent-main-100 bg-accent-main-100/10 shrink-0">
                   {t('servers.current')}
@@ -141,65 +144,69 @@ function ServerItem({
                 </span>
               )}
             </div>
-            <div className="text-[length:var(--fs-xs)] text-text-400 truncate font-mono flex items-center gap-1">
-              {server.url}
+            <div className="text-[length:var(--fs-xs)] text-text-400 truncate font-mono flex items-center gap-1 mt-0.5 min-w-0">
+              <span className="truncate min-w-0" title={server.url}>
+                {server.url}
+              </span>
               {server.auth?.password && <KeyIcon size={10} className="shrink-0 text-text-400" />}
             </div>
           </div>
         </button>
-        {isAccessMode && (
-          <a
-            href={server.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={e => e.stopPropagation()}
-            className="p-2 rounded text-text-400 hover:text-accent-main-100 hover:bg-accent-main-100/10 transition-all"
-            title={t('servers.accessLogin')}
-            aria-label={t('servers.accessLogin')}
-          >
-            <ExternalLinkIcon size={12} />
-          </a>
-        )}
-        <button
-          type="button"
-          className="p-2 rounded hover:bg-bg-200 transition-colors"
-          onClick={e => {
-            e.stopPropagation()
-            onCheckHealth()
-          }}
-          title={statusTitle()}
-          aria-label={statusTitle()}
-        >
-          {statusIcon()}
-        </button>
-        {!server.isDefault && (
+        <div className="shrink-0 flex items-center gap-0.5">
+          {isAccessMode && (
+            <a
+              href={server.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className="p-1.5 rounded-md text-text-400 hover:text-accent-main-100 hover:bg-accent-main-100/10 transition-colors"
+              title={t('servers.accessLogin')}
+              aria-label={t('servers.accessLogin')}
+            >
+              <ExternalLinkIcon size={13} />
+            </a>
+          )}
           <button
             type="button"
-            className="p-2 rounded text-text-400 hover:text-accent-main-100 hover:bg-accent-main-100/10 transition-all"
+            className="p-1.5 rounded-md text-text-400 hover:text-text-200 hover:bg-bg-200/70 transition-colors"
             onClick={e => {
               e.stopPropagation()
-              setEditing(true)
+              onCheckHealth()
             }}
-            title={t('servers.editServer')}
-            aria-label={t('servers.editServer')}
+            title={statusTitle()}
+            aria-label={statusTitle()}
           >
-            <PencilIcon size={12} />
+            {statusIcon()}
           </button>
-        )}
-        {(!server.isDefault || canDeleteDefault) && (
-          <button
-            type="button"
-            className="p-2 rounded text-text-400 hover:text-danger-100 hover:bg-danger-100/10 transition-all"
-            onClick={e => {
-              e.stopPropagation()
-              setConfirmDelete(true)
-            }}
-            title={t('common:remove')}
-            aria-label={t('common:remove')}
-          >
-            <TrashIcon size={12} />
-          </button>
-        )}
+          {!server.isDefault && (
+            <button
+              type="button"
+              className="p-1.5 rounded-md text-text-400 hover:text-accent-main-100 hover:bg-accent-main-100/10 transition-colors"
+              onClick={e => {
+                e.stopPropagation()
+                setEditing(true)
+              }}
+              title={t('servers.editServer')}
+              aria-label={t('servers.editServer')}
+            >
+              <PencilIcon size={13} />
+            </button>
+          )}
+          {(!server.isDefault || canDeleteDefault) && (
+            <button
+              type="button"
+              className="p-1.5 rounded-md text-text-400 hover:text-danger-100 hover:bg-danger-100/10 transition-colors"
+              onClick={e => {
+                e.stopPropagation()
+                setConfirmDelete(true)
+              }}
+              title={t('common:remove')}
+              aria-label={t('common:remove')}
+            >
+              <TrashIcon size={13} />
+            </button>
+          )}
+        </div>
       </div>
 
       <ConfirmDialog
@@ -250,7 +257,8 @@ function EditServerForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim()) {
+    const trimmedName = name.trim().slice(0, SERVER_NAME_MAX_LENGTH)
+    if (!trimmedName) {
       setError(t('servers.nameRequired'))
       return
     }
@@ -265,7 +273,7 @@ function EditServerForm({
       return
     }
     onSave({
-      name: name.trim(),
+      name: trimmedName,
       url: url.trim(),
       username: password.trim() ? username.trim() || 'opencode' : undefined,
       password: password.trim() || undefined,
@@ -273,8 +281,7 @@ function EditServerForm({
     })
   }
 
-  const inputCls =
-    'w-full h-8 px-3 text-[length:var(--fs-md)] bg-bg-000 border border-border-200 rounded-md focus:outline-none focus:border-accent-main-100/50 text-text-100 placeholder:text-text-400'
+  const inputCls = settingsFieldClass
 
   return (
     <form
@@ -286,8 +293,9 @@ function EditServerForm({
         <input
           type="text"
           value={name}
+          maxLength={SERVER_NAME_MAX_LENGTH}
           onChange={e => {
-            setName(e.target.value)
+            setName(e.target.value.slice(0, SERVER_NAME_MAX_LENGTH))
             setError('')
           }}
           placeholder={t('servers.namePlaceholder')}
@@ -412,7 +420,8 @@ function AddServerForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim()) {
+    const trimmedName = name.trim().slice(0, SERVER_NAME_MAX_LENGTH)
+    if (!trimmedName) {
       setError(t('servers.nameRequired'))
       return
     }
@@ -428,7 +437,7 @@ function AddServerForm({
     }
 
     onAdd(
-      name.trim(),
+      trimmedName,
       url.trim(),
       password.trim() ? username.trim() || 'opencode' : undefined,
       password.trim() || undefined,
@@ -447,18 +456,18 @@ function AddServerForm({
   })()
   const showHttpsIpWarning = isHttpsIpUrl(url)
 
-  const inputCls =
-    'w-full h-8 px-3 text-[length:var(--fs-md)] bg-bg-000 border border-border-200 rounded-md focus:outline-none focus:border-accent-main-100/50 text-text-100 placeholder:text-text-400'
+  const inputCls = settingsFieldClass
 
   return (
-    <form onSubmit={handleSubmit} className="p-3 rounded-lg border border-border-200 bg-bg-050 space-y-2.5">
+    <form onSubmit={handleSubmit} className="p-3 rounded-lg border border-border-200 bg-bg-100 space-y-2.5">
       <div>
         <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">{t('servers.name')}</label>
         <input
           type="text"
           value={name}
+          maxLength={SERVER_NAME_MAX_LENGTH}
           onChange={e => {
-            setName(e.target.value)
+            setName(e.target.value.slice(0, SERVER_NAME_MAX_LENGTH))
             setError('')
           }}
           placeholder={t('servers.namePlaceholder')}
@@ -620,77 +629,76 @@ export function ServersSettings() {
   )
 
   return (
-    <div className="space-y-4">
-      <SettingsCard
-        title={t('servers.connections')}
-        description={t('servers.connectionsDesc')}
-        actions={
-          <div className="flex items-center gap-2">
-            <button
-              onClick={checkAllHealth}
-              className="text-[length:var(--fs-xs)] px-2 py-1 rounded-md border border-border-200/60 text-text-300 hover:text-text-100 hover:border-border-300/70 hover:bg-bg-100/60 transition-colors"
-            >
-              {t('common:refresh')}
-            </button>
-            {!addingServer && (
-              <button
-                onClick={() => setAddingServer(true)}
-                className="flex items-center gap-1 text-[length:var(--fs-xs)] px-2 py-1 rounded-md border border-accent-main-100/40 text-accent-main-100 hover:text-accent-main-200 hover:border-accent-main-100/60 hover:bg-accent-main-100/5 transition-colors"
-              >
-                <PlusIcon size={10} /> {t('common:add')}
-              </button>
-            )}
-          </div>
-        }
-      >
-        <div className="space-y-1.5">
-          {orderedServers.map(s => (
-            <ServerItem
-              key={s.id}
-              server={s}
-              health={getHealth(s.id)}
-              isActive={activeServer?.id === s.id}
-              canDeleteDefault={canDeleteDefault}
-              onSelect={() => handleSelectServer(s.id)}
-              onDelete={() => removeServer(s.id)}
-              onEdit={updates => {
-                const auth = updates.password
-                  ? { username: updates.username || 'opencode', password: updates.password }
-                  : undefined
-                updateServer(s.id, {
-                  name: updates.name,
-                  url: updates.url,
-                  auth,
-                  authMode: updates.useCloudflareAccess ? 'cloudflare-access' : 'basic',
-                })
-                void checkHealth(s.id)
-              }}
-              onCheckHealth={() => void checkHealth(s.id)}
-            />
-          ))}
-
-          {addingServer && (
-            <AddServerForm
-              onAdd={(n, u, user, pass, useAccess) => {
-                const auth = pass ? { username: user || 'opencode', password: pass } : undefined
-                const s = addServer({
-                  name: n,
-                  url: u,
-                  auth,
-                  authMode: useAccess ? 'cloudflare-access' : 'basic',
-                })
-                setAddingServer(false)
-                void checkHealth(s.id)
-              }}
-              onCancel={() => setAddingServer(false)}
-            />
-          )}
-
-          {servers.length === 0 && !addingServer && (
-            <div className="text-[length:var(--fs-md)] text-text-400 text-center py-8">{t('servers.noServersConfigured')}</div>
-          )}
+    <SettingsSection
+      title={t('servers.connections')}
+      description={t('servers.connectionsDesc')}
+      actions={
+        <div className="flex items-center gap-2">
+          <button
+            onClick={checkAllHealth}
+            className="flex items-center justify-center w-7 h-7 rounded-md text-text-400 hover:text-text-200 hover:bg-bg-200/70 transition-colors"
+            title={t('common:refresh')}
+            aria-label={t('common:refresh')}
+          >
+            <RetryIcon size={14} />
+          </button>
+          <button
+            onClick={() => setAddingServer(true)}
+            disabled={addingServer}
+            className="h-7 px-2.5 rounded-md text-[length:var(--fs-sm)] font-medium text-accent-main-100 hover:bg-accent-main-100/10 transition-colors disabled:opacity-40"
+          >
+            {t('common:add')}
+          </button>
         </div>
-      </SettingsCard>
-    </div>
+      }
+    >
+      <div className="space-y-1.5">
+        {orderedServers.map(s => (
+          <ServerItem
+            key={s.id}
+            server={s}
+            health={getHealth(s.id)}
+            isActive={activeServer?.id === s.id}
+            canDeleteDefault={canDeleteDefault}
+            onSelect={() => handleSelectServer(s.id)}
+            onDelete={() => removeServer(s.id)}
+            onEdit={updates => {
+              const auth = updates.password
+                ? { username: updates.username || 'opencode', password: updates.password }
+                : undefined
+              updateServer(s.id, {
+                name: updates.name,
+                url: updates.url,
+                auth,
+                authMode: updates.useCloudflareAccess ? 'cloudflare-access' : 'basic',
+              })
+              void checkHealth(s.id)
+            }}
+            onCheckHealth={() => void checkHealth(s.id)}
+          />
+        ))}
+
+        {addingServer && (
+          <AddServerForm
+            onAdd={(n, u, user, pass, useAccess) => {
+              const auth = pass ? { username: user || 'opencode', password: pass } : undefined
+              const s = addServer({
+                name: n,
+                url: u,
+                auth,
+                authMode: useAccess ? 'cloudflare-access' : 'basic',
+              })
+              setAddingServer(false)
+              void checkHealth(s.id)
+            }}
+            onCancel={() => setAddingServer(false)}
+          />
+        )}
+
+        {servers.length === 0 && !addingServer && (
+          <div className="text-[length:var(--fs-md)] text-text-400 text-center py-8">{t('servers.noServersConfigured')}</div>
+        )}
+      </div>
+    </SettingsSection>
   )
 }

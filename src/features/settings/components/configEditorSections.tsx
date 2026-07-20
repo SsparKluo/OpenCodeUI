@@ -3,16 +3,16 @@ import { ChevronRightIcon, PlusIcon, TrashIcon } from '../../../components/Icons
 import { buildAgentConfigFields } from './configEditorAgentFields'
 import { AgentsSection } from './configEditorAgents'
 import { DrillChild, DrillRow } from './configEditorDrill'
-import { useDrillContainer } from './configEditorDrillState'
+import { useDrillContainer, useDrillState } from './configEditorDrillState'
 import { BoolField, fieldClass, IntegerField, JsonStructuredEditor, KeyValueField, NumberField, PortField, PositiveIntegerField, Select, StringListField, TextArea, TextField } from './configEditorControls'
-import { DrillFields, EmptyHint, FieldRow, GroupHeader, NamedDrillList, SectionShell, type FieldDef } from './configEditorFields'
+import { DrillFields, DuplicateIdField, EmptyHint, FieldRow, GroupHeader, NamedDrillList, SectionShell, type FieldDef } from './configEditorFields'
 import { FormatterSection, LspSection, McpSection } from './configEditorIntegrations'
 import { KNOWN_ROOT_KEYS } from './configEditorMeta'
 import { PermissionsSection, ToolToggleMap } from './configEditorPermissions'
 import { ProvidersSection } from './configEditorProviders'
 import { enumChoices, type SectionProps } from './configEditorSectionTypes'
 import type { Choice, JsonRecord, Lang, SectionID } from './configEditorTypes'
-import { getObject, hasNested, hasRoot, isRecord, previewValue, setNested, setRoot, tx } from './configEditorUtils'
+import { clone, getObject, hasNested, hasOwn, hasRoot, isRecord, previewValue, setNested, setRoot, tx } from './configEditorUtils'
 
 function GeneralSection({ config, setConfig, lang, shells, models, agents }: SectionProps) {
   const root = config as JsonRecord
@@ -35,6 +35,12 @@ function GeneralSection({ config, setConfig, lang, shells, models, agents }: Sec
       label: 'default_agent',
       desc: tx("Primary agent used when none is specified. Falls back to 'build'.", "未指定时使用的主 agent，默认回退到 'build'。", lang),
       control: <Select editable value={root.default_agent} options={agents} onChange={v => set('default_agent', v)} />,
+    },
+    {
+      key: 'subagent_depth',
+      label: 'subagent_depth',
+      desc: tx('Maximum subagent nesting depth (default: 1).', '子 agent 最大嵌套深度（默认 1）。', lang),
+      control: <IntegerField value={root.subagent_depth} min={0} onChange={v => set('subagent_depth', v)} />,
     },
     {
       key: 'shell',
@@ -80,7 +86,7 @@ function GeneralSection({ config, setConfig, lang, shells, models, agents }: Sec
       key: 'snapshot',
       label: 'snapshot',
       desc: tx('Record filesystem snapshots so changes can be undone/reverted (default: true).', '记录文件系统快照以支持撤销/回退（默认 true）。', lang),
-      control: <BoolField value={root.snapshot} onChange={v => set('snapshot', v)} />,
+      control: <BoolField value={root.snapshot !== false} onChange={v => set('snapshot', v)} />,
     },
     {
       key: 'instructions',
@@ -138,6 +144,7 @@ function CommandsSection(props: SectionProps) {
 
 function CommandHome({ config, setConfig, lang, models, agents }: SectionProps) {
   const { activeChildId, enter, depth } = useDrillContainer()
+  const drill = useDrillState()
   const map = getObject(config, 'command')
   const names = Object.keys(map).sort()
   const selected = activeChildId?.startsWith('command:') ? activeChildId.slice('command:'.length) : ''
@@ -157,7 +164,18 @@ function CommandHome({ config, setConfig, lang, models, agents }: SectionProps) 
   if (selected) {
     return (
       <DrillChild depth={depth}>
-        <DrillFields fields={fields} isConfigured={key => key in item} lang={lang} />
+        <div className="space-y-6">
+          <DuplicateIdField
+            sourceId={selected}
+            existing={map}
+            lang={lang}
+            onCopy={targetId => {
+              setConfig(setNested(config, ['command', targetId], clone(item)))
+              drill.replace(0, { id: `command:${targetId}`, title: targetId })
+            }}
+          />
+          <DrillFields fields={fields} isConfigured={key => key in item} lang={lang} />
+        </div>
       </DrillChild>
     )
   }
@@ -176,30 +194,48 @@ function CommandHome({ config, setConfig, lang, models, agents }: SectionProps) 
 }
 
 function SkillsSection({ config, setConfig, lang }: SectionProps) {
+  return (
+    <SectionShell id="skills" lang={lang}>
+      <SkillsContent config={config} setConfig={setConfig} lang={lang} />
+    </SectionShell>
+  )
+}
+
+function SkillsContent({ config, setConfig, lang }: Pick<SectionProps, 'config' | 'setConfig' | 'lang'>) {
+  const { activeChildId } = useDrillContainer()
   const skills = getObject(config, 'skills')
-  const reference = getObject(config, 'reference')
+  const references = getObject(config, 'references')
+  const legacyReferences = getObject(config, 'reference')
+  const editingCurrent = activeChildId?.startsWith('reference:')
+  const editingLegacy = activeChildId?.startsWith('legacy-reference:')
   const skillFields: FieldDef[] = [
     { key: 'skills.paths', label: 'skills.paths', desc: tx('Additional paths to skill folders.', '额外的技能文件夹路径。', lang), control: <StringListField value={skills.paths} onChange={v => setConfig(setNested(config, ['skills', 'paths'], v))} mono /> },
     { key: 'skills.urls', label: 'skills.urls', desc: tx('URLs to fetch skills from (e.g. /.well-known/skills/).', '从这些 URL 获取技能（如 /.well-known/skills/）。', lang), control: <StringListField value={skills.urls} onChange={v => setConfig(setNested(config, ['skills', 'urls'], v))} mono /> },
   ]
   return (
-    <SectionShell id="skills" lang={lang}>
       <div className="space-y-6">
-        <DrillFields fields={skillFields} isConfigured={key => hasNested(config, key.split('.'))} lang={lang} />
-        <div>
-          <GroupHeader text={tx('References (@alias)', '引用（@alias）', lang)} count={Object.keys(reference).length} />
+        {!editingCurrent && !editingLegacy && <DrillFields fields={skillFields} isConfigured={key => hasNested(config, key.split('.'))} lang={lang} />}
+        {!editingLegacy && <div>
+          <GroupHeader text={tx('References (@alias)', '引用（@alias）', lang)} count={Object.keys(references).length} />
           <p className="mb-2 text-[length:var(--fs-xs)] leading-relaxed text-text-400">
             {tx('Named git or local directory references mentioned as @alias or @alias/path.', '命名的 git 或本地目录引用，可用 @alias 或 @alias/path 提及。', lang)}
           </p>
-          <ReferenceEditor value={reference} onChange={v => setConfig(setRoot(config, 'reference', v))} lang={lang} />
-        </div>
+          <ReferenceEditor value={references} onChange={v => setConfig(setRoot(config, 'references', v))} lang={lang} drillPrefix="reference" />
+        </div>}
+        {hasRoot(config, 'reference') && !editingCurrent && <div>
+          <GroupHeader text={tx('Legacy references (@alias)', '旧版引用（@alias）', lang)} count={Object.keys(legacyReferences).length} />
+          <p className="mb-2 text-[length:var(--fs-xs)] leading-relaxed text-text-400">
+            {tx("Deprecated 'reference' entries. New aliases should be added above.", "已废弃的 'reference' 条目，新 alias 请添加到上方。", lang)}
+          </p>
+          <ReferenceEditor value={legacyReferences} onChange={v => setConfig(setRoot(config, 'reference', v))} lang={lang} drillPrefix="legacy-reference" />
+        </div>}
       </div>
-    </SectionShell>
   )
 }
 
-function ReferenceEditor({ value, onChange, lang }: { value: JsonRecord; onChange: (value: JsonRecord) => void; lang: Lang }) {
+function ReferenceEditor({ value, onChange, lang, drillPrefix }: { value: JsonRecord; onChange: (value: JsonRecord) => void; lang: Lang; drillPrefix: 'reference' | 'legacy-reference' }) {
   const { activeChildId, enter, depth } = useDrillContainer()
+  const drill = useDrillState()
   const [newAlias, setNewAlias] = useState('')
   const entries = Object.entries(value)
   const setEntry = (alias: string, entry: unknown) => onChange({ ...value, [alias]: entry })
@@ -209,12 +245,23 @@ function ReferenceEditor({ value, onChange, lang }: { value: JsonRecord; onChang
     return 'git'
   }
 
-  if (activeChildId?.startsWith('reference:')) {
-    const alias = activeChildId.slice('reference:'.length)
-    if (alias in value) {
+  if (activeChildId?.startsWith(`${drillPrefix}:`)) {
+    const alias = activeChildId.slice(`${drillPrefix}:`.length)
+    if (hasOwn(value, alias)) {
       return (
         <DrillChild depth={depth}>
-          <ReferenceEntry alias={alias} entry={value[alias]} setEntry={setEntry} lang={lang} />
+          <div className="space-y-6">
+            <DuplicateIdField
+              sourceId={alias}
+              existing={value}
+              lang={lang}
+              onCopy={targetId => {
+                onChange({ ...value, [targetId]: clone(value[alias]) })
+                drill.replace(depth, { id: `${drillPrefix}:${targetId}`, title: `@${targetId}` })
+              }}
+            />
+            <ReferenceEntry alias={alias} entry={value[alias]} setEntry={setEntry} lang={lang} />
+          </div>
         </DrillChild>
       )
     }
@@ -223,17 +270,17 @@ function ReferenceEditor({ value, onChange, lang }: { value: JsonRecord; onChang
   return (
     <div className="space-y-3">
       {entries.length === 0 && <EmptyHint text={tx('No references configured.', '还没有配置引用。', lang)} />}
-      <div className="rounded-xl border border-border-200/45 bg-bg-000/25 px-3.5">
+      <div className="space-y-0.5">
       {entries.map(([alias, entry]) => {
         const type = typeOf(entry)
         return (
-          <div key={alias} className="group flex items-center gap-2 border-b border-border-200/35 last:border-b-0">
-            <button type="button" onClick={() => enter({ id: `reference:${alias}`, title: `@${alias}` })} className="flex min-w-0 flex-1 items-center gap-3 py-3.5 text-left">
+          <div key={alias} className="group flex items-center gap-2 rounded-lg px-2.5 transition-colors hover:bg-bg-100/50">
+            <button type="button" onClick={() => enter({ id: `${drillPrefix}:${alias}`, title: `@${alias}` })} className="flex min-w-0 flex-1 items-center gap-3 py-2.5 text-left">
               <div className="min-w-0 flex-1">
                 <div className="truncate font-mono text-[length:var(--fs-sm)] font-medium text-text-100">@{alias}</div>
-                <div className="truncate text-[length:var(--fs-xs)] text-text-500">{type} · {previewValue(entry, lang)}</div>
+                <div className="truncate text-[length:var(--fs-xs)] text-text-400">{type} · {previewValue(entry, lang)}</div>
               </div>
-              <ChevronRightIcon size={15} className="shrink-0 text-text-500 transition-transform group-hover:translate-x-0.5" />
+              <ChevronRightIcon size={14} className="shrink-0 text-text-300" />
             </button>
           </div>
         )
@@ -243,7 +290,7 @@ function ReferenceEditor({ value, onChange, lang }: { value: JsonRecord; onChang
         <input value={newAlias} onChange={event => setNewAlias(event.target.value)} placeholder={tx('alias', '别名', lang)} className={`${fieldClass} min-w-0 flex-1 font-mono`} />
         <button
           type="button"
-          disabled={!newAlias.trim() || newAlias in value}
+          disabled={!newAlias.trim() || hasOwn(value, newAlias.trim())}
           onClick={() => {
             setEntry(newAlias.trim(), '')
             setNewAlias('')
@@ -291,8 +338,14 @@ function ReferenceEntry({ alias, entry, setEntry, lang }: { alias: string; entry
         ? [
             { key: 'repository', label: 'repository', desc: tx('Repository URL or owner/repo shorthand.', '仓库 URL 或 owner/repo 简写。', lang), control: <TextField value={rec.repository} onChange={v => setEntry(alias, { ...rec, repository: v })} mono placeholder={tx('repository URL or owner/repo', '仓库 URL 或 owner/repo', lang)} /> },
             { key: 'branch', label: 'branch', desc: tx('Branch to use (optional).', '使用的分支（可选）。', lang), control: <TextField value={rec.branch} onChange={v => setEntry(alias, { ...rec, branch: v })} /> },
+            { key: 'description', label: 'description', desc: tx('Description of this reference.', '该引用的说明。', lang), control: <TextField value={rec.description} onChange={v => setEntry(alias, { ...rec, description: v })} /> },
+            { key: 'hidden', label: 'hidden', desc: tx('Hide this reference from suggestions.', '在建议列表中隐藏该引用。', lang), control: <BoolField value={rec.hidden} onChange={v => setEntry(alias, { ...rec, hidden: v })} /> },
           ]
-        : [{ key: 'path', label: 'path', desc: tx('Local path to reference.', '本地引用路径。', lang), control: <TextField value={rec.path} onChange={v => setEntry(alias, { ...rec, path: v })} mono placeholder={tx('absolute, ~/ or workspace-relative path', '绝对路径、~/ 或相对工作区路径', lang)} /> }]),
+        : [
+            { key: 'path', label: 'path', desc: tx('Local path to reference.', '本地引用路径。', lang), control: <TextField value={rec.path} onChange={v => setEntry(alias, { ...rec, path: v })} mono placeholder={tx('absolute, ~/ or workspace-relative path', '绝对路径、~/ 或相对工作区路径', lang)} /> },
+            { key: 'description', label: 'description', desc: tx('Description of this reference.', '该引用的说明。', lang), control: <TextField value={rec.description} onChange={v => setEntry(alias, { ...rec, description: v })} /> },
+            { key: 'hidden', label: 'hidden', desc: tx('Hide this reference from suggestions.', '在建议列表中隐藏该引用。', lang), control: <BoolField value={rec.hidden} onChange={v => setEntry(alias, { ...rec, hidden: v })} /> },
+          ]),
   ]
   return <DrillFields fields={fields} isConfigured={key => key === 'type' || (isRecord(entry) ? key in entry : key === 'value')} lang={lang} />
 }
@@ -326,21 +379,21 @@ function PluginsHome({ config, setConfig, lang }: SectionProps) {
       {list.length === 0 ? (
         <EmptyHint text={tx('No plugins configured.', '还没有配置插件。', lang)} />
       ) : (
-        <div className="rounded-xl border border-border-200/45 bg-bg-000/25 px-3.5">
+        <div className="space-y-0.5">
           {list.map((entry, index) => {
             const isTuple = Array.isArray(entry)
             const name = isTuple ? String(entry[0] ?? '') : String(entry ?? '')
             const options = isTuple && isRecord(entry[1]) ? (entry[1] as JsonRecord) : {}
             return (
-              <div key={index} className="group flex items-center gap-2 border-b border-border-200/35 last:border-b-0">
-                <button type="button" onClick={() => enter({ id: `plugin:${index}`, title: name || tx('plugin', '插件', lang) })} className="flex min-w-0 flex-1 items-center gap-3 py-3.5 text-left">
+              <div key={index} className="group flex items-center gap-2 rounded-lg px-2.5 transition-colors hover:bg-bg-100/50">
+                <button type="button" onClick={() => enter({ id: `plugin:${index}`, title: name || tx('plugin', '插件', lang) })} className="flex min-w-0 flex-1 items-center gap-3 py-2.5 text-left">
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-mono text-[length:var(--fs-sm)] font-medium text-text-100">{name || tx('(empty)', '（空）', lang)}</div>
-                    <div className="truncate text-[length:var(--fs-xs)] text-text-500">{isTuple ? previewValue(options, lang) : tx('no options', '无配置项', lang)}</div>
+                    <div className="truncate text-[length:var(--fs-xs)] text-text-400">{isTuple ? previewValue(options, lang) : tx('no options', '无配置项', lang)}</div>
                   </div>
-                  <ChevronRightIcon size={15} className="shrink-0 text-text-500 transition-transform group-hover:translate-x-0.5" />
+                  <ChevronRightIcon size={14} className="shrink-0 text-text-300" />
                 </button>
-                <button type="button" onClick={() => set(list.filter((_, i) => i !== index))} className="shrink-0 rounded-md p-1.5 text-text-500 opacity-0 transition-opacity hover:text-error-100 group-hover:opacity-100">
+                <button type="button" onClick={() => set(list.filter((_, i) => i !== index))} className="shrink-0 rounded-md p-1.5 text-text-400 opacity-0 transition-opacity hover:text-error-100 group-hover:opacity-100">
                   <TrashIcon size={13} />
                 </button>
               </div>
@@ -391,7 +444,7 @@ function AttachmentsSection({ config, setConfig, lang }: SectionProps) {
   const image = getObject(getObject(config, 'attachment'), 'image')
   const set = (key: string, v: unknown) => setConfig(setNested(config, ['attachment', 'image', key], v))
   const fields: FieldDef[] = [
-    { key: 'auto_resize', label: 'image.auto_resize', desc: tx('Resize oversized images before sending (default: true).', '发送前缩放超限图片（默认 true）。', lang), control: <BoolField value={image.auto_resize} onChange={v => set('auto_resize', v)} /> },
+    { key: 'auto_resize', label: 'image.auto_resize', desc: tx('Resize oversized images before sending (default: true).', '发送前缩放超限图片（默认 true）。', lang), control: <BoolField value={image.auto_resize !== false} onChange={v => set('auto_resize', v)} /> },
     { key: 'max_width', label: 'image.max_width', desc: tx('Max image width before resize/reject (default: 2000).', '缩放/拒绝前的最大宽度（默认 2000）。', lang), control: <PositiveIntegerField value={image.max_width} onChange={v => set('max_width', v)} /> },
     { key: 'max_height', label: 'image.max_height', desc: tx('Max image height before resize/reject (default: 2000).', '缩放/拒绝前的最大高度（默认 2000）。', lang), control: <PositiveIntegerField value={image.max_height} onChange={v => set('max_height', v)} /> },
     { key: 'max_base64_bytes', label: 'image.max_base64_bytes', desc: tx('Max base64 payload bytes (default: 5242880).', 'base64 最大字节数（默认 5242880）。', lang), control: <PositiveIntegerField value={image.max_base64_bytes} onChange={v => set('max_base64_bytes', v)} /> },
@@ -411,7 +464,7 @@ function RuntimeSection({ config, setConfig, lang }: SectionProps) {
   const fields: FieldDef[] = [
     { key: 'tool_output.max_lines', label: 'tool_output.max_lines', desc: tx('Max lines of tool output before truncation (default: 2000).', '工具输出截断前的最大行数（默认 2000）。', lang), control: <PositiveIntegerField value={toolOutput.max_lines} onChange={v => setConfig(setNested(config, ['tool_output', 'max_lines'], v))} /> },
     { key: 'tool_output.max_bytes', label: 'tool_output.max_bytes', desc: tx('Max bytes of tool output before truncation (default: 51200).', '工具输出截断前的最大字节（默认 51200）。', lang), control: <PositiveIntegerField value={toolOutput.max_bytes} onChange={v => setConfig(setNested(config, ['tool_output', 'max_bytes'], v))} /> },
-    { key: 'compaction.auto', label: 'compaction.auto', desc: tx('Auto-compact context when full (default: true).', '上下文满时自动压缩（默认 true）。', lang), control: <BoolField value={compaction.auto} onChange={v => setConfig(setNested(config, ['compaction', 'auto'], v))} /> },
+    { key: 'compaction.auto', label: 'compaction.auto', desc: tx('Auto-compact context when full (default: true).', '上下文满时自动压缩（默认 true）。', lang), control: <BoolField value={compaction.auto !== false} onChange={v => setConfig(setNested(config, ['compaction', 'auto'], v))} /> },
     { key: 'compaction.prune', label: 'compaction.prune', desc: tx('Prune old tool outputs (default: false).', '修剪旧的工具输出（默认 false）。', lang), control: <BoolField value={compaction.prune} onChange={v => setConfig(setNested(config, ['compaction', 'prune'], v))} /> },
     { key: 'compaction.tail_turns', label: 'compaction.tail_turns', desc: tx('Recent user turns kept verbatim during compaction (default: 2).', '压缩时原样保留的最近用户轮次数（默认 2）。', lang), control: <IntegerField value={compaction.tail_turns} min={0} onChange={v => setConfig(setNested(config, ['compaction', 'tail_turns'], v))} /> },
     { key: 'compaction.preserve_recent_tokens', label: 'compaction.preserve_recent_tokens', desc: tx('Max tokens from recent turns to preserve verbatim.', '原样保留的最近轮次最大 token 数。', lang), control: <IntegerField value={compaction.preserve_recent_tokens} min={0} onChange={v => setConfig(setNested(config, ['compaction', 'preserve_recent_tokens'], v))} /> },
@@ -454,23 +507,73 @@ function ExperimentalSection({ config, setConfig, lang }: SectionProps) {
 function PolicyEditor({ value, onChange, lang }: { value: unknown; onChange: (value: unknown[]) => void; lang: Lang }) {
   const list = Array.isArray(value) ? value : []
   return (
-    <div className="space-y-2">
-      {list.map((entry, index) => {
-        const rec = isRecord(entry) ? entry : {}
-        return (
-          <div key={index} className="space-y-2 rounded-lg border border-border-200/40 p-2">
-            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2">
-              <Select value={rec.action} options={[{ value: 'provider.use', label: 'provider.use' }]} onChange={v => { const next = [...list]; next[index] = { ...rec, action: v }; onChange(next) }} />
-              <Select value={rec.effect} options={enumChoices(['allow', 'deny'])} onChange={v => { const next = [...list]; next[index] = { ...rec, effect: v }; onChange(next) }} />
-              <button type="button" onClick={() => onChange(list.filter((_, i) => i !== index))} className="rounded-md p-1.5 text-text-500 hover:text-error-100">
-                <TrashIcon size={13} />
-              </button>
+    <div className="space-y-1">
+      {list.length === 0 && (
+        <div className="py-2 text-[length:var(--fs-sm)] text-text-400">
+          {tx('No policies yet. Add one below.', '还没有策略，可在下方添加。', lang)}
+        </div>
+      )}
+      <div className="divide-y divide-border-200/35">
+        {list.map((entry, index) => {
+          const rec = isRecord(entry) ? entry : {}
+          return (
+            <div key={index} className="space-y-2.5 py-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 text-[length:var(--fs-xs)] text-text-400">{tx('Action', '动作', lang)}</div>
+                  <Select
+                    value={rec.action}
+                    options={[{ value: 'provider.use', label: 'provider.use' }]}
+                    onChange={v => {
+                      const next = [...list]
+                      next[index] = { ...rec, action: v }
+                      onChange(next)
+                    }}
+                  />
+                </div>
+                <div className="w-[120px] shrink-0">
+                  <div className="mb-1 text-[length:var(--fs-xs)] text-text-400">{tx('Effect', '效果', lang)}</div>
+                  <Select
+                    value={rec.effect}
+                    options={enumChoices(['allow', 'deny'])}
+                    onChange={v => {
+                      const next = [...list]
+                      next[index] = { ...rec, effect: v }
+                      onChange(next)
+                    }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onChange(list.filter((_, i) => i !== index))}
+                  className="mt-5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-300 transition-colors hover:bg-bg-200/40 hover:text-error-100"
+                  title={tx('Remove', '删除', lang)}
+                >
+                  <TrashIcon size={14} />
+                </button>
+              </div>
+              <div>
+                <div className="mb-1 text-[length:var(--fs-xs)] text-text-400">{tx('Resource', '资源', lang)}</div>
+                <TextField
+                  value={rec.resource}
+                  onChange={v => {
+                    const next = [...list]
+                    next[index] = { ...rec, resource: v }
+                    onChange(next)
+                  }}
+                  placeholder={tx('e.g. anthropic/*', '例如 anthropic/*', lang)}
+                  mono
+                />
+              </div>
             </div>
-            <TextField value={rec.resource} onChange={v => { const next = [...list]; next[index] = { ...rec, resource: v }; onChange(next) }} placeholder="resource" mono />
-          </div>
-        )
-      })}
-      <button type="button" onClick={() => onChange([...list, { action: 'provider.use', effect: 'allow', resource: '' }])} className="inline-flex items-center gap-1.5 rounded-lg border border-border-200/60 px-3 py-1.5 text-[length:var(--fs-xs)] text-text-300 hover:bg-bg-100">
+          )
+        })}
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange([...list, { action: 'provider.use', effect: 'allow', resource: '' }])}
+        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-border-200 px-2.5 text-[length:var(--fs-sm)] font-medium text-text-100 transition-colors hover:border-border-300"
+      >
         <PlusIcon size={13} />
         {tx('Add policy', '添加策略', lang)}
       </button>
@@ -502,24 +605,50 @@ function CompatibilitySection({ config, setConfig, lang, models }: SectionProps)
 
 function ModeCompatEditor({ value, onChange, lang, models }: { value: unknown; onChange: (value: JsonRecord) => void; lang: Lang; models: Choice[] }) {
   const { activeChildId, enter, depth } = useDrillContainer()
+  const drill = useDrillState()
   const rec = isRecord(value) ? value : {}
   const names = Object.keys(rec).sort()
   const [newName, setNewName] = useState('')
   if (activeChildId?.startsWith('mode-agent:')) {
     const name = activeChildId.slice('mode-agent:'.length)
     const agent = getObject(rec, name)
-    return <DrillChild depth={depth}><AgentCompatEditor value={agent} onChange={next => onChange({ ...rec, [name]: next })} lang={lang} models={models} /></DrillChild>
+    return (
+      <DrillChild depth={depth}>
+        <div className="space-y-6">
+          {drill.stack.length === depth + 1 && (
+            <DuplicateIdField
+              sourceId={name}
+              existing={rec}
+              lang={lang}
+              onCopy={targetId => {
+                onChange({ ...rec, [targetId]: clone(agent) })
+                drill.replace(depth, { id: `mode-agent:${targetId}`, title: targetId })
+              }}
+            />
+          )}
+          <AgentCompatEditor value={agent} onChange={next => onChange({ ...rec, [name]: next })} lang={lang} models={models} />
+        </div>
+      </DrillChild>
+    )
   }
   return (
     <div className="space-y-3">
       {names.length === 0 ? <EmptyHint text={tx('No deprecated mode entries.', '没有旧 mode 条目。', lang)} /> : (
-        <div className="rounded-xl border border-border-200/45 bg-bg-000/25 px-3.5">
+        <div className="space-y-0.5">
           {names.map(name => <DrillRow key={name} label={name} preview={previewValue(rec[name], lang)} onClick={() => enter({ id: `mode-agent:${name}`, title: name })} />)}
         </div>
       )}
       <div className="flex min-w-0 gap-2">
         <input value={newName} onChange={event => setNewName(event.target.value)} placeholder={tx('mode name', 'mode 名称', lang)} className={`${fieldClass} min-w-0 flex-1 font-mono`} />
-        <button type="button" disabled={!newName.trim() || newName in rec} onClick={() => { onChange({ ...rec, [newName.trim()]: {} }); setNewName('') }} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border-200/60 px-3 py-2 text-[length:var(--fs-xs)] text-text-300 hover:bg-bg-100 disabled:opacity-40">
+        <button
+          type="button"
+          disabled={!newName.trim() || hasOwn(rec, newName.trim())}
+          onClick={() => {
+            onChange({ ...rec, [newName.trim()]: { description: '' } })
+            setNewName('')
+          }}
+          className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md px-3 text-[length:var(--fs-sm)] font-medium text-accent-main-100 transition-colors hover:bg-accent-main-100/10 disabled:opacity-40"
+        >
           <PlusIcon size={13} />
           {tx('Add', '添加', lang)}
         </button>
@@ -549,7 +678,7 @@ function AdvancedSection({ config, setConfig, lang }: SectionProps) {
       {rest.length === 0 ? (
         <EmptyHint text={tx('No unrecognized fields. Everything is editable in the sections above.', '没有未识别字段，全部都能在上面的分区里编辑。', lang)} />
       ) : (
-        <div className="rounded-xl border border-border-200/45 bg-bg-000/25 px-3.5">
+        <div className="space-y-1">
           {rest.map(([key, value]) => (
             editingUnknown ? (
               <FieldRow

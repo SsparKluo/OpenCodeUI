@@ -804,7 +804,7 @@ export const ModelSelector = memo(
         >
           <span className="font-medium truncate max-w-[240px]">{displayName}</span>
           <div className={`opacity-50 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
-            <ChevronDownIcon size={10} />
+            <ChevronDownIcon size={16} />
           </div>
         </button>
       ) : (

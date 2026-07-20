@@ -104,6 +104,12 @@ export const PreviewTabsBar = memo(function PreviewTabsBar({
                   if (target.closest('button')) return
                   startInternalDrag(event, { kind: 'preview-tab', id: item.id })
                 }}
+                onMouseDown={event => {
+                  if (event.button !== 1) return
+                  event.preventDefault()
+                  event.stopPropagation()
+                  onClose(item.id)
+                }}
                 className={
                   isActive
                     ? `tab-active relative z-10 mx-px flex h-full ${tabWidthClassName} shrink-0 select-none items-center gap-1 bg-bg-100 text-text-100`

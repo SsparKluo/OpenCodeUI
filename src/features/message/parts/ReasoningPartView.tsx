@@ -122,6 +122,20 @@ export const ReasoningPartView = memo(function ReasoningPartView({ part, isStrea
       : isPartStreaming
         ? 'text-[length:var(--fs-sm)] leading-5 text-text-200 whitespace-nowrap overflow-hidden text-ellipsis'
         : 'text-[length:var(--fs-sm)] leading-5 text-text-300 whitespace-nowrap overflow-hidden text-ellipsis'
+    // 折叠态 markdown：渲染完整内容，但强制只露一行
+    const collapsedMarkdownClassName = [
+      'max-h-5 overflow-hidden',
+      isPartStreaming ? 'text-text-200' : 'text-text-300',
+      isPartStreaming ? 'reasoning-shimmer-text' : '',
+      // 压扁块级结构，避免折叠时露出多行
+      '[&_.markdown-stream-block]:!my-0',
+      '[&_p]:!my-0 [&_p]:inline',
+      '[&_h1]:!my-0 [&_h1]:inline [&_h2]:!my-0 [&_h2]:inline [&_h3]:!my-0 [&_h3]:inline',
+      '[&_ul]:!my-0 [&_ol]:!my-0 [&_li]:inline [&_li]:!my-0',
+      '[&_pre]:!my-0 [&_pre]:inline-block [&_pre]:max-w-full [&_pre]:overflow-hidden',
+      '[&_blockquote]:!my-0 [&_blockquote]:inline',
+      '[&_br]:hidden',
+    ].join(' ')
 
     const content = shouldUseToggle ? (
       <>
@@ -134,11 +148,19 @@ export const ReasoningPartView = memo(function ReasoningPartView({ part, isStrea
         >
           <div ref={summaryContainerRef} className="relative min-w-0 flex-1 overflow-hidden">
             <span className="relative inline-block min-w-0 max-w-full align-top">
-              <span
-                className={`block min-w-0 ${isMarkdownMode ? '' : 'italic '} ${summaryClassName} ${isPartStreaming ? 'reasoning-shimmer-text' : ''}`}
-              >
-                {expanded ? expandedMetaText : summaryText}
-              </span>
+              {expanded ? (
+                <span className={`block min-w-0 ${isMarkdownMode ? '' : 'italic '} ${summaryClassName}`}>
+                  {expandedMetaText}
+                </span>
+              ) : isMarkdownMode ? (
+                <div className={`min-w-0 text-[length:var(--fs-sm)] leading-5 ${collapsedMarkdownClassName}`}>
+                  <MarkdownRenderer content={displayText} variant="reasoning" isStreaming={isPartStreaming} />
+                </div>
+              ) : (
+                <span className={`block min-w-0 italic ${summaryClassName} ${isPartStreaming ? 'reasoning-shimmer-text' : ''}`}>
+                  {summaryText}
+                </span>
+              )}
             </span>
             <span
               ref={summaryMeasureRef}

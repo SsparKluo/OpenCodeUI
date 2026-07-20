@@ -1,5 +1,19 @@
 # Changelog
 
+## [v0.6.34] - 2026-07-19
+
+- fix(message): markdown 思考折叠时渲染单行预览 (5505c2d3)
+- fix(settings): 对齐已保存 CSS 覆盖方案工具栏 (85559cd4)
+- fix(settings): 优化代码块主题选择与预览 (a4ef92a5)
+- feat(ui): 优化侧栏与面板控件交互 (f15c5350)
+- feat(settings): 调整聊天相关默认设置 (dd401a85)
+- chore: remove TODO.md (task complete) (40bb61ab)
+- feat(code-block): user-configurable Shiki theme (light/dark independent) (93a71e61)
+- fix(settings): 优化搜索候选宽度和键盘滚动 (fd1de693)
+- feat(config): 添加配置字段和原始 JSON 搜索 (dba66d9a)
+- feat(settings): 添加设置搜索和分类导航 (913d949e)
+- refactor(config): 重构可视化配置编辑器 (6caacc71)
+
 ## [v0.6.33] - 2026-07-18
 
 - fix(sidebar): 修复文件夹模式全局文件夹拖拽排序 (7dbe35c)
