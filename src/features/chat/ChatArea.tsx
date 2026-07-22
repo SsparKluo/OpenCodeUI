@@ -437,6 +437,7 @@ export const ChatArea = memo(
       const autoForceScroll = auto.forceScrollToBottom
       const autoScrollBottom = auto.scrollToBottom
       const autoPause = auto.pause
+      const autoSetStreaming = auto.setStreaming
       const userScrolledRef = auto.userScrolledRef
       const autoSetPinToBottom = auto.setPinToBottom
       const spacerHeight = bottomSpacerHeight(bottomPadding)
@@ -447,6 +448,9 @@ export const ChatArea = memo(
       // 给 message tree 里的 disclosure widget 用：用户主动操作（展开/折叠）
       // 时通知这里停止贴底跟随。值 stable（pause 是 useCallback），不会引起消费方 re-render。
       const autoScrollCtxValue = useMemo(() => ({ pause: autoPause }), [autoPause])
+
+      // 同步 isStreaming 到 useAutoScroll —— selection 只在流式时才影响跟随
+      useEffect(() => { autoSetStreaming(isStreaming) }, [autoSetStreaming, isStreaming])
 
       // ── 滚动状态（同步计算，不使用 rAF） ──
       const prevState = useRef({ overflow: false, bottom: true, jump: false })
