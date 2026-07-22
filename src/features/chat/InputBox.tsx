@@ -15,7 +15,9 @@ import { InputToolbar } from './input/InputToolbar'
 import type { ModelSelectorHandle } from './ModelSelector'
 import { InputFooter } from './input/InputFooter'
 import { FloatingActions, CollapsedCapsule } from './input/InputActions'
+import { QueuedMessagesBar } from './input/QueuedMessagesBar'
 import { useMobileCollapse } from './input/useMobileCollapse'
+import type { QueuedFollowupDraft } from '../../store/followupQueueStore'
 import { useAttachmentRail } from './input/useAttachmentRail'
 import { useInputHistory } from './input/useInputHistory'
 import {
@@ -159,6 +161,13 @@ export interface InputBoxProps {
   // Collapsed dialog capsules
   collapsedPermission?: CollapsedDialogInfo
   collapsedQuestion?: CollapsedDialogInfo
+  // Queued messages — data + callbacks
+  queuedItems?: QueuedFollowupDraft[]
+  queuedFailedId?: string
+  queuedSendingId?: string
+  onQueuedRemove?: (id: string) => void
+  onQueuedCancelFailed?: (id: string) => void
+  onQueuedSendNow?: (id: string) => void
 }
 
 // ============================================
@@ -201,6 +210,12 @@ function InputBoxComponent({
   onScrollToBottom,
   collapsedPermission,
   collapsedQuestion,
+  queuedItems = [],
+  queuedFailedId,
+  queuedSendingId,
+  onQueuedRemove,
+  onQueuedCancelFailed,
+  onQueuedSendNow,
 }: InputBoxProps) {
   const { t } = useTranslation('chat')
   // 合并文件能力：优先用 fileCapabilities，回退到 supportsImages
@@ -1205,7 +1220,9 @@ function InputBoxComponent({
   return (
     <div className="w-full">
       <div
-        className={`mx-auto max-w-3xl pointer-events-auto transition-[max-width] duration-300 ease-in-out ${isCompact ? 'px-2' : 'px-4'}`}
+        className={`mx-auto max-w-3xl transition-[max-width] duration-300 ease-in-out ${isCompact ? 'px-2' : 'px-4'} ${
+          isCollapsed ? 'pointer-events-none' : 'pointer-events-auto'
+        }`}
         style={{ paddingBottom: bottomDockPadding }}
       >
         <div
@@ -1251,6 +1268,7 @@ function InputBoxComponent({
               onExpand={handleExpandInput}
               showScrollToBottom={showScrollToBottom}
               onScrollToBottom={onScrollToBottom}
+              queuedCount={queuedItems.length}
             />
           )}
 
@@ -1263,6 +1281,20 @@ function InputBoxComponent({
                 : 'relative opacity-100 scale-100'
             }`}
           >
+            {/* Queued Messages Bar — 在输入框展开时显示 */}
+            {!isCollapsed && queuedItems.length > 0 && (
+              <div className="pb-2">
+                <QueuedMessagesBar
+                  items={queuedItems}
+                  failedId={queuedFailedId}
+                  sendingId={queuedSendingId}
+                  onRemove={onQueuedRemove!}
+                  onCancelFailed={onQueuedCancelFailed!}
+                  onSendNow={onQueuedSendNow!}
+                />
+              </div>
+            )}
+
             {/* @ Mention Menu */}
             <MentionMenu
               ref={mentionMenuRef}

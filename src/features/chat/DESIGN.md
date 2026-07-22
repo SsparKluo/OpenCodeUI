@@ -49,7 +49,7 @@ Two states, three transition types. No intermediate state.
 | `pointerup` | (any) | no-op (mouse-up is not a "scroll down" gesture) |
 | `keydown` PageUp/Home/ArrowUp | focus in chat root, not editable | `stopFollow()` |
 | `keydown` PageDown/End/ArrowDown | focus in chat root, not editable | `tryRecover()` |
-| `selectionchange` empty → non-empty | selection anchor in chat root | `stopFollow()` |
+| `selectionchange` empty → non-empty | selection anchor in chat root, **only during active streaming** | `stopFollow()` |
 | `selectionchange` non-empty → empty | (any) | no-op |
 | `OS_DRAG_START` (overlayScrollbar) | custom event from custom scrollbar thumb | `stopFollow()` |
 | `OS_DRAG_END` (overlayScrollbar) | custom event on pointerup from thumb | `tryRecover()` |
@@ -87,6 +87,11 @@ intent at the moment they fire:
 
 Each input declares its intent. We don't need to infer it from a
 downstream `scroll` event that conflates user and programmatic scrolls.
+
+**Selection during idle is a no-op.** `selectionchange` only calls
+`stopFollow` when `isStreaming` is true. When the chat is idle,
+selecting text to copy/reference doesn't break follow state or show
+the toBottom button — there's nothing to unfollow.
 
 ## Why nested scrollables need special handling
 
