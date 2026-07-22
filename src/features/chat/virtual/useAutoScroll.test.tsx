@@ -395,6 +395,42 @@ describe('useAutoScroll', () => {
       })
       expect(getResult().userScrolled).toBe(false)
     })
+
+    it('selection during streaming stops following', () => {
+      const { el } = mountScrollEl()
+      const { getResult } = setup(el)
+
+      act(() => getResult().setStreaming(true))
+
+      // 模拟开始选中文字
+      const sel = {
+        toString: () => 'selected',
+        anchorNode: el,
+      } as unknown as Selection
+      vi.spyOn(window, 'getSelection').mockReturnValue(sel)
+
+      act(() => {
+        document.dispatchEvent(new Event('selectionchange'))
+      })
+      expect(getResult().userScrolled).toBe(true)
+    })
+
+    it('selection during idle (non-streaming) does NOT stop following', () => {
+      const { el } = mountScrollEl()
+      const { getResult } = setup(el)
+
+      // 不 setStreaming —— 默认 false
+      const sel = {
+        toString: () => 'selected',
+        anchorNode: el,
+      } as unknown as Selection
+      vi.spyOn(window, 'getSelection').mockReturnValue(sel)
+
+      act(() => {
+        document.dispatchEvent(new Event('selectionchange'))
+      })
+      expect(getResult().userScrolled).toBe(false)
+    })
   })
 
   describe('recovery window', () => {

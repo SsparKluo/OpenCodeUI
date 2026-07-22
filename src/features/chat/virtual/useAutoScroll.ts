@@ -49,6 +49,7 @@ interface InputHandlerContext {
   touchStartYRef: React.MutableRefObject<number>
   touchMaxDownRef: React.MutableRefObject<number>
   lastSelEmptyRef: React.MutableRefObject<boolean>
+  isStreamingRef: React.MutableRefObject<boolean>
 }
 
 function createInputHandlers(ctx: InputHandlerContext) {
@@ -121,6 +122,9 @@ function createInputHandlers(ctx: InputHandlerContext) {
   }
 
   const onSelectionChange = () => {
+    // 非流式时 selection 不影响跟随状态 —— 用户只是在复制/引用文字，
+    // 不应该导致 toBottom 按钮出现或下一条消息不贴底
+    if (!ctx.isStreamingRef.current) return
     const sel = window.getSelection()
     const isEmpty = !sel || sel.toString().length === 0
     if (isEmpty === ctx.lastSelEmptyRef.current) return
@@ -205,6 +209,8 @@ function shouldMarkBoundaryGesture(nested: HTMLElement, delta: number) {
 export function useAutoScroll(bottomThreshold = 10) {
   const scrollElRef = useRef<HTMLElement | undefined>(undefined)
   const contentElRef = useRef<HTMLElement | undefined>(undefined)
+  /** 是否正在流式输出 —— selection 只在流式时才影响跟随状态 */
+  const isStreamingRef = useRef(false)
   const userScrolledRef = useRef(false)
   const [userScrolled, setUserScrolled] = useState(false)
   const lastSelEmptyRef = useRef(true)
@@ -319,6 +325,10 @@ export function useAutoScroll(bottomThreshold = 10) {
     contentElRef.current = el ?? undefined
   }, [])
 
+  const setStreaming = useCallback((v: boolean) => {
+    isStreamingRef.current = v
+  }, [])
+
   // ── 输入事件监听器：mount 一次，cleanup 通过 AbortController 统一 ──
   useEffect(() => {
     const el = scrollElRef.current
@@ -331,6 +341,7 @@ export function useAutoScroll(bottomThreshold = 10) {
       touchStartYRef,
       touchMaxDownRef,
       lastSelEmptyRef,
+      isStreamingRef,
     })
     return attachInputListeners(el, handlers)
   }, [markRecoverGesture, stopFollow, tryRecover])
@@ -353,6 +364,7 @@ export function useAutoScroll(bottomThreshold = 10) {
     setScrollRef,
     setContentRef,
     setPinToBottom,
+    setStreaming,
     handleScroll,
     pause,
     reset,
@@ -362,7 +374,7 @@ export function useAutoScroll(bottomThreshold = 10) {
     userScrolledRef,
     userScrolled,
   }), [
-    setScrollRef, setContentRef, setPinToBottom, handleScroll, pause,
+    setScrollRef, setContentRef, setPinToBottom, setStreaming, handleScroll, pause,
     reset, resume, scrollToBottomCb, forceScrollToBottom, userScrolled,
   ])
 }
