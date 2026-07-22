@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { Sidebar } from './features/chat'
 import { ChatPane } from './features/chat/ChatPane'
 import { SplitContainer } from './features/chat/SplitContainer'
+import { TextSelectionPopup } from './features/text-selection-popup'
 import type { CommandItem } from './components/CommandPalette'
 import { ToastContainer } from './components/ToastContainer'
 import { RightPanel } from './components/RightPanel'
@@ -983,6 +984,7 @@ function App() {
             </>
           )}
           <ToastContainer onOpenAbout={openAboutSettings} />
+          <TextSelectionPopup />
         </div>
 
         <Suspense fallback={null}>
