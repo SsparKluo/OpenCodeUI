@@ -18,6 +18,7 @@ import { useFolderProjectDrop } from './useFolderProjectDrop'
 import { FolderProjectDropOverlay } from './FolderProjectDropOverlay'
 import { useChatSession, useModels, useModelSelection } from '../../hooks'
 import { useServerStore } from '../../hooks/useServerStore'
+import { followupQueueStore } from '../../store/followupQueueStore'
 import { useCancelHint } from '../../hooks/useCancelHint'
 import { InlineToolRequestContext, type InlineToolRequestContextValue } from './InlineToolRequestContext'
 import { ChatViewportProvider, canUseSplitPane, useChatViewportMaybe, type ChatViewportValue } from './chatViewport'
@@ -276,6 +277,10 @@ export const ChatPane = memo(function ChatPane({
     handleQuestionReject,
     isReplying,
 
+    queuedFollowups,
+    queuedFollowupFailedId,
+    queuedFollowupSendingId,
+
     loadMoreHistory,
     handleRedoAll,
     clearRevert,
@@ -284,6 +289,7 @@ export const ChatPane = memo(function ChatPane({
     registerInputBox,
 
     handleSend,
+    handleSendQueuedNow,
     handleAbort,
     handleCommand,
     handleUndoWithAnimation,
@@ -305,6 +311,25 @@ export const ChatPane = memo(function ChatPane({
     navigateToSession,
     navigateHome,
   })
+
+  const handleRemoveQueuedMessage = useCallback(
+    (id: string) => {
+      if (routeSessionId) {
+        followupQueueStore.remove(routeSessionId, id)
+      }
+    },
+    [routeSessionId],
+  )
+
+  const handleCancelFailedQueuedMessage = useCallback(
+    (id: string) => {
+      if (routeSessionId) {
+        followupQueueStore.clearFailed(routeSessionId)
+        followupQueueStore.remove(routeSessionId, id)
+      }
+    },
+    [routeSessionId],
+  )
 
   const messageView = useMemo(() => ({ sessionId: routeSessionId, messages }), [routeSessionId, messages])
   const deferredMessageView = useDeferredValue(messageView)
@@ -937,6 +962,12 @@ export const ChatPane = memo(function ChatPane({
                 }
               : undefined
           }
+          queuedItems={queuedFollowups}
+          queuedFailedId={queuedFollowupFailedId}
+          queuedSendingId={queuedFollowupSendingId}
+          onQueuedRemove={handleRemoveQueuedMessage}
+          onQueuedCancelFailed={handleCancelFailedQueuedMessage}
+          onQueuedSendNow={handleSendQueuedNow}
         />
       </div>
 
