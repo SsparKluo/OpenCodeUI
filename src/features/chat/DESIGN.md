@@ -41,8 +41,9 @@ Two states, three transition types. No intermediate state.
 | `wheel` (any direction) | target inside marked nested scrollable, movement stays inside it | no-op for chat follow |
 | `wheel` (deltaY < 0) | marked nested scrollable is already at top | `stopFollow()` |
 | `wheel` (deltaY > 0) | marked nested scrollable is already at bottom | mark recovery gesture; outer scroll may complete it |
-| `touchstart` | target in chat root, not editable | `stopFollow()` + reset `touchMaxDownRef` |
-| `touchmove` | during a touch gesture | update `touchMaxDownRef` (max downward displacement) |
+| `touchstart` | target in chat root, not editable | record start position (no state change) |
+| `touchmove` | finger down >10px (scroll up gesture) | `stopFollow()` |
+| `touchmove` | finger up (scroll down) | update `touchMaxDownRef` |
 | `touchend` | `touchMaxDownRef > 10` (real downward drag) | `tryRecover()` |
 | `touchend` | no downward drag (tap / up-fling) | no-op |
 | `pointerdown` on scrollbar | target === scroll root, clientX in scrollbar region | `stopFollow()` |

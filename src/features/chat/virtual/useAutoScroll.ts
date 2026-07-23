@@ -70,26 +70,33 @@ function createInputHandlers(ctx: InputHandlerContext) {
     }
   }
 
-  const onTouchStart = (e: TouchEvent) => {
+  const isRelevantTouch = (e: TouchEvent): boolean => {
     const t = e.target instanceof Element ? e.target : null
-    if (!t || !el.contains(t)) return
-    if (t.closest(EDITABLE_SELECTOR)) return
-    stopFollow()
+    if (!t || !el.contains(t)) return false
+    if (t.closest(EDITABLE_SELECTOR)) return false
+    return true
+  }
+
+  const onTouchStart = (e: TouchEvent) => {
+    if (!isRelevantTouch(e)) return
     ctx.touchStartYRef.current = e.touches[0]?.clientY ?? 0
     ctx.touchMaxDownRef.current = 0
   }
 
   const onTouchMove = (e: TouchEvent) => {
+    if (!isRelevantTouch(e)) return
     const y = e.touches[0]?.clientY ?? 0
-    // 手指上移 = 内容向下滚，d>0 表示本次手势向下滚动过
+    // d > 0: 手指上移 = 内容向下滚（向下滚动）
+    // d < 0: 手指下移 = 内容向上滚（向上滚动）
     const d = ctx.touchStartYRef.current - y
     if (d > ctx.touchMaxDownRef.current) ctx.touchMaxDownRef.current = d
+    // 向上滚动手势（手指下移超过阈值）→ 停止跟随，和桌面端 wheel-up 一致
+    if (d < -10) stopFollow()
   }
 
-  const onTouchEnd = () => {
+  const onTouchEnd = (e: TouchEvent) => {
+    if (!isRelevantTouch(e)) return
     // 只有「本次触摸是向下滚动手势且已回到底部」才恢复跟随。
-    // 普通点击、上滚、或微小抖动都不算向下滚动 → 不解除 userScrolled，
-    // 否则会出现「刚解除贴底、松手就又被拉回底部」的问题。
     if (ctx.touchMaxDownRef.current > 10) tryRecover()
   }
 
