@@ -8,17 +8,23 @@ import { ActiveSessionItem } from './ActiveSessionItem'
 import { NotificationItem } from './NotificationItem'
 import { SidebarFooter } from './SidebarFooter'
 import { buildActiveSessionTree } from './activeSessionTree'
+import { getParentPath } from './sidebarUtils'
 import {
   SidebarIcon,
   FolderIcon,
+  GlobeIcon,
+  PlusIcon,
   NewChatIcon,
   TrashIcon,
+  SearchIcon,
+  CloseIcon,
+  ChevronDownIcon,
   ListFilterIcon,
   FolderMinusIcon,
   CheckIcon,
   SpinnerIcon,
 } from '../../../components/Icons'
-import { useDirectory, useKeybindingLabel, useGitWorkspaceCatalog } from '../../../hooks'
+import { useDirectory, useKeybindingLabel, useGitWorkspaceCatalog, useVcsInfo } from '../../../hooks'
 import { useSessionContext } from '../../../contexts/useSessionContext'
 import { useLayoutStore, childSessionStore } from '../../../store'
 import { useBusySessions, useBusyCount } from '../../../store/activeSessionStore'
@@ -114,6 +120,7 @@ export function SidePanel({
     removeDirectory,
     addDirectory,
     reorderDirectories,
+    recentProjects,
   } = useDirectory()
   const catalogDirectories = useMemo(
     () =>
@@ -128,7 +135,13 @@ export function SidePanel({
   )
   const { catalog: gitWorkspaceCatalog, isLoading: isGitWorkspaceCatalogLoading } =
     useGitWorkspaceCatalog(catalogDirectories)
+  const { vcsInfo: currentDirectoryVcsInfo, isLoading: isCurrentDirectoryVcsLoading } = useVcsInfo(currentDirectory)
   const { sidebarFolderRecents, sidebarShowChildSessions } = useLayoutStore()
+  const [globalFolderIndex, setGlobalFolderIndex] = useState<number>(() => {
+    const saved = localStorage.getItem('opencode-sidebar-global-folder-index')
+    const parsed = saved ? Number.parseInt(saved, 10) : 0
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+  })
   const normalizedCurrentDirectory = useMemo(
     () => (currentDirectory ? normalizeToForwardSlash(currentDirectory) : undefined),
     [currentDirectory],
@@ -138,6 +151,7 @@ export function SidePanel({
     isOpen: false,
     projectId: null,
   })
+  const [projectsExpanded, setProjectsExpanded] = useState(false)
   const [sidebarTab, setSidebarTab] = useState<'recents' | 'active'>('recents')
   const [expandedRecentProjectIds, setExpandedRecentProjectIds] = useState<string[]>([])
 
@@ -148,6 +162,11 @@ export function SidePanel({
   const sessionSelectionAnchorIdRef = useRef<string | null>(null)
   const projectSelectionAnchorIdRef = useRef<string | null>(null)
   const recentsSelectionRootRef = useRef<HTMLDivElement>(null)
+  const projectToggleRef = useRef<HTMLButtonElement>(null)
+  const projectsDropdownRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const pendingOpenProjectsRef = useRef(false)
+  const pendingFocusSearchRef = useRef(false)
   // 批量删除确认弹窗
   const [batchDeleteSessionConfirm, setBatchDeleteSessionConfirm] = useState(false)
   const [batchRemoveProjectConfirm, setBatchRemoveProjectConfirm] = useState(false)
@@ -243,6 +262,32 @@ export function SidePanel({
 
   const showLabels = isExpanded || isMobile
   const newChatShortcut = useKeybindingLabel('newSession')
+
+  useEffect(() => {
+    if (showLabels && projectsExpanded) return
+    const activeElement = document.activeElement as Node | null
+    if (activeElement && projectsDropdownRef.current?.contains(activeElement)) {
+      projectToggleRef.current?.focus()
+    }
+  }, [projectsExpanded, showLabels])
+
+  // 收起态点项目/搜索：展开后再执行打开列表或聚焦输入
+  useEffect(() => {
+    if (!showLabels) return
+
+    if (pendingOpenProjectsRef.current) {
+      pendingOpenProjectsRef.current = false
+      setProjectsExpanded(true)
+    }
+
+    if (pendingFocusSearchRef.current) {
+      pendingFocusSearchRef.current = false
+      const frameId = requestAnimationFrame(() => {
+        searchInputRef.current?.focus()
+      })
+      return () => cancelAnimationFrame(frameId)
+    }
+  }, [showLabels])
 
   // Active sessions
   const busySessions = useBusySessions()
@@ -532,6 +577,16 @@ export function SidePanel({
     return buildProjectGroups(savedDirectories)
   }, [buildProjectGroups, savedDirectories])
 
+  const selectorProjectGroups = useMemo<ProjectItem[]>(() => {
+    const sortedDirectories = [...savedDirectories].sort((a, b) => {
+      const aTime = recentProjects[a.path] || a.addedAt
+      const bTime = recentProjects[b.path] || b.addedAt
+      return bTime - aTime
+    })
+
+    return buildProjectGroups(sortedDirectories)
+  }, [buildProjectGroups, recentProjects, savedDirectories])
+
   const globalProject = useMemo<ProjectItem>(
     () => ({
       id: 'global',
@@ -540,6 +595,10 @@ export function SidePanel({
     }),
     [t],
   )
+
+  const projects = useMemo<ProjectItem[]>(() => {
+    return [globalProject, ...selectorProjectGroups]
+  }, [globalProject, selectorProjectGroups])
 
   const currentProject = useMemo<ProjectItem>(() => {
     if (!currentDirectory) return globalProject
@@ -562,6 +621,26 @@ export function SidePanel({
     }
   }, [currentDirectory, folderProjectGroups, gitWorkspaceCatalog, globalProject, normalizedCurrentDirectory])
 
+  const currentProjectLabel = useMemo(() => {
+    const baseLabel = currentProject?.name || t('sidebar.global')
+    if (!currentDirectory || currentProject?.id === 'global') return baseLabel
+
+    const branchLabel = currentDirectoryVcsInfo?.branch ?? (isCurrentDirectoryVcsLoading ? '...' : undefined)
+    return branchLabel ? `${baseLabel} · ${branchLabel}` : baseLabel
+  }, [
+    currentDirectory,
+    currentDirectoryVcsInfo?.branch,
+    currentProject?.id,
+    currentProject?.name,
+    isCurrentDirectoryVcsLoading,
+    t,
+  ])
+
+  const globalFolderProject = useMemo<ProjectItem>(
+    () => ({ id: 'global', worktree: '', name: t('sidebar.global'), canReorder: true }),
+    [t],
+  )
+
   const folderProjects = useMemo<ProjectItem[]>(() => {
     const list = [...folderProjectGroups]
 
@@ -569,8 +648,9 @@ export function SidePanel({
       list.push({ ...currentProject, canReorder: false })
     }
 
-    return list
-  }, [folderProjectGroups, currentDirectory, currentProject])
+    const insertAt = Math.min(Math.max(globalFolderIndex, 0), list.length)
+    return [...list.slice(0, insertAt), globalFolderProject, ...list.slice(insertAt)]
+  }, [folderProjectGroups, currentDirectory, currentProject, globalFolderProject, globalFolderIndex])
   const canShowFolderRecents = sidebarFolderRecents && !search && folderProjects.length > 0
 
   const workspaceDirectoriesByProjectId = useMemo(() => {
@@ -645,6 +725,18 @@ export function SidePanel({
     [allDisplayedProjects],
   )
 
+  const handleSelectProject = useCallback(
+    (projectId: string) => {
+      if (projectId === 'global') {
+        setCurrentDirectory(undefined)
+      } else {
+        setCurrentDirectory(projectId)
+      }
+      setProjectsExpanded(false)
+    },
+    [setCurrentDirectory],
+  )
+
   const handleRemoveProject = useCallback(
     (projectId: string) => {
       getProjectDirectoriesToRemove(projectId).forEach(directory => removeDirectory(directory))
@@ -654,14 +746,45 @@ export function SidePanel({
 
   const handleReorderProjectGroup = useCallback(
     (draggedId: string, targetId: string) => {
-      const draggedProject = folderProjects.find(project => project.id === draggedId)
-      const targetProject = folderProjects.find(project => project.id === targetId)
-      const draggedReorderPath = draggedProject?.reorderPath
-      const targetReorderPath = targetProject?.reorderPath
+      const draggedIdx = folderProjects.findIndex(project => project.id === draggedId)
+      const targetIdx = folderProjects.findIndex(project => project.id === targetId)
+      if (draggedIdx === -1 || targetIdx === -1 || draggedIdx === targetIdx) return
+
+      const draggedIsGlobal = folderProjects[draggedIdx].id === 'global'
+      const targetIsGlobal = folderProjects[targetIdx].id === 'global'
+
+      if (draggedIsGlobal) {
+        // 全局移到 target 位置：globalFolderIndex 直接等于 targetIdx
+        if (targetIdx !== globalFolderIndex) {
+          setGlobalFolderIndex(targetIdx)
+          localStorage.setItem('opencode-sidebar-global-folder-index', String(targetIdx))
+        }
+        return
+      }
+
+      if (targetIsGlobal) {
+        // 普通目录拖到全局位置 = 交换：全局到普通目录原位，普通目录移到全局旁
+        const adjacentIdx = draggedIdx < targetIdx ? targetIdx - 1 : targetIdx + 1
+        if (draggedIdx !== adjacentIdx) {
+          const draggedReorderPath = folderProjects[draggedIdx].reorderPath
+          const adjacentReorderPath = folderProjects[adjacentIdx].reorderPath
+          if (draggedReorderPath && adjacentReorderPath) {
+            reorderDirectories(draggedReorderPath, adjacentReorderPath)
+          }
+        }
+        if (draggedIdx !== globalFolderIndex) {
+          setGlobalFolderIndex(draggedIdx)
+          localStorage.setItem('opencode-sidebar-global-folder-index', String(draggedIdx))
+        }
+        return
+      }
+
+      const draggedReorderPath = folderProjects[draggedIdx].reorderPath
+      const targetReorderPath = folderProjects[targetIdx].reorderPath
       if (!draggedReorderPath || !targetReorderPath) return
       reorderDirectories(draggedReorderPath, targetReorderPath)
     },
-    [folderProjects, reorderDirectories],
+    [folderProjects, reorderDirectories, globalFolderIndex],
   )
 
   const handleSelect = useCallback(
@@ -834,6 +957,20 @@ export function SidePanel({
     onToggleProjectSelection: toggleProjectSelection,
   }
 
+  useEffect(() => {
+    let frameId: number | null = null
+
+    if (!isExpanded) {
+      frameId = requestAnimationFrame(() => {
+        setProjectsExpanded(false)
+      })
+    }
+
+    return () => {
+      if (frameId !== null) cancelAnimationFrame(frameId)
+    }
+  }, [isExpanded])
+
   // 统一的结构，通过 CSS 控制显示/隐藏
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -903,29 +1040,206 @@ export function SidePanel({
           </span>
         </button>
 
-        {/* Open/Add Workspace */}
+        {/* Project Selector - 收起时仅图标，点击展开侧栏并打开列表 */}
         <button
+          ref={projectToggleRef}
           type="button"
-          onClick={onAddProject}
-          aria-label={t('sidebar.addProject')}
-          className="h-8 flex items-center rounded-lg text-text-300 hover:text-text-100 hover:bg-bg-200 active:scale-[0.98] transition-all duration-300 overflow-hidden"
+          onClick={() => {
+            if (!showLabels) {
+              pendingOpenProjectsRef.current = true
+              onToggleSidebar()
+              return
+            }
+            setProjectsExpanded(!projectsExpanded)
+          }}
+          aria-expanded={showLabels ? projectsExpanded : false}
+          aria-label={currentProjectLabel}
+          className={`h-8 flex items-center rounded-lg active:scale-[0.98] transition-all duration-300 overflow-hidden ${
+            projectsExpanded && showLabels
+              ? 'bg-bg-200 text-text-100'
+              : 'text-text-300 hover:text-text-100 hover:bg-bg-200'
+          }`}
           style={{
             width: showLabels ? '100%' : 32,
             paddingLeft: 6,
             paddingRight: 6,
           }}
-          title={t('sidebar.addProject')}
+          title={currentProjectLabel}
         >
           <span className="size-5 flex items-center justify-center shrink-0">
-            <FolderIcon size={16} />
+            {currentProject?.id === 'global' ? (
+              <GlobeIcon size={16} className="text-accent-main-100" />
+            ) : (
+              <FolderIcon size={16} />
+            )}
           </span>
-          <span
-            className="ml-2 text-[length:var(--fs-base)] whitespace-nowrap transition-opacity duration-300"
+          <div
+            className="ml-2 min-w-0 flex-1 text-left text-[length:var(--fs-base)] transition-opacity duration-300"
             style={{ opacity: showLabels ? 1 : 0 }}
           >
-            {t('sidebar.addProject')}
-          </span>
+            <div
+              className="block overflow-hidden whitespace-nowrap text-left"
+              style={{
+                WebkitMaskImage: 'linear-gradient(to right, black 82%, transparent 100%)',
+                maskImage: 'linear-gradient(to right, black 82%, transparent 100%)',
+              }}
+            >
+              {currentProjectLabel}
+            </div>
+          </div>
+          <ChevronDownIcon
+            size={14}
+            className={`ml-auto text-text-400 transition-all duration-200 shrink-0 ${
+              projectsExpanded && showLabels ? '' : '-rotate-90'
+            }`}
+            style={{ opacity: showLabels ? 1 : 0 }}
+          />
         </button>
+
+        {/* Projects Dropdown */}
+        <div
+          ref={projectsDropdownRef}
+          className="overflow-hidden transition-[max-height,opacity,margin] duration-300 ease-out"
+          style={{
+            maxHeight: showLabels && projectsExpanded ? 304 : 0,
+            opacity: showLabels && projectsExpanded ? 1 : 0,
+            marginTop: showLabels && projectsExpanded ? 4 : 0,
+            visibility: showLabels && projectsExpanded ? 'visible' : 'hidden',
+            pointerEvents: showLabels && projectsExpanded ? 'auto' : 'none',
+          }}
+          aria-hidden={!showLabels || !projectsExpanded}
+        >
+          <div className="rounded-lg border border-border-200/60 glass-alt shadow-sm overflow-hidden">
+            <div className="max-h-48 overflow-y-auto custom-scrollbar p-1">
+              {projects.map(project => {
+                const isGlobal = project.id === 'global'
+                const isActive = currentProject?.id === project.id
+                const itemLabel =
+                  isActive && !isGlobal
+                    ? currentProjectLabel
+                    : project.name || (isGlobal ? t('sidebar.global') : project.worktree)
+                return (
+                  <div
+                    key={project.id}
+                    onClick={() => handleSelectProject(project.id)}
+                    className={`group w-full flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors ${
+                      isActive ? 'bg-bg-200/60 text-text-100' : 'text-text-300 hover:text-text-100 hover:bg-bg-200/50'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={e => {
+                        e.stopPropagation()
+                        handleSelectProject(project.id)
+                      }}
+                      aria-current={isActive ? 'true' : undefined}
+                      className="min-w-0 flex flex-1 items-center gap-2 text-left bg-transparent border-none p-0"
+                      title={project.worktree}
+                    >
+                      <span className="w-5 h-5 flex items-center justify-center shrink-0">
+                        {isGlobal ? <GlobeIcon size={14} className="text-accent-main-100" /> : <FolderIcon size={14} />}
+                      </span>
+                      <div className="flex-1 min-w-0 text-left">
+                        <div className="text-left text-[length:var(--fs-sm)]">
+                          <div
+                            className="overflow-hidden whitespace-nowrap text-left"
+                            style={{
+                              WebkitMaskImage: 'linear-gradient(to right, black 82%, transparent 100%)',
+                              maskImage: 'linear-gradient(to right, black 82%, transparent 100%)',
+                            }}
+                          >
+                            {itemLabel}
+                          </div>
+                        </div>
+                        <div
+                          className={`text-[length:var(--fs-xxs)] text-text-400 truncate opacity-70 ${isGlobal ? '' : 'font-mono'}`}
+                        >
+                          {isGlobal
+                            ? t('sidebar.globalProjectHint')
+                            : project.worktree
+                              ? getParentPath(project.worktree)
+                              : ''}
+                        </div>
+                      </div>
+                    </button>
+                    {!isGlobal && (
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation()
+                          setProjectDeleteConfirm({ isOpen: true, projectId: project.id })
+                        }}
+                        aria-label={t('sidebar.removeProject')}
+                        className="p-1 rounded text-text-400 hover:text-danger-100 hover:bg-danger-100/10 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:focus-visible:opacity-100 transition-all"
+                        title={t('common:remove')}
+                      >
+                        <TrashIcon size={12} />
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div className="relative p-1 pt-1.5">
+              <div className="pointer-events-none absolute inset-x-3 top-0 h-px bg-border-200/30" />
+              <button
+                type="button"
+                onClick={onAddProject}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[length:var(--fs-sm)] text-text-300 hover:text-text-100 hover:bg-bg-200/50 transition-colors"
+              >
+                <PlusIcon size={14} />
+                {t('sidebar.addProject')}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Search — 与上方导航同列 gap-0.5；收起时图标，展开时输入框 */}
+        {showLabels ? (
+          <div className="relative w-full">
+            <span className="pointer-events-none absolute left-[6px] top-1/2 -translate-y-1/2 size-5 flex items-center justify-center text-text-300">
+              <SearchIcon size={16} />
+            </span>
+            <input
+              ref={searchInputRef}
+              type="text"
+              name="sidebar-chat-search"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={t('sidebar.searchChats')}
+              aria-label={t('sidebar.searchChats')}
+              autoComplete="off"
+              spellCheck={false}
+              className="h-8 w-full appearance-none rounded-lg border-0 bg-transparent pl-[34px] pr-[26px] text-[length:var(--fs-base)] text-text-100 shadow-none outline-none ring-0 placeholder:text-text-300 transition-shadow focus-visible:ring-1 focus-visible:ring-accent-main-100/30"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-[6px] top-1/2 flex size-[14px] -translate-y-1/2 items-center justify-center text-text-400 hover:text-text-100"
+                aria-label={t('sidebar.clearSearch')}
+              >
+                <CloseIcon size={14} />
+              </button>
+            )}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              pendingFocusSearchRef.current = true
+              onToggleSidebar()
+            }}
+            aria-label={t('sidebar.searchChats')}
+            className="h-8 flex items-center rounded-lg text-text-300 hover:text-text-100 hover:bg-bg-200 active:scale-[0.98] transition-all duration-300 overflow-hidden"
+            style={{ width: 32, paddingLeft: 6, paddingRight: 6 }}
+            title={t('sidebar.searchChats')}
+          >
+            <span className="size-5 flex items-center justify-center shrink-0">
+              <SearchIcon size={16} />
+            </span>
+          </button>
+        )}
       </div>
 
       {/* ===== Main Content ===== */}
