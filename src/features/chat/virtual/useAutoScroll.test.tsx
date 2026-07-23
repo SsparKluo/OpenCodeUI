@@ -230,23 +230,43 @@ describe('useAutoScroll', () => {
   })
 
   describe('touch events', () => {
-    it('touchstart stops following', () => {
+    it('tap (touchstart + touchend, no movement) does NOT stop following', () => {
       const { el } = mountScrollEl()
       const { getResult } = setup(el)
 
-      act(() => fireTouchStart(el))
+      act(() => fireTouchStart(el, 500))
+      act(() => fireTouchEnd(el))
+      expect(getResult().userScrolled).toBe(false)
+    })
+
+    it('touchmove upward (finger down >10px) stops following', () => {
+      const { el } = mountScrollEl()
+      const { getResult } = setup(el)
+
+      act(() => fireTouchStart(el, 500))
+      act(() => fireTouchMove(el, 520)) // finger down 20px = scroll up
       expect(getResult().userScrolled).toBe(true)
+    })
+
+    it('small touchmove (<10px) does NOT stop following', () => {
+      const { el } = mountScrollEl()
+      const { getResult } = setup(el)
+
+      act(() => fireTouchStart(el, 500))
+      act(() => fireTouchMove(el, 508)) // finger down 8px = below threshold
+      expect(getResult().userScrolled).toBe(false)
     })
 
     it('touchend (plain release, no downward drag) does NOT recover', () => {
       const { el, state } = mountScrollEl({ scrollTop: 495 })
       const { getResult } = setup(el)
 
-      act(() => fireTouchStart(el, 500))
+      // 用 wheel-up 预设 userScrolled（touchstart 不再自动设置）
+      act(() => fireWheel(el, -100))
       expect(getResult().userScrolled).toBe(true)
 
-      // 没有 move（没向下滚），直接松手：不应解除 userScrolled
       setDims(state, { scrollTop: 495 })
+      act(() => fireTouchStart(el, 500))
       act(() => fireTouchEnd(el))
       expect(getResult().userScrolled).toBe(true)
     })
@@ -255,11 +275,12 @@ describe('useAutoScroll', () => {
       const { el, state } = mountScrollEl({ scrollTop: 200 })
       const { getResult } = setup(el)
 
-      act(() => fireTouchStart(el, 500))
+      act(() => fireWheel(el, -100))
       expect(getResult().userScrolled).toBe(true)
 
       // 手指上移 400px → 内容向下滚 400px，已到底部
       setDims(state, { scrollTop: 495 })
+      act(() => fireTouchStart(el, 500))
       act(() => fireTouchMove(el, 100))
       act(() => fireTouchEnd(el))
       expect(getResult().userScrolled).toBe(false)
@@ -269,11 +290,12 @@ describe('useAutoScroll', () => {
       const { el, state } = mountScrollEl({ scrollTop: 495 })
       const { getResult } = setup(el)
 
-      act(() => fireTouchStart(el, 100))
+      act(() => fireWheel(el, -100))
       expect(getResult().userScrolled).toBe(true)
 
       // 手指下移（内容向上滚）→ 不是向下滚
       setDims(state, { scrollTop: 480 })
+      act(() => fireTouchStart(el, 100))
       act(() => fireTouchMove(el, 500))
       act(() => fireTouchEnd(el))
       expect(getResult().userScrolled).toBe(true)
