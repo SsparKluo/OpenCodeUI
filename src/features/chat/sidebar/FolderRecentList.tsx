@@ -5,6 +5,7 @@ import {
   FolderIcon,
   FolderOpenIcon,
   GitBranchIcon,
+  GlobeIcon,
   GripVerticalIcon,
   PinIcon,
   SpinnerIcon,
@@ -154,7 +155,7 @@ function getInitialExpandedProjectIds(projects: FolderRecentProject[], currentDi
 
   const currentProject = currentDirectory
     ? projects.find(project => isSameDirectory(project.worktree, currentDirectory))
-    : undefined
+    : projects.find(project => project.id === 'global')
 
   return [currentProject?.id || projects[0].id]
 }
@@ -164,9 +165,11 @@ function areProjectIdListsEqual(left: string[], right: string[]) {
 }
 
 function getCurrentProjectId(projects: FolderRecentProject[], currentDirectory?: string) {
-  return currentDirectory
-    ? projects.find(project => isSameDirectory(project.worktree, currentDirectory))?.id
-    : undefined
+  if (!currentDirectory) {
+    const globalProject = projects.find(project => project.id === 'global')
+    return globalProject?.id
+  }
+  return projects.find(project => isSameDirectory(project.worktree, currentDirectory))?.id
 }
 
 function reconcileExpandedProjectIds(prev: string[], projects: FolderRecentProject[], currentDirectory?: string) {
@@ -934,7 +937,13 @@ function FolderRecentSection({
       ? (vcsInfo?.branch ?? (isBranchLoading ? '...' : workspaceFallbackName))
       : project.name || workspaceFallbackName
   const FolderDisplayIcon =
-    sectionKind === 'workspace' ? GitBranchIcon : isExpanded ? FolderOpenIcon : FolderIcon
+    project.id === 'global'
+      ? GlobeIcon
+      : sectionKind === 'workspace'
+        ? GitBranchIcon
+        : isExpanded
+          ? FolderOpenIcon
+          : FolderIcon
 
   // 展开时：文件夹与首条 session 可拼成连续选中块
   const firstVisibleSessionChecked =
