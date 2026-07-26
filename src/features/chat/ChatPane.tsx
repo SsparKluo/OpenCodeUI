@@ -223,8 +223,9 @@ export const ChatPane = memo(function ChatPane({
     visibleMessageIdsRef.current = ids
     setVisibleMessageIds(ids)
   }, [])
-  const [isAtBottom, setIsAtBottom] = useState(true)
-  /** 用户是否在贴底跟随（true=正在跟随，false=用户主动停止） */
+  /** 用户是否在贴底跟随（true=正在跟随，false=用户主动停止）。
+   *  InputBox 折叠 / 回底按钮都由这个信号驱动（!userScrolled），
+   *  不跟几何 dist —— 流式增长时 dist 抖动会导致 isCollapsed 抖，InputFooter 闪烁。 */
   const [isFollowing, setIsFollowing] = useState(true)
 
   const handleOutlineScrollToMessage = useCallback((messageId: string) => {
@@ -347,7 +348,7 @@ export const ChatPane = memo(function ChatPane({
   // 切 session remount 时默认视为贴底，避免回底按钮闪一下
   useEffect(() => {
     if (chatAreaMountKey == null) return
-    setIsAtBottom(true)
+    setIsFollowing(true)
     setVisibleMessageIdsStable([])
   }, [chatAreaMountKey, setVisibleMessageIdsStable])
 
@@ -862,7 +863,6 @@ export const ChatPane = memo(function ChatPane({
                 retryStatus={retryStatus}
                 bottomPadding={inputBoxHeight}
                 onVisibleMessageIdsChange={handleVisibleIdsChange}
-                onAtBottomChange={setIsAtBottom}
                 onFollowingChange={setIsFollowing}
               />
             )}
@@ -936,7 +936,7 @@ export const ChatPane = memo(function ChatPane({
           onRedoAll={handleRedoAll}
           onClearRevert={clearRevert}
           registerInputBox={registerInputBox}
-          isAtBottom={isAtBottom}
+          isAtBottom={isFollowing}
           showScrollToBottom={!isFollowing}
           onScrollToBottom={() => chatAreaRef.current?.scrollToBottom()}
           collapsedPermission={
