@@ -56,7 +56,12 @@ describe('ReasoningPartView', () => {
     })
 
     expect(screen.getByRole('button', { expanded: true })).toBeInTheDocument()
-    expect(screen.getByText('Thinking...')).toBeInTheDocument()
+    const thinking = screen.getByText('Thinking...')
+    expect(thinking).toBeInTheDocument()
+    expect(thinking.className).toContain('reasoning-shimmer-text')
+    expect(thinking.className).toContain('inline-block')
+    expect(thinking.className).toContain('italic')
+    expect(thinking.className).not.toContain('text-text-200')
     expect(screen.getAllByText('thinking through steps...').length).toBeGreaterThan(0)
     expect(screen.queryByTestId('markdown-content')).not.toBeInTheDocument()
   })
@@ -97,10 +102,9 @@ describe('ReasoningPartView', () => {
     })
 
     expect(screen.getByRole('button', { expanded: false })).toBeInTheDocument()
-    // 折叠时也走 Markdown 渲染，而不是纯文本摘要
-    expect(screen.getByTestId('markdown-content')).toHaveTextContent(
-      'First line with **bold** Second line with `code`',
-    )
+    // 折叠时只渲染第一行 markdown，并走 Markdown 渲染
+    expect(screen.getByTestId('markdown-content')).toHaveTextContent('First line with **bold**')
+    expect(screen.getByTestId('markdown-content')).not.toHaveTextContent('Second line')
   })
 
   it('renders single-line content without toggle button', () => {

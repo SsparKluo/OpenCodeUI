@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { EXPAND_MOTION } from '../constants/expandMotion'
 
 function isAndroid(): boolean {
   return typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)
@@ -6,7 +7,8 @@ function isAndroid(): boolean {
 
 const DURATION_MS = 260
 const EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
-const GRID_TRANSITION_CLASS = 'transition-[grid-template-rows] duration-300 ease-in-out'
+/** @deprecated 用 EXPAND_MOTION.gridTransition；保留导出兼容旧 import */
+export const COMPOSITOR_GRID_TRANSITION = EXPAND_MOTION.gridTransition
 
 /**
  * Android expand blank fix:
@@ -101,7 +103,7 @@ export function useCompositorExpand(open: boolean) {
       contentRef: contentRef as RefObject<HTMLDivElement | null>,
       layoutOpen: open,
       keepMounted: open,
-      panelClassName: GRID_TRANSITION_CLASS,
+      panelClassName: COMPOSITOR_GRID_TRANSITION,
     }
   }
 
@@ -109,7 +111,7 @@ export function useCompositorExpand(open: boolean) {
     contentRef: contentRef as RefObject<HTMLDivElement | null>,
     layoutOpen,
     keepMounted: open || layoutOpen || keepAnimating,
-    panelClassName: useGridTransition ? GRID_TRANSITION_CLASS : '',
+    panelClassName: useGridTransition ? COMPOSITOR_GRID_TRANSITION : '',
   }
 }
 
