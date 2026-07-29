@@ -58,43 +58,42 @@ describe('formatQuote', () => {
 })
 
 describe('buildQuotePatch', () => {
-  it('quotes into an empty input and places the cursor at the end of the quote', () => {
+  it('quotes into an empty input and leaves the cursor on a fresh line below', () => {
     const result = buildQuotePatch('', 0, 'first line\nsecond line')
     expect(result.newText).toBe('> first line\n> second line\n\n')
-    expect(result.newCursor).toBe('> first line\n> second line'.length)
+    expect(result.newCursor).toBe('> first line\n> second line\n\n'.length)
   })
 
-  it('quotes at the end of a non-empty input that already ends with a newline', () => {
+  it('wraps the quote with blank lines when appending to text that ends with a single newline', () => {
     const existing = 'Please look at this:\n'
     const result = buildQuotePatch(existing, existing.length, 'quoted block')
-    // Single trailing newline → add one more so the quote sits on a blank line.
-    expect(result.newText).toBe('Please look at this:\n\n> quoted block')
+    expect(result.newText).toBe('Please look at this:\n\n> quoted block\n\n')
     expect(result.newCursor).toBe(result.newText.length)
   })
 
-  it('does not double-add a separator when the input already ends with a blank line', () => {
+  it('keeps the existing blank line above and still adds one below when text ends with a blank line', () => {
     const existing = 'Already has a blank line:\n\n'
     const result = buildQuotePatch(existing, existing.length, 'quoted block')
-    expect(result.newText).toBe('Already has a blank line:\n\n> quoted block')
+    expect(result.newText).toBe('Already has a blank line:\n\n> quoted block\n\n')
   })
 
-  it('quotes in the middle of a non-empty input while preserving surrounding text', () => {
+  it('quotes in the middle of a non-empty input with blank lines on both sides', () => {
     const existing = 'prefix suffix'
     const result = buildQuotePatch(existing, 'prefix '.length, 'line one\nline two')
     expect(result.newText).toBe('prefix \n\n> line one\n> line two\n\nsuffix')
-    expect(result.newCursor).toBe('prefix \n\n> line one\n> line two'.length)
+    expect(result.newCursor).toBe('prefix \n\n> line one\n> line two\n\n'.length)
   })
 
-  it('clamps an out-of-range cursor to the text length', () => {
+  it('wraps the quote with blank lines even when the cursor is clamped to the end', () => {
     const result = buildQuotePatch('abc', 99, 'quoted')
-    expect(result.newText).toBe('abc\n\n> quoted')
-    expect(result.newCursor).toBe('abc\n\n> quoted'.length)
+    expect(result.newText).toBe('abc\n\n> quoted\n\n')
+    expect(result.newCursor).toBe('abc\n\n> quoted\n\n'.length)
   })
 
-  it('handles multi-line selections that already include internal newlines', () => {
+  it('handles multi-line selections and still leaves a trailing blank line', () => {
     const result = buildQuotePatch('hi ', 3, 'foo\nbar')
-    expect(result.newText).toBe('hi \n\n> foo\n> bar')
-    expect(result.newCursor).toBe('hi \n\n> foo\n> bar'.length)
+    expect(result.newText).toBe('hi \n\n> foo\n> bar\n\n')
+    expect(result.newCursor).toBe('hi \n\n> foo\n> bar\n\n'.length)
   })
 })
 
