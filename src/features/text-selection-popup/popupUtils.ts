@@ -19,7 +19,7 @@ export function formatQuote(text: string): string {
 /**
  * Count the newlines needed before the quote so it lands on its own blank
  * line in the rendered Markdown.
- *   - empty `before`        → 0 (handled separately)
+ *   - empty `before`        → 0 (quote at the very start, nothing above it)
  *   - ends with `\n\n`+     → 0 (blank line already exists)
  *   - ends with `\n`        → 1 (add one more for a blank line)
  *   - ends with non-newline → 2 (full blank line)
@@ -31,9 +31,17 @@ function leadNewlinesFor(before: string): string {
   return '\n\n'
 }
 
-/** Symmetric trailing-newline counterpart to {@link leadNewlinesFor}. */
+/**
+ * Newlines needed after the quote so it is always separated from what follows
+ * by a blank line — including when nothing follows, so the user can type a
+ * reply below the blockquote instead of appending to its last line.
+ *   - empty `after`         → 2 (blank line, lands cursor on a fresh line)
+ *   - starts with `\n\n`+   → 0 (blank line already exists)
+ *   - starts with `\n`      → 1 (add one more for a blank line)
+ *   - starts with non-newline → 2 (full blank line)
+ */
 function trailingNewlinesFor(after: string): string {
-  if (after.length === 0) return ''
+  if (after.length === 0) return '\n\n'
   if (/^\s*\n\s*\n/.test(after)) return ''
   if (/^\s*\n/.test(after)) return '\n'
   return '\n\n'
@@ -41,8 +49,9 @@ function trailingNewlinesFor(after: string): string {
 
 /**
  * Build a text patch that inserts a quoted version of `selected` into
- * `existing` at `cursor`, returning the next text + the cursor position right
- * after the insertion (so the user can continue typing).
+ * `existing` at `cursor`, returning the next text + the cursor position just
+ * past the trailing separator (so the user can keep typing a reply below the
+ * blockquote).
  */
 export function buildQuotePatch(
   existing: string,
@@ -54,12 +63,11 @@ export function buildQuotePatch(
   const after = existing.slice(safeCursor)
   const quoted = formatQuote(selected)
 
-  const beforeChunk = `${before}${leadNewlinesFor(before)}`
-  const middleSep = before.length === 0 ? '\n\n' : '' // empty input → cursor lands on fresh line
-  const afterChunk = `${middleSep}${trailingNewlinesFor(after)}${after}`
+  const lead = leadNewlinesFor(before)
+  const trail = trailingNewlinesFor(after)
 
-  const newText = `${beforeChunk}${quoted}${afterChunk}`
-  const newCursor = beforeChunk.length + quoted.length
+  const newText = `${before}${lead}${quoted}${trail}${after}`
+  const newCursor = before.length + lead.length + quoted.length + trail.length
 
   return { newText, newCursor }
 }
