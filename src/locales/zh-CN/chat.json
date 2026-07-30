@@ -205,7 +205,9 @@
     "failed": "发送失败",
     "remove": "从队列移除",
     "cancelFailed": "放弃",
-    "sendNow": "立即发送"
+    "sendNow": "立即发送",
+    "revert": "编辑",
+    "reorder": "拖动调整顺序"
   },
   "hints": {
     "pressEscAgain": "再按一次 <1>Esc</1> 停止",
