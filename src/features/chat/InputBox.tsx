@@ -1220,7 +1220,9 @@ function InputBoxComponent({
   return (
     <div className="w-full">
       <div
-        className={`mx-auto max-w-3xl pointer-events-auto transition-[max-width] duration-300 ease-in-out ${isCompact ? 'px-2' : 'px-4'}`}
+        className={`mx-auto max-w-3xl transition-[max-width] duration-300 ease-in-out ${isCompact ? 'px-2' : 'px-4'} ${
+          isCollapsed ? 'pointer-events-none' : 'pointer-events-auto'
+        }`}
         style={{ paddingBottom: bottomDockPadding }}
       >
         <div
@@ -1436,21 +1438,20 @@ function InputBoxComponent({
           </div>
         </div>
 
-        {/* Footer: 输入框下方固定高度区域，内容垂直水平居中 */}
-        {!isCollapsed && (
-          <div
-            ref={footerRef}
-            onPointerDown={handleContainerPointerDown}
-            className="h-8 flex items-center justify-center"
-          >
-            <InputFooter
-              paneId={paneId}
-              sessionId={sessionId}
-              onNewChat={onNewChat}
-              inputContainerRef={inputContainerRef}
-            />
-          </div>
-        )}
+        {/* Footer: 常驻 DOM，收起用 hidden。避免 isCollapsed 抖一下时卸载整行（自动放行/免责声明闪烁） */}
+        <div
+          ref={footerRef}
+          onPointerDown={handleContainerPointerDown}
+          className={`h-8 flex items-center justify-center ${isCollapsed ? 'hidden' : ''}`}
+          aria-hidden={isCollapsed || undefined}
+        >
+          <InputFooter
+            paneId={paneId}
+            sessionId={sessionId}
+            onNewChat={onNewChat}
+            inputContainerRef={inputContainerRef}
+          />
+        </div>
       </div>
     </div>
   )

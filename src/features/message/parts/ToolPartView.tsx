@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { diffLines } from 'diff'
 import { ChevronDownIcon, ChevronRightIcon } from '../../../components/Icons'
 import type { ToolPart } from '../../../types/message'
-import { useCompositorExpand, useDelayedRender, useDisclosureScrollLock } from '../../../hooks'
+import { useCompositorExpand, useDisclosureScrollLock } from '../../../hooks'
 import { useNow } from '../../../hooks/useNow'
 import { serverStore } from '../../../store/serverStore'
 import { useTheme } from '../../../hooks/useTheme'
@@ -25,6 +25,8 @@ import {
   TaskRenderer,
   hasTodos,
 } from '../tools'
+import { MSG_SPACING } from '../messageSpacing'
+import { MessageExpandPanel, useMessageExpandRender } from '../messageExpand'
 
 // ============================================
 // ToolPartView - 单个工具调用
@@ -131,7 +133,7 @@ export const ToolPartView = memo(function ToolPartView({
   const { contentRef: expandContentRef, layoutOpen, keepMounted, panelClassName } =
     useCompositorExpand(effectiveExpanded)
   // 展开即挂 body：默认展开的工具 header/body 同帧，不再先 header 后 body
-  const shouldRenderBody = useDelayedRender(keepMounted)
+  const shouldRenderBody = useMessageExpandRender(keepMounted)
   const toggleExpanded = useCallback(() => {
     withScrollLock(() => setExpanded(!expanded))
   }, [expanded, setExpanded, withScrollLock])
@@ -201,7 +203,7 @@ export const ToolPartView = memo(function ToolPartView({
         <ToolBody part={part} data={toolData} onFullscreenChange={handleFullscreenChange} />
       )}
       {displayPermission && (
-        <div className={hideToolBodyForPermission && !permissionContentHidden ? '' : 'pt-2'}>
+        <div className={hideToolBodyForPermission && !permissionContentHidden ? '' : MSG_SPACING.inner}>
           <InlinePermission
             request={displayPermission}
             onReply={onPermissionReply}
@@ -212,7 +214,7 @@ export const ToolPartView = memo(function ToolPartView({
         </div>
       )}
       {questionRequest && (
-        <div className="pt-2">
+        <div className={MSG_SPACING.inner}>
           <InlineQuestion
             request={questionRequest}
             onReply={onQuestionReply}
@@ -224,17 +226,29 @@ export const ToolPartView = memo(function ToolPartView({
     </>
   )
 
+  const expandBody = (padClass: string) => (
+    <MessageExpandPanel
+      open={layoutOpen}
+      panelClassName={panelClassName}
+      contentRef={expandContentRef}
+      innerClassName="overflow-hidden min-h-0"
+      contentClassName={padClass}
+    >
+      {shouldRenderBody && bodyContent}
+    </MessageExpandPanel>
+  )
+
   if (descriptive) {
     const hasDiffFiles = !!toolData.files?.length
     // diffStats 可能从 metadata 来，也可能需要从 diff 数据计算
     const diffStats = toolData.diffStats || computeDiffStatsFromData(toolData)
 
     return (
-      <div ref={rootRef} className="group py-0.5">
+      <div ref={rootRef} className={`group ${MSG_SPACING.item}`}>
         <button
           type="button"
           ref={headerRef}
-          className="flex w-full items-center gap-3 rounded-md px-0 py-1 text-left hover:bg-bg-200/30 transition-colors group/header"
+          className={`flex w-full items-center gap-3 rounded-md px-0 ${MSG_SPACING.header} text-left hover:bg-bg-200/30 transition-colors group/header`}
           onClick={toggleExpanded}
         >
           <div className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden">
@@ -280,19 +294,7 @@ export const ToolPartView = memo(function ToolPartView({
           </div>
         </button>
 
-        <div
-          className={`grid ${panelClassName} ${
-            layoutOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-          }`}
-        >
-          <div className="overflow-hidden min-h-0">
-            {shouldRenderBody && (
-              <div ref={expandContentRef} className="pb-2 pt-1">
-                {bodyContent}
-              </div>
-            )}
-          </div>
-        </div>
+        {expandBody(MSG_SPACING.body)}
       </div>
     )
   }
@@ -301,7 +303,7 @@ export const ToolPartView = memo(function ToolPartView({
   // Grid: [14px icon] [gap 6px] [content] — mirrors ReasoningPartView alignment
   if (compact) {
     return (
-      <div ref={rootRef} className="group relative grid grid-cols-[14px_minmax(0,1fr)] gap-x-1.5 items-start py-1">
+      <div ref={rootRef} className={`group relative grid grid-cols-[14px_minmax(0,1fr)] gap-x-1.5 items-start ${MSG_SPACING.item}`}>
         {/* Icon column — fixed, outside of interactive area */}
         <span className="inline-flex h-9 w-[14px] items-center justify-center shrink-0">{toolIcon}</span>
 
@@ -365,26 +367,14 @@ export const ToolPartView = memo(function ToolPartView({
             </div>
           </button>
 
-          {/* Body */}
-          <div
-            className={`grid ${panelClassName} ${
-              layoutOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-            }`}
-          >
-            <div className="overflow-hidden min-h-0">
-              {shouldRenderBody && (
-                <div ref={expandContentRef} className="pl-2 pr-2.5 pb-2 pt-1">
-                  {bodyContent}
-                </div>
-              )}
-            </div>
-          </div>
+          {expandBody(MSG_SPACING.toolBodyInset)}
         </div>
       </div>
     )
   }
 
   // ── Timeline layout (multi-tool groups) ──
+  // 根节点不加垂直 padding，连接线要贴 icon
   return (
     <div ref={rootRef} className="group relative flex min-w-0">
       {/* Timeline Column */}
@@ -462,20 +452,7 @@ export const ToolPartView = memo(function ToolPartView({
           </div>
         </button>
 
-        {/* Body - grid collapse */}
-        <div
-          className={`grid ${panelClassName} ${
-            layoutOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-          }`}
-        >
-          <div className="overflow-hidden min-h-0">
-            {shouldRenderBody && (
-              <div ref={expandContentRef} className="pl-2 pr-2.5 pb-2 pt-1">
-                {bodyContent}
-              </div>
-            )}
-          </div>
-        </div>
+        {expandBody(MSG_SPACING.toolBodyInset)}
       </div>
     </div>
   )

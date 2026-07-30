@@ -5,7 +5,7 @@ import { animate } from 'motion/mini'
 import { ChevronDownIcon, ChevronRightIcon, SplitIcon, SpinnerIcon, UndoIcon } from '../../components/Icons'
 import { CopyButton, SmoothHeight } from '../../components/ui'
 import { MarkdownRenderer } from '../../components/MarkdownRenderer'
-import { useCompositorExpand, useDelayedRender, useDisclosureScrollLock } from '../../hooks'
+import { useCompositorExpand, useDisclosureScrollLock } from '../../hooks'
 import { useInputCapabilities } from '../../hooks/useInputCapabilities'
 import { useNow } from '../../hooks/useNow'
 import { useTheme } from '../../hooks/useTheme'
@@ -28,6 +28,8 @@ import {
   MessageErrorView,
 } from './parts'
 import { extractToolData } from './tools'
+import { MSG_SPACING } from './messageSpacing'
+import { MessageExpandPanel, useMessageExpandRender } from './messageExpand'
 import type {
   Message,
   Part,
@@ -95,7 +97,7 @@ const ProcessCollapseHeader = memo(function ProcessCollapseHeader({
       ref={headerRef}
       type="button"
       onClick={onToggle}
-      className="flex w-full items-center gap-1.5 rounded-md py-1 text-left text-[length:var(--fs-sm)] leading-5 text-text-400 hover:bg-bg-200/30 hover:text-text-200 transition-colors"
+      className={`flex w-full items-center gap-1.5 rounded-md ${MSG_SPACING.header} text-left text-[length:var(--fs-sm)] leading-5 text-text-400 hover:bg-bg-200/30 hover:text-text-200 transition-colors`}
     >
       <span className={isActive ? 'reasoning-shimmer-text' : 'text-text-400'}>{label}</span>
       <span className="inline-flex items-center justify-center text-text-500">
@@ -120,7 +122,7 @@ export function ProcessCollapseBlock({
   stateKey: string
 }) {
   const [expanded, setExpanded] = useUiDisclosureState(stateKey, isActive)
-  const shouldRenderBody = useDelayedRender(expanded)
+  const shouldRenderBody = useMessageExpandRender(expanded)
   const rootRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLButtonElement>(null)
   const unlockScrollRef = useRef<(() => void) | null>(null)
@@ -159,21 +161,9 @@ export function ProcessCollapseBlock({
         onToggle={toggleExpanded}
         headerRef={headerRef}
       />
-      <div
-        className={
-          animateGrid
-            ? `grid transition-[grid-template-rows] duration-300 ease-in-out ${
-                expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-              }`
-            : expanded
-              ? 'grid grid-rows-[1fr]'
-              : 'grid grid-rows-[0fr]'
-        }
-      >
-        <div className="min-h-0 min-w-0 overflow-hidden" style={{ clipPath: 'inset(0 -100% 0 -100%)' }}>
-          {shouldRenderBody && <div className="flex flex-col gap-2 pt-1">{children}</div>}
-        </div>
-      </div>
+      <MessageExpandPanel open={expanded} animate={animateGrid} clip>
+        {shouldRenderBody && <div className={MSG_SPACING.processBody}>{children}</div>}
+      </MessageExpandPanel>
     </div>
   )
 }
@@ -588,7 +578,7 @@ const UserMessageView = memo(function UserMessageView({
     `message:${info.id}:user-system-context`,
     false,
   )
-  const shouldRenderSystemContext = useDelayedRender(showSystemContext)
+  const shouldRenderSystemContext = useMessageExpandRender(showSystemContext)
   const {
     rootRef: systemContextRootRef,
     headerRef: systemContextHeaderRef,
@@ -656,21 +646,20 @@ const UserMessageView = memo(function UserMessageView({
               </span>
             </button>
 
-            <div
-              className={`grid w-full transition-[grid-template-rows,opacity] duration-300 ease-out ${
-                showSystemContext ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-              }`}
+            <MessageExpandPanel
+              open={showSystemContext}
+              variant="fade"
+              className="w-full"
+              innerClassName="overflow-hidden"
             >
-              <div className="overflow-hidden">
-                {shouldRenderSystemContext && (
-                  <div className="pt-2 flex max-w-full min-w-0 flex-wrap gap-2 justify-end">
-                    {syntheticParts.map(part => (
-                      <SyntheticTextPartView key={part.id} part={part} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+              {shouldRenderSystemContext && (
+                <div className="pt-2 flex max-w-full min-w-0 flex-wrap gap-2 justify-end">
+                  {syntheticParts.map(part => (
+                    <SyntheticTextPartView key={part.id} part={part} />
+                  ))}
+                </div>
+              )}
+            </MessageExpandPanel>
           </div>
         )}
 
@@ -826,7 +815,7 @@ const AssistantMessageView = memo(function AssistantMessageView({
     // 有错误时直接显示错误信息
     if (messageError) {
       return (
-        <div className="flex flex-col gap-2 w-full">
+        <div className={`flex flex-col ${MSG_SPACING.stack} w-full`}>
           <MessageErrorView error={messageError} stateKey={`message:${message.info.id}:error`} />
         </div>
       )
@@ -842,10 +831,10 @@ const AssistantMessageView = memo(function AssistantMessageView({
   }
 
   return (
-    <div ref={wrapperRef} className="flex flex-col gap-2 w-full group">
+    <div ref={wrapperRef} className={`flex flex-col ${MSG_SPACING.stack} w-full group`}>
       {/* 流式增高走自然撑开 + 贴底 scroll，默认不做 height 补间，避免每帧 layout/remeasure */}
       <SmoothHeight isActive={!!isStreaming && allowStreamingLayoutAnimation && processContentScope === 'all'}>
-        <div className="flex flex-col gap-2">
+        <div className={`flex flex-col ${MSG_SPACING.stack}`}>
           {renderItems.map((item: RenderItem, idx: number) => {
             // 本消息内最后一个含 stepFinish 的 item（耗时/完成时刻只挂这里）
             const isLastStepFinish =
@@ -892,6 +881,7 @@ const AssistantMessageView = memo(function AssistantMessageView({
               }
               case 'step-finish':
                 if (!showStepFinish) return null
+                // 独立 step-finish 靠 stack gap 取距；与 ToolGroup 内 MSG_SPACING.finish 等距
                 return (
                   <StepFinishPartView
                     key={part.id}
@@ -1079,7 +1069,7 @@ const ToolGroup = memo(function ToolGroup({
     panelClassName: stepsPanelClassName,
   } = useCompositorExpand(effectiveExpanded)
   // 展开即挂工具行：默认展开时 header 与 body 同帧
-  const shouldRenderBody = useDelayedRender(stepsKeepMounted)
+  const shouldRenderBody = useMessageExpandRender(stepsKeepMounted)
 
   // compact: 单工具时用紧凑布局（图标内联，无 timeline 连接线）
   // 不区分 streaming 状态 — 单工具始终 compact，第二个工具到来时再自然过渡到 timeline
@@ -1087,107 +1077,110 @@ const ToolGroup = memo(function ToolGroup({
   // steps header: 多工具始终显示；描述型 steps 模式下，单工具也显示
   const showStepsHeader = totalCount > 1 || descriptiveToolSteps
 
+  // 只 map 一次：有 header 时受 expand mount 控制，无 header 时始终挂载
+  const toolParts =
+    !showStepsHeader || shouldRenderBody
+      ? parts.map((part, idx) => (
+          <ToolPartView
+            key={part.id}
+            part={part}
+            isFirst={idx === 0}
+            isLast={idx === parts.length - 1}
+            compact={isSingleCompact}
+            descriptive={descriptiveToolSteps}
+            isStreaming={isStreaming}
+          />
+        ))
+      : null
+
   // 统一容器结构 — ToolPartView 始终在同一 React 树位置，
   // streaming→idle / 1→N 工具切换时不 remount，expanded 状态不丢失
   return (
     <div ref={stepsRootRef} className="flex flex-col">
-        {showStepsHeader &&
-          (descriptiveToolSteps ? (
-            <button
-              type="button"
-              ref={stepsHeaderRef}
-              onClick={() => withStepsScrollLock(() => setExpanded(!expanded))}
-              className="flex w-full items-baseline rounded-md py-1 text-left hover:bg-bg-200/30 transition-colors"
-            >
-              <span className="text-[length:var(--fs-sm)] leading-5">
-                {stepsSummary?.map((seg, i) => (
-                  <span
-                    key={i}
-                    className={
-                      seg.type === 'error'
-                        ? 'text-danger-100'
-                        : seg.type === 'active'
-                          ? 'reasoning-shimmer-text'
-                          : 'text-text-300'
-                    }
-                  >
-                    {seg.text}
-                  </span>
-                ))}
+      {showStepsHeader &&
+        (descriptiveToolSteps ? (
+          <button
+            type="button"
+            ref={stepsHeaderRef}
+            onClick={() => withStepsScrollLock(() => setExpanded(!expanded))}
+            className={`flex w-full items-baseline rounded-md ${MSG_SPACING.header} text-left hover:bg-bg-200/30 transition-colors`}
+          >
+            <span className="text-[length:var(--fs-sm)] leading-5">
+              {stepsSummary?.map((seg, i) => (
+                <span
+                  key={i}
+                  className={
+                    seg.type === 'error'
+                      ? 'text-danger-100'
+                      : seg.type === 'active'
+                        ? 'reasoning-shimmer-text'
+                        : 'text-text-300'
+                  }
+                >
+                  {seg.text}
+                </span>
+              ))}
+            </span>
+            {totalDiffStats && !hasActiveTools && (
+              <span className="ml-1.5 inline-flex items-center gap-1 text-[length:var(--fs-xxs)] font-mono font-medium tabular-nums">
+                {totalDiffStats.additions > 0 && (
+                  <span className="text-success-100">+{totalDiffStats.additions}</span>
+                )}
+                {totalDiffStats.deletions > 0 && <span className="text-danger-100">-{totalDiffStats.deletions}</span>}
               </span>
-              {totalDiffStats && !hasActiveTools && (
-                <span className="ml-1.5 inline-flex items-center gap-1 text-[length:var(--fs-xxs)] font-mono font-medium tabular-nums">
-                  {totalDiffStats.additions > 0 && (
-                    <span className="text-success-100">+{totalDiffStats.additions}</span>
-                  )}
-                  {totalDiffStats.deletions > 0 && <span className="text-danger-100">-{totalDiffStats.deletions}</span>}
+            )}
+          </button>
+        ) : (
+          <button
+            type="button"
+            ref={stepsHeaderRef}
+            onClick={() => withStepsScrollLock(() => setExpanded(!expanded))}
+            className={`flex items-center gap-1.5 ${MSG_SPACING.header} text-text-400 text-[length:var(--fs-base)] hover:text-text-200 hover:bg-bg-200/30 rounded-md transition-colors`}
+          >
+            <span className="inline-flex w-[14px] items-center justify-center shrink-0">
+              {effectiveExpanded ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
+            </span>
+            <span className="inline-flex items-baseline gap-2 whitespace-nowrap">
+              <span className="text-[length:var(--fs-md)] font-medium leading-tight">
+                {isAllDone
+                  ? t('stepsCount', { done: totalCount, total: totalCount })
+                  : t('stepsCount', { done: doneCount, total: totalCount })}
+              </span>
+              {!effectiveExpanded && stepFinish && (
+                <span className="text-[length:var(--fs-sm)] text-text-500 font-mono opacity-70">
+                  {formatTokens(stepFinish.tokens, t)}
                 </span>
               )}
-            </button>
-          ) : (
-            <button
-              type="button"
-              ref={stepsHeaderRef}
-              onClick={() => withStepsScrollLock(() => setExpanded(!expanded))}
-              className="flex items-center gap-1.5 py-1.5 text-text-400 text-[length:var(--fs-base)] hover:text-text-200 hover:bg-bg-200/30 rounded-md transition-colors"
-            >
-              <span className="inline-flex w-[14px] items-center justify-center shrink-0">
-                {effectiveExpanded ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
-              </span>
-              <span className="inline-flex items-baseline gap-2 whitespace-nowrap">
-                <span className="text-[length:var(--fs-md)] font-medium leading-tight">
-                  {isAllDone
-                    ? t('stepsCount', { done: totalCount, total: totalCount })
-                    : t('stepsCount', { done: doneCount, total: totalCount })}
-                </span>
-                {!effectiveExpanded && stepFinish && (
-                  <span className="text-[length:var(--fs-sm)] text-text-500 font-mono opacity-70">
-                    {formatTokens(stepFinish.tokens, t)}
-                  </span>
-                )}
-              </span>
-            </button>
-          ))}
+            </span>
+          </button>
+        ))}
 
-        <div
-          className={
-            showStepsHeader
-              ? `grid ${stepsPanelClassName} ${stepsLayoutOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`
-              : ''
-          }
+      {showStepsHeader ? (
+        <MessageExpandPanel
+          open={stepsLayoutOpen}
+          panelClassName={stepsPanelClassName}
+          contentRef={stepsExpandContentRef}
+          clip
+          innerClassName="flex flex-col min-h-0 min-w-0 overflow-hidden"
         >
-          <div
-            ref={showStepsHeader ? stepsExpandContentRef : undefined}
-            className={showStepsHeader ? 'flex flex-col min-h-0 min-w-0 overflow-hidden' : 'flex flex-col'}
-            style={showStepsHeader ? { clipPath: 'inset(0 -100% 0 -100%)' } : undefined}
-          >
-            {(!showStepsHeader || shouldRenderBody) &&
-              parts.map((part, idx) => (
-                <ToolPartView
-                  key={part.id}
-                  part={part}
-                  isFirst={idx === 0}
-                  isLast={idx === parts.length - 1}
-                  compact={isSingleCompact}
-                  descriptive={descriptiveToolSteps}
-                  isStreaming={isStreaming}
-                />
-              ))}
-          </div>
-        </div>
+          {toolParts}
+        </MessageExpandPanel>
+      ) : (
+        <div className="flex flex-col">{toolParts}</div>
+      )}
 
-        {stepFinish && (
-          <div className="mt-2">
-            <StepFinishPartView
-              part={stepFinish}
-              duration={duration}
-              turnDuration={turnDuration}
-              agent={agent}
-              modelLabel={modelLabel}
-              completedAt={completedAt}
-            />
-          </div>
-        )}
+      {stepFinish && (
+        <div className={MSG_SPACING.finish}>
+          <StepFinishPartView
+            part={stepFinish}
+            duration={duration}
+            turnDuration={turnDuration}
+            agent={agent}
+            modelLabel={modelLabel}
+            completedAt={completedAt}
+          />
+        </div>
+      )}
     </div>
   )
 })
