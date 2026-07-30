@@ -168,6 +168,8 @@ export interface InputBoxProps {
   onQueuedRemove?: (id: string) => void
   onQueuedCancelFailed?: (id: string) => void
   onQueuedSendNow?: (id: string) => void
+  onQueuedRevert?: (id: string) => void
+  onQueuedReorder?: (draggedId: string, targetId: string) => void
 }
 
 // ============================================
@@ -216,6 +218,8 @@ function InputBoxComponent({
   onQueuedRemove,
   onQueuedCancelFailed,
   onQueuedSendNow,
+  onQueuedRevert,
+  onQueuedReorder,
 }: InputBoxProps) {
   const { t } = useTranslation('chat')
   // 合并文件能力：优先用 fileCapabilities，回退到 supportsImages
@@ -1291,6 +1295,8 @@ function InputBoxComponent({
                   onRemove={onQueuedRemove!}
                   onCancelFailed={onQueuedCancelFailed!}
                   onSendNow={onQueuedSendNow!}
+                  onRevert={onQueuedRevert!}
+                  onReorder={onQueuedReorder!}
                 />
               </div>
             )}

@@ -19,6 +19,7 @@ import { FolderProjectDropOverlay } from './FolderProjectDropOverlay'
 import { useChatSession, useModels, useModelSelection } from '../../hooks'
 import { useServerStore } from '../../hooks/useServerStore'
 import { followupQueueStore } from '../../store/followupQueueStore'
+import type { RevertHistoryItem } from '../../store/messageStoreTypes'
 import { useCancelHint } from '../../hooks/useCancelHint'
 import { InlineToolRequestContext, type InlineToolRequestContextValue } from './InlineToolRequestContext'
 import { ChatViewportProvider, canUseSplitPane, useChatViewportMaybe, type ChatViewportValue } from './chatViewport'
@@ -329,6 +330,34 @@ export const ChatPane = memo(function ChatPane({
     [routeSessionId],
   )
 
+  const handleRevertQueuedMessage = useCallback(
+    (id: string) => {
+      if (!routeSessionId) return
+      const item = followupQueueStore.getItem(routeSessionId, id)
+      if (!item) return
+      setQueuedRevertContent({
+        messageId: item.id,
+        text: item.text,
+        attachments: item.attachments,
+        model: item.model,
+        variant: item.variant,
+        agent: item.agent,
+      })
+      followupQueueStore.clearFailed(routeSessionId)
+      followupQueueStore.remove(routeSessionId, id)
+    },
+    [routeSessionId],
+  )
+
+  const handleReorderQueuedMessage = useCallback(
+    (draggedId: string, targetId: string) => {
+      if (routeSessionId) {
+        followupQueueStore.reorder(routeSessionId, draggedId, targetId)
+      }
+    },
+    [routeSessionId],
+  )
+
   const messageView = useMemo(() => ({ sessionId: routeSessionId, messages }), [routeSessionId, messages])
   const deferredMessageView = useDeferredValue(messageView)
   const shouldDeferMessages = displayMode === 'split' && !isStreaming && messages.length > 20
@@ -468,7 +497,16 @@ export const ChatPane = memo(function ChatPane({
   // 只在 session 切换（routeSessionId 变化）或 revert/undo 恢复时执行一次。
   // 流式输出期间 messages 变化不会触发，避免覆盖用户的模型选择。
   // ============================================
-  const inputRestoreContent = revertedContent ?? restoredContent
+  // queued-message revert：把队列中的消息拉回输入框编辑时暂存内容
+  const [queuedRevertContent, setQueuedRevertContent] = useState<RevertHistoryItem | null>(null)
+
+  const inputRestoreContent = queuedRevertContent ?? revertedContent ?? restoredContent
+
+  // 清除输入框恢复内容：同时清除 undo 恢复和队列恢复
+  const handleClearInputRevert = useCallback(() => {
+    clearRevert()
+    setQueuedRevertContent(null)
+  }, [clearRevert])
 
   // revert/undo 恢复：inputRestoreContent 变化时立即恢复
   useEffect(() => {
@@ -936,7 +974,7 @@ export const ChatPane = memo(function ChatPane({
           revertSteps={redoSteps}
           onRedo={handleRedoWithAnimation}
           onRedoAll={handleRedoAll}
-          onClearRevert={clearRevert}
+          onClearRevert={handleClearInputRevert}
           registerInputBox={registerInputBox}
           isAtBottom={isAtBottom}
           showScrollToBottom={!isAtBottom}
@@ -970,6 +1008,8 @@ export const ChatPane = memo(function ChatPane({
           onQueuedRemove={handleRemoveQueuedMessage}
           onQueuedCancelFailed={handleCancelFailedQueuedMessage}
           onQueuedSendNow={handleSendQueuedNow}
+          onQueuedRevert={handleRevertQueuedMessage}
+          onQueuedReorder={handleReorderQueuedMessage}
         />
       </div>
 
