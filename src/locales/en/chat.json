@@ -205,7 +205,9 @@
     "failed": "Failed",
     "remove": "Remove from queue",
     "cancelFailed": "Dismiss",
-    "sendNow": "Send now"
+    "sendNow": "Send now",
+    "revert": "Edit",
+    "reorder": "Drag to reorder"
   },
   "hints": {
     "pressEscAgain": "Press <1>Esc</1> again to stop",
