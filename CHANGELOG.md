@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.6.36] - 2026-08-10
+
+- perf(ui): reduce streaming work and sync window controls (871a9726)
+- fix(markdown): keep single-tilde ranges literal and render \(...\)/\[...\] math (43a0b7e4)
+
 ## [v0.6.35] - 2026-07-24
 
 - fix(pwa): manifest 使用相对路径，修复子路径部署下 start_url 指向根域 (be8fa62b)
