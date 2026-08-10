@@ -374,6 +374,10 @@ docker/                  # Docker 配置（Gateway / Frontend / Backend）
 
 部分 UI 风格参考了 [Claude](https://claude.ai) 的界面设计。
 
+## 相关项目
+
+- [PiUI](https://github.com/lehhair/PiUI) — 与 OpenCodeUI 共享 UI 设计和交互体验的 Pi 编程助手前端
+
 ## 许可证
 
 [GPL-3.0](./LICENSE)

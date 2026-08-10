@@ -323,6 +323,10 @@ docker/                  # Docker config (Gateway / Frontend / Backend)
 
 Some UI styles are inspired by the [Claude](https://claude.ai) interface design.
 
+## Related Project
+
+- [PiUI](https://github.com/lehhair/PiUI) — A frontend for the Pi coding agent that shares OpenCodeUI's UI design and interaction patterns
+
 ## License
 
 [GPL-3.0](./LICENSE)
