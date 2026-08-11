@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.40] - 2026-08-11
+
+- fix(multi-server): terminal tabs keep their own server; connections no longer break after focus switch (3bd25276)
+
 ## [v0.6.39] - 2026-08-11
 
 - fix(multi-server): per-server path style detection (Windows/Linux coexistence) (15491eb7)
