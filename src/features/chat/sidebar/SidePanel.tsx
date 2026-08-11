@@ -696,7 +696,7 @@ export function SidePanel({
     const insertAt = Math.min(Math.max(globalFolderIndex, 0), list.length)
     return [...list.slice(0, insertAt), globalFolderProject, ...list.slice(insertAt)]
   }, [folderProjectGroups, currentDirectory, currentProject, globalFolderProject, globalFolderIndex])
-  const canShowFolderRecents = sidebarFolderRecents && !search && folderProjects.length > 0
+  // 文件夹模式开启（搜索时由 SearchResults 接管，文件夹与 session 一起搜）
 
   const workspaceDirectoriesByProjectId = useMemo(() => {
     const map = new Map<string, string[]>()
@@ -1498,15 +1498,24 @@ export function SidePanel({
                     </button>
                   </div>
                 )
-              ) : canShowFolderRecents ? (
-                <FolderRecentList
-                  projects={folderProjects}
-                  {...commonFolderRecentListProps}
-                  onReorderProject={handleReorderProjectGroup}
-                  workspaceDirectoriesByProjectId={workspaceDirectoriesByProjectId}
-                  pinnedSessions={resolvedPinnedSessions}
-                  unavailablePinnedEntries={unavailablePinnedEntries}
-                />
+              ) : sidebarFolderRecents ? (
+                search ? (
+                  /* 文件夹模式 + 搜索：文件夹 + session 一起搜（单服务器：无服务器组头） */
+                  <SearchResults
+                    search={search}
+                    selectedSessionId={selectedSessionId}
+                    onSelectSession={handleSelect}
+                  />
+                ) : (
+                  <FolderRecentList
+                    projects={folderProjects}
+                    {...commonFolderRecentListProps}
+                    onReorderProject={handleReorderProjectGroup}
+                    workspaceDirectoriesByProjectId={workspaceDirectoriesByProjectId}
+                    pinnedSessions={resolvedPinnedSessions}
+                    unavailablePinnedEntries={unavailablePinnedEntries}
+                  />
+                )
               ) : shouldRenderWorkspaceTreeOnly ? (
                 <FolderRecentList
                   projects={currentProjectTreeProjects}

@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getSessions, type ApiSession } from '../../../api'
+import { makeSessionKey } from '../../../utils/sessionKey'
 import { serverStore } from '../../../store/serverStore'
 import { multiServerStore } from '../../../store/multiServerStore'
 import { useDirectory } from '../../../contexts/useDirectory'
@@ -58,9 +59,17 @@ interface ServerSearchGroupProps {
   search: string
   selectedSessionId: string | null
   onSelectSession: (session: ApiSession & { serverId?: string }) => void
+  /** 是否显示服务器组头（多服务器模式；单服务器模式直接平铺文件夹/session） */
+  showHeader?: boolean
 }
 
-function ServerSearchGroup({ serverId, search, selectedSessionId, onSelectSession }: ServerSearchGroupProps) {
+function ServerSearchGroup({
+  serverId,
+  search,
+  selectedSessionId,
+  onSelectSession,
+  showHeader = true,
+}: ServerSearchGroupProps) {
   const { t } = useTranslation(['chat', 'common'])
   const { setCurrentDirectory } = useDirectory()
   const server = serverStore.getServer(serverId)
@@ -130,6 +139,79 @@ function ServerSearchGroup({ serverId, search, selectedSessionId, onSelectSessio
   const folderCount = matchedFolders.length
   const sessionCount = sessions.length
 
+  // 单服务器模式：无组头，直接展开内容
+  const body = (
+    <div className="ml-1.5 pl-2 border-l border-border-200/40">
+      {/* 匹配文件夹：点击切焦点服务器 + 目录 */}
+      {matchedFolders.map(dir => (
+        <button
+          key={dir}
+          type="button"
+          onClick={() => {
+            if (multiServerStore.isEnabled()) {
+              multiServerStore.setFocusedServerId(serverId)
+            }
+            setCurrentDirectory(dir)
+          }}
+          className="flex w-full items-center gap-2 px-2 py-1 rounded-md text-left hover:bg-bg-200/40"
+          title={dir}
+        >
+          <FolderIcon size={13} className="shrink-0 text-text-400" />
+          <span className="min-w-0 flex-1 truncate text-[length:var(--fs-sm)] text-text-200">
+            {dir.split('/').pop() || dir}
+          </span>
+          <span className="shrink-0 max-w-[40%] truncate text-[length:var(--fs-xxs)] text-text-400/70">{dir}</span>
+        </button>
+      ))}
+
+      {/* 匹配 session */}
+      {sessions.map(session => {
+        // 精确匹配复合 key（serverId::sessionId）：两个服务器连同一后端时 session.id 相同，
+        // 用 endsWith 会把两个服务器的同名 session 都高亮，必须带服务器前缀精确匹配
+        const isSelected = !!selectedSessionId && selectedSessionId === makeSessionKey(serverId, session.id)
+        return (
+          <button
+            key={session.id}
+            type="button"
+            onClick={() => onSelectSession({ ...session, serverId })}
+            className={`flex w-full items-center gap-2 px-2 py-1 rounded-md text-left hover:bg-bg-200/40 ${
+              isSelected ? 'bg-bg-200/60' : ''
+            }`}
+            title={session.directory}
+          >
+            <MessageSquareIcon size={13} className="shrink-0 text-text-400" />
+            <span className="min-w-0 flex-1 truncate text-[length:var(--fs-sm)] text-text-200">
+              {session.title || t('sessions.untitledChat', { defaultValue: 'Untitled chat' })}
+            </span>
+            {session.directory && (
+              <span className="shrink-0 max-w-[40%] truncate text-[length:var(--fs-xxs)] text-text-400/70">
+                {session.directory}
+              </span>
+            )}
+          </button>
+        )
+      })}
+
+      {/* session 搜索中 */}
+      {isLoadingSessions && sessions.length === 0 && (
+        <div className="px-2 py-1 text-[length:var(--fs-xxs)] text-text-400/70">
+          {t('sidebar.searchingSessions', { defaultValue: '搜索会话中…' })}
+        </div>
+      )}
+
+      {/* 服务器本身命中但无文件夹/session */}
+      {serverMatched && sessions.length === 0 && matchedFolders.length === 0 && (
+        <div className="px-2 py-1 text-[length:var(--fs-xxs)] text-text-400/70">
+          {t('sidebar.searchServerMatchHint', { defaultValue: '服务器匹配 · 点击组头切换焦点' })}
+        </div>
+      )}
+    </div>
+  )
+
+  if (!showHeader) {
+    return body
+  }
+
   return (
     <div className="mb-0.5">
       {/* 服务器组头：点击切换焦点服务器 + 折叠/展开 */}
@@ -162,70 +244,7 @@ function ServerSearchGroup({ serverId, search, selectedSessionId, onSelectSessio
         />
       </button>
 
-      {expanded && (
-        <div className="ml-1.5 pl-2 border-l border-border-200/40">
-          {/* 匹配文件夹：点击切焦点服务器 + 目录 */}
-          {matchedFolders.map(dir => (
-            <button
-              key={dir}
-              type="button"
-              onClick={() => {
-                multiServerStore.setFocusedServerId(serverId)
-                setCurrentDirectory(dir)
-              }}
-              className="flex w-full items-center gap-2 px-2 py-1 rounded-md text-left hover:bg-bg-200/40"
-              title={dir}
-            >
-              <FolderIcon size={13} className="shrink-0 text-text-400" />
-              <span className="min-w-0 flex-1 truncate text-[length:var(--fs-sm)] text-text-200">
-                {dir.split('/').pop() || dir}
-              </span>
-              <span className="shrink-0 max-w-[40%] truncate text-[length:var(--fs-xxs)] text-text-400/70">{dir}</span>
-            </button>
-          ))}
-
-          {/* 匹配 session */}
-          {sessions.map(session => {
-            const isSelected =
-              !!selectedSessionId && (selectedSessionId === session.id || selectedSessionId.endsWith(`::${session.id}`))
-            return (
-              <button
-                key={session.id}
-                type="button"
-                onClick={() => onSelectSession({ ...session, serverId })}
-                className={`flex w-full items-center gap-2 px-2 py-1 rounded-md text-left hover:bg-bg-200/40 ${
-                  isSelected ? 'bg-bg-200/60' : ''
-                }`}
-                title={session.directory}
-              >
-                <MessageSquareIcon size={13} className="shrink-0 text-text-400" />
-                <span className="min-w-0 flex-1 truncate text-[length:var(--fs-sm)] text-text-200">
-                  {session.title || t('sessions.untitledChat', { defaultValue: 'Untitled chat' })}
-                </span>
-                {session.directory && (
-                  <span className="shrink-0 max-w-[40%] truncate text-[length:var(--fs-xxs)] text-text-400/70">
-                    {session.directory}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-
-          {/* session 搜索中 */}
-          {isLoadingSessions && sessions.length === 0 && (
-            <div className="px-2 py-1 text-[length:var(--fs-xxs)] text-text-400/70">
-              {t('sidebar.searchingSessions', { defaultValue: '搜索会话中…' })}
-            </div>
-          )}
-
-          {/* 服务器本身命中但无文件夹/session */}
-          {serverMatched && sessions.length === 0 && matchedFolders.length === 0 && (
-            <div className="px-2 py-1 text-[length:var(--fs-xxs)] text-text-400/70">
-              {t('sidebar.searchServerMatchHint', { defaultValue: '服务器匹配 · 点击组头切换焦点' })}
-            </div>
-          )}
-        </div>
-      )}
+      {expanded && body}
     </div>
   )
 }
@@ -239,13 +258,21 @@ interface SearchResultsProps {
 export function SearchResults({ search, selectedSessionId, onSelectSession }: SearchResultsProps) {
   const { t } = useTranslation(['chat', 'common'])
 
-  // 多服务器模式：白名单服务器（过滤已删除的）；缺省活动服务器
+  // 活动服务器（响应式：单服务器模式切服务器后刷新）
+  const activeServerId = useSyncExternalStore(
+    cb => serverStore.subscribe(cb),
+    () => serverStore.getActiveServerId(),
+    () => serverStore.getActiveServerId(),
+  )
+  const multiServerEnabled = multiServerStore.isEnabled()
+
+  // 多服务器模式：白名单服务器（过滤已删除的）；单服务器：活动服务器
   const serverIds = useMemo(() => {
-    if (multiServerStore.isEnabled()) {
+    if (multiServerEnabled) {
       return multiServerStore.getSubscribedServerIds().filter(id => serverStore.getServers().some(s => s.id === id))
     }
-    return [serverStore.getActiveServerId()]
-  }, [search])
+    return [activeServerId]
+  }, [multiServerEnabled, activeServerId])
 
   if (splitTerms(search).length === 0) return null
 
@@ -261,6 +288,7 @@ export function SearchResults({ search, selectedSessionId, onSelectSession }: Se
           search={search}
           selectedSessionId={selectedSessionId}
           onSelectSession={onSelectSession}
+          showHeader={multiServerEnabled}
         />
       ))}
       <div className="px-2 py-3 text-center text-[length:var(--fs-xs)] text-text-400/70">
