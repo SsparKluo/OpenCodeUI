@@ -46,6 +46,8 @@ import { getMessageText, isUserMessage, type AssistantMessageInfo, type Message 
 import { clipboardErrorHandler, copyTextToClipboard, createErrorHandler } from '../utils'
 import { clearSessionRuntimeState } from '../utils/sessionLifecycle'
 import { serverStorage } from '../utils/perServerStorage'
+import { sessionKeyToServerId } from '../utils/sessionKey'
+import { serverStore } from '../store/serverStore'
 import { STORAGE_KEY_SELECTED_AGENT } from '../constants'
 import type { ChatAreaHandle } from '../features/chat'
 import { followupQueueStore, useFollowupQueue } from '../store/followupQueueStore'
@@ -134,6 +136,17 @@ export function useChatSession({
     routeSessionIdRef.current = routeSessionId
   }, [routeSessionId])
 
+  /** 当前 pane 绑定的服务器（sessionId 为复合 key，split 出 serverId；home 状态跟随 active server） */
+  const activeServerId = useSyncExternalStore(
+    cb => serverStore.subscribe(cb),
+    () => serverStore.getActiveServerId(),
+    () => serverStore.getActiveServerId(),
+  )
+  const paneServerId = useMemo(
+    () => (routeSessionId ? sessionKeyToServerId(routeSessionId) : activeServerId),
+    [routeSessionId, activeServerId],
+  )
+
   const handleMissingRouteSession = useCallback(
     (missingSessionId: string) => {
       if (routeSessionIdRef.current !== missingSessionId) return
@@ -218,7 +231,7 @@ export function useChatSession({
     refreshPendingRequests,
     resetPendingRequests,
     isReplying,
-  } = usePermissionHandler()
+  } = usePermissionHandler(paneServerId)
 
   // Prevent infinite retry loops when auto-approve API calls fail
   // but the server may have already processed the request (lost response).
@@ -469,7 +482,7 @@ export function useChatSession({
         }
         refetchModels().catch(() => {})
         // 重新获取 agents 列表（切换后端时 currentDirectory 可能没变，useEffect 不会触发）
-        getSelectableAgents(currentDirectory)
+        getSelectableAgents(currentDirectory, paneServerId)
           .then(setAgents)
           .catch(() => {})
       },
@@ -526,7 +539,7 @@ export function useChatSession({
 
   // Load agents
   useEffect(() => {
-    getSelectableAgents(currentDirectory)
+    getSelectableAgents(currentDirectory, paneServerId)
       .then(setAgents)
       .catch(err => handleError('fetch agents', err))
   }, [currentDirectory])
@@ -535,8 +548,8 @@ export function useChatSession({
   useEffect(() => {
     if (!routeSessionId || !effectiveDirectory) return
 
-    prefetchRootDirectory(effectiveDirectory).catch(() => {})
-    prefetchCommands(effectiveDirectory).catch(() => {})
+    prefetchRootDirectory(effectiveDirectory, paneServerId).catch(() => {})
+    prefetchCommands(effectiveDirectory, paneServerId).catch(() => {})
   }, [routeSessionId, effectiveDirectory])
 
   // agents 列表加载后，校验当前选中的 agent 是否存在于列表中
@@ -572,11 +585,11 @@ export function useChatSession({
       const existingChildren = childSessionStore.getChildSessionIds(routeSessionId!)
       if (existingChildren.length === 0) {
         try {
-          const children = await getSessionChildren(routeSessionId!, effectiveDirectory)
+          const children = await getSessionChildren(routeSessionId!, effectiveDirectory, paneServerId)
           if (cancelled) return
           // 注册所有子 session 到 store
           for (const child of children) {
-            childSessionStore.registerChildSession(child)
+            childSessionStore.registerChildSession(child, paneServerId)
           }
         } catch {
           // 获取子 session 失败不影响主流程
@@ -591,8 +604,8 @@ export function useChatSession({
       // Step 3: 获取所有待处理请求，然后用 family 过滤
       // GET /permission 和 GET /question 返回全量数据，不传 sessionId 避免 N 次重复请求
       const [allPerms, allQuestions] = await Promise.all([
-        getPendingPermissions(undefined, effectiveDirectory).catch(() => []),
-        getPendingQuestions(undefined, effectiveDirectory).catch(() => []),
+        getPendingPermissions(undefined, effectiveDirectory, paneServerId).catch(() => []),
+        getPendingQuestions(undefined, effectiveDirectory, paneServerId).catch(() => []),
       ])
 
       if (cancelled) return
@@ -665,15 +678,18 @@ export function useChatSession({
         // 不要在 send 前 setStreaming：新 user 往往还没入列，过程折叠会把
         // 「上一轮已收工」误判成最新 Working 再展开，造成一闪。
         // streaming 在 send 成功后、或 SSE 推到 assistant 时再打开。
-        await sendMessageAsync({
-          sessionId,
-          text: input.content,
-          attachments: input.attachments,
-          model: input.model,
-          agent: input.options?.agent,
-          variant: input.options?.variant,
-          directory: input.directory,
-        })
+        await sendMessageAsync(
+          {
+            sessionId,
+            text: input.content,
+            attachments: input.attachments,
+            model: input.model,
+            agent: input.options?.agent,
+            variant: input.options?.variant,
+            directory: input.directory,
+          },
+          paneServerId,
+        )
 
         messageStore.setStreaming(sessionId, true)
 
@@ -687,7 +703,7 @@ export function useChatSession({
           // 消息数量增加了，说明 SSE 已正常推送
           if (state.messages.length > msgCountBeforeSend) return
 
-          getSessionMessages(pullSessionId, 5, pullDir)
+          getSessionMessages(pullSessionId, 5, pullDir, paneServerId)
             .then(apiMessages => {
               for (const msg of apiMessages) {
                 messageStore.handleMessageUpdated(msg.info)
@@ -901,7 +917,7 @@ export function useChatSession({
               }
             }
           }
-          const forkedSession = await forkSession(assistantInfo.sessionID, forkAtMessageId, effectiveDirectory)
+          const forkedSession = await forkSession(assistantInfo.sessionID, forkAtMessageId, effectiveDirectory, paneServerId)
           setRestoredContent(null)
           navigateToSession(forkedSession.id, forkedSession.directory)
           return
@@ -913,7 +929,7 @@ export function useChatSession({
 
         const userInfo = message.info
         const content = extractUserMessageContent(message)
-        const forkedSession = await forkSession(userInfo.sessionID, targetMessageId, effectiveDirectory)
+        const forkedSession = await forkSession(userInfo.sessionID, targetMessageId, effectiveDirectory, paneServerId)
 
         setRestoredContent({
           sessionId: forkedSession.id,
@@ -940,7 +956,7 @@ export function useChatSession({
     if (!routeSessionId) return
     try {
       const directory = sessionDirectory || currentDirectory
-      await abortSession(routeSessionId, directory)
+      await abortSession(routeSessionId, directory, paneServerId)
       messageStore.handleSessionIdle(routeSessionId)
     } catch (error) {
       handleError('abort session', error)
@@ -995,6 +1011,7 @@ export function useChatSession({
             sessionId,
             { providerID: currentModel.providerId, modelID: currentModel.id },
             effectiveDirectory,
+            paneServerId,
           ).catch(err => {
             handleError('execute command', err)
           })
@@ -1004,7 +1021,7 @@ export function useChatSession({
 
         // Keep command submission semantics aligned with normal messages:
         // once the command is dispatched, clear the draft immediately.
-        void executeCommand(sessionId, command, args, effectiveDirectory).catch(err => {
+        void executeCommand(sessionId, command, args, effectiveDirectory, paneServerId).catch(err => {
           handleError('execute command', err)
         })
 
@@ -1056,7 +1073,7 @@ export function useChatSession({
   const handleArchiveSession = useCallback(async () => {
     if (!routeSessionId) return
     try {
-      await updateSession(routeSessionId, { time: { archived: Date.now() } }, effectiveDirectory)
+      await updateSession(routeSessionId, { time: { archived: Date.now() } }, effectiveDirectory, paneServerId)
       navigateHome()
       handleNewChat()
     } catch (error) {

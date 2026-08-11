@@ -19,6 +19,8 @@ import { FolderProjectDropOverlay } from './FolderProjectDropOverlay'
 import { useChatSession, useModels, useModelSelection } from '../../hooks'
 import { useServerStore } from '../../hooks/useServerStore'
 import { useCancelHint } from '../../hooks/useCancelHint'
+import { makeSessionKey, sessionKeyToServerId } from '../../utils/sessionKey'
+import { serverStore } from '../../store/serverStore'
 import { InlineToolRequestContext, type InlineToolRequestContextValue } from './InlineToolRequestContext'
 import { ChatViewportProvider, canUseSplitPane, useChatViewportMaybe, type ChatViewportValue } from './chatViewport'
 import { useChatPageViewModel } from './useChatPageViewModel'
@@ -200,11 +202,25 @@ export const ChatPane = memo(function ChatPane({
   // ============================================
   // Pane-local navigation
   // ============================================
+  /** 当前 pane 绑定的服务器（sessionId 为复合 key，split 出 serverId） */
+  const paneServerId = useMemo(
+    () => (sessionId ? sessionKeyToServerId(sessionId) : serverStore.getActiveServerId()),
+    [sessionId],
+  )
+
+  /** 规范化 session 标识为复合 key：已是复合 key 则原样，原始 id 用 pane 的服务器合成 */
+  const normalizeSessionKey = useCallback(
+    (sid: string): string => {
+      return sid.includes('::') ? sid : makeSessionKey(paneServerId, sid)
+    },
+    [paneServerId],
+  )
+
   const navigateToSession = useCallback(
     (sid: string, directory?: string) => {
-      navigatePaneToSession(paneId, sid, directory)
+      navigatePaneToSession(paneId, normalizeSessionKey(sid), directory)
     },
-    [paneId, navigatePaneToSession],
+    [paneId, navigatePaneToSession, normalizeSessionKey],
   )
 
   const navigateHome = useCallback(() => {
@@ -606,10 +622,11 @@ export const ChatPane = memo(function ChatPane({
       resetDropState()
       cancelPendingSplitSessionNavigation()
 
-      if (payload.sessionId === routeSessionId && zone === 'center') return
+      const sessionKey = normalizeSessionKey(payload.sessionId)
+      if (sessionKey === routeSessionId && zone === 'center') return
 
       if (zone === 'center') {
-        navigatePaneToSession(paneId, payload.sessionId, payload.directory)
+        navigatePaneToSession(paneId, sessionKey, payload.directory)
         return
       }
 
@@ -622,11 +639,11 @@ export const ChatPane = memo(function ChatPane({
 
         scheduleSplitSessionNavigation(() => {
           if (!paneLayoutStore.findLeaf(newPaneId)) return
-          navigatePaneToSession(newPaneId, payload.sessionId, payload.directory)
+          navigatePaneToSession(newPaneId, sessionKey, payload.directory)
         })
       }
     },
-    [paneId, routeSessionId, navigatePaneToSession, resetDropState],
+    [paneId, routeSessionId, navigatePaneToSession, resetDropState, normalizeSessionKey],
   )
 
   useEffect(() => {

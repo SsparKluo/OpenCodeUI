@@ -10,10 +10,13 @@ import {
   KeyIcon,
   PencilIcon,
   RetryIcon,
+  PlugIcon,
+  CircleIcon,
 } from '../../../components/Icons'
 import { useServerStore, useRouter } from '../../../hooks'
 import { messageStore } from '../../../store'
-import { settingsFieldClass, SettingsSection } from './SettingsUI'
+import { useMultiServerStore, multiServerStore } from '../../../store/multiServerStore'
+import { settingsFieldClass, SettingsSection, SettingRow, Toggle } from './SettingsUI'
 import type { ServerConfig, ServerHealth } from '../../../store/serverStore'
 
 const IPV4_PATTERN = /^(?:\d{1,3}\.){3}\d{1,3}$/
@@ -38,18 +41,24 @@ function ServerItem({
   server,
   health,
   isActive,
+  subscribed,
+  multiServerEnabled,
   onSelect,
   onDelete,
   onEdit,
   onCheckHealth,
+  onToggleSubscribe,
 }: {
   server: ServerConfig
   health: ServerHealth | null
   isActive: boolean
+  subscribed: boolean
+  multiServerEnabled: boolean
   onSelect: () => void
   onDelete: () => void
   onEdit: (updates: { name: string; url: string; username?: string; password?: string }) => void
   onCheckHealth: () => void
+  onToggleSubscribe: () => void
 }) {
   const { t } = useTranslation(['settings', 'common'])
   const [editing, setEditing] = useState(false)
@@ -127,6 +136,29 @@ function ServerItem({
           </div>
         </button>
         <div className="shrink-0 flex items-center gap-0.5">
+          <button
+            type="button"
+            disabled={!multiServerEnabled}
+            onClick={e => {
+              e.stopPropagation()
+              onToggleSubscribe()
+            }}
+            title={
+              !multiServerEnabled
+                ? t('servers.enableMultiServerFirst', { defaultValue: 'Enable multi-server mode first' })
+                : subscribed
+                  ? t('servers.unsubscribe')
+                  : t('servers.subscribe')
+            }
+            aria-label={subscribed ? t('servers.unsubscribe') : t('servers.subscribe')}
+            className={`p-1.5 rounded-md transition-colors ${
+              subscribed
+                ? 'text-accent-main-100 hover:bg-accent-main-100/10'
+                : 'text-text-400 hover:text-text-200 hover:bg-bg-200/70'
+            } ${!multiServerEnabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+          >
+            {subscribed ? <PlugIcon size={13} /> : <CircleIcon size={11} className="opacity-50" />}
+          </button>
           <button
             type="button"
             className="p-1.5 rounded-md text-text-400 hover:text-text-200 hover:bg-bg-200/70 transition-colors"
@@ -500,6 +532,8 @@ function AddServerForm({
 export function ServersSettings() {
   const { t } = useTranslation(['settings', 'common'])
   const [addingServer, setAddingServer] = useState(false)
+  const multiServerConfig = useMultiServerStore()
+  const subscribedCount = multiServerStore.getSubscribedServerIds().length
   const {
     servers,
     activeServer,
@@ -541,48 +575,80 @@ export function ServersSettings() {
   )
 
   return (
-    <SettingsSection
-      title={t('servers.connections')}
-      description={t('servers.connectionsDesc')}
-      actions={
-        <div className="flex items-center gap-2">
-          <button
-            onClick={checkAllHealth}
-            className="flex items-center justify-center w-7 h-7 rounded-md text-text-400 hover:text-text-200 hover:bg-bg-200/70 transition-colors"
-            title={t('common:refresh')}
-            aria-label={t('common:refresh')}
-          >
-            <RetryIcon size={14} />
-          </button>
-          <button
-            onClick={() => setAddingServer(true)}
-            disabled={addingServer}
-            className="h-7 px-2.5 rounded-md text-[length:var(--fs-sm)] font-medium text-accent-main-100 hover:bg-accent-main-100/10 transition-colors disabled:opacity-40"
-          >
-            {t('common:add')}
-          </button>
-        </div>
-      }
-    >
-      <div className="space-y-1.5">
-        {orderedServers.map(s => (
-          <ServerItem
-            key={s.id}
-            server={s}
-            health={getHealth(s.id)}
-            isActive={activeServer?.id === s.id}
-            onSelect={() => handleSelectServer(s.id)}
-            onDelete={() => removeServer(s.id)}
-            onEdit={updates => {
-              const auth = updates.password
-                ? { username: updates.username || 'opencode', password: updates.password }
-                : undefined
-              updateServer(s.id, { name: updates.name, url: updates.url, auth })
-              void checkHealth(s.id)
-            }}
-            onCheckHealth={() => void checkHealth(s.id)}
+    <>
+      <SettingsSection
+        title={t('servers.multiServerMode', { defaultValue: 'Multi-server mode' })}
+        description={t('servers.multiServerModeDesc', {
+          defaultValue:
+            'Subscribe to multiple servers at once. Sidebar session list is grouped by server, and you can interact with sessions on any connected server simultaneously.',
+        })}
+      >
+        <SettingRow
+          label={t('servers.multiServerMode', { defaultValue: 'Multi-server mode' })}
+          description={
+            multiServerConfig.enabled
+              ? t('servers.subscribedCountHint', {
+                  defaultValue: '{{count}} servers subscribed. Use the plug icon on each server to join/leave the whitelist.',
+                  count: subscribedCount,
+                })
+              : t('servers.multiServerModeOffHint', {
+                  defaultValue: 'Only the servers you subscribe to appear in the sidebar session list.',
+                })
+          }
+        >
+          <Toggle
+            enabled={multiServerConfig.enabled}
+            onChange={() => multiServerStore.setEnabled(!multiServerConfig.enabled)}
+            ariaLabel={t('servers.multiServerMode', { defaultValue: 'Multi-server mode' })}
           />
-        ))}
+        </SettingRow>
+      </SettingsSection>
+
+      <SettingsSection
+        title={t('servers.connections')}
+        description={t('servers.connectionsDesc')}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={checkAllHealth}
+              className="flex items-center justify-center w-7 h-7 rounded-md text-text-400 hover:text-text-200 hover:bg-bg-200/70 transition-colors"
+              title={t('common:refresh')}
+              aria-label={t('common:refresh')}
+            >
+              <RetryIcon size={14} />
+            </button>
+            <button
+              onClick={() => setAddingServer(true)}
+              disabled={addingServer}
+              className="h-7 px-2.5 rounded-md text-[length:var(--fs-sm)] font-medium text-accent-main-100 hover:bg-accent-main-100/10 transition-colors disabled:opacity-40"
+            >
+              {t('common:add')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-1.5">
+          {orderedServers.map(s => (
+            <ServerItem
+              key={s.id}
+              server={s}
+              health={getHealth(s.id)}
+              isActive={activeServer?.id === s.id}
+              subscribed={multiServerStore.isSubscribed(s.id)}
+              multiServerEnabled={multiServerConfig.enabled}
+              onSelect={() => handleSelectServer(s.id)}
+              onDelete={() => removeServer(s.id)}
+              onEdit={updates => {
+                const auth = updates.password
+                  ? { username: updates.username || 'opencode', password: updates.password }
+                  : undefined
+                updateServer(s.id, { name: updates.name, url: updates.url, auth })
+                void checkHealth(s.id)
+              }}
+              onCheckHealth={() => void checkHealth(s.id)}
+              onToggleSubscribe={() => multiServerStore.setSubscribed(s.id, !multiServerStore.isSubscribed(s.id))}
+            />
+          ))}
 
         {addingServer && (
           <AddServerForm
@@ -600,6 +666,7 @@ export function ServersSettings() {
           <div className="text-[length:var(--fs-md)] text-text-400 text-center py-8">{t('servers.noServersConfigured')}</div>
         )}
       </div>
-    </SettingsSection>
+      </SettingsSection>
+    </>
   )
 }

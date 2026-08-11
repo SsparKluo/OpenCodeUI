@@ -247,6 +247,7 @@ describe('useChatSession handleCommand', () => {
       'session-1',
       { providerID: 'provider-1', modelID: 'model-1' },
       '/workspace/demo',
+      'local',
     )
     expect(settled).toBe(true)
     expect(commandResult).toBe(true)
@@ -279,7 +280,7 @@ describe('useChatSession handleCommand', () => {
       await Promise.resolve()
     })
 
-    expect(executeCommandMock).toHaveBeenCalledWith('session-1', 'review', 'src/App.tsx', '/workspace/demo')
+    expect(executeCommandMock).toHaveBeenCalledWith('session-1', 'review', 'src/App.tsx', '/workspace/demo', 'local')
     expect(settled).toBe(true)
     expect(commandResult).toBe(true)
   })

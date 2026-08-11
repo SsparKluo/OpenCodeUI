@@ -2,6 +2,8 @@ import { useCallback, useMemo, useState, useEffect, useRef, useSyncExternalStore
 import { useTranslation } from 'react-i18next'
 import { SessionList } from '../../sessions'
 import { FolderRecentList } from './FolderRecentList'
+import { MultiServerFolderList } from './MultiServerFolderList'
+import { useMultiServerStore, multiServerStore } from '../../../store/multiServerStore'
 import { getProjectGroupIdentity } from './projectGrouping'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 import { ActiveSessionItem } from './ActiveSessionItem'
@@ -139,6 +141,15 @@ export function SidePanel({
     useGitWorkspaceCatalog(catalogDirectories)
   const { vcsInfo: currentDirectoryVcsInfo, isLoading: isCurrentDirectoryVcsLoading } = useVcsInfo(currentDirectory)
   const { sidebarFolderRecents, sidebarShowChildSessions } = useLayoutStore()
+
+  // 多服务器订阅模式配置
+  const multiServerConfig = useMultiServerStore()
+  const subscribedServerIds = useMemo(() => {
+    // 白名单精确生效：只展示用户在设置里勾选的服务器
+    return multiServerConfig.subscribedServerIds.filter(id => serverStore.getServers().some(s => s.id === id))
+  }, [multiServerConfig.subscribedServerIds])
+  // 多服务器列表按复合 key（serverId::sessionId）比较，避免跨服务器同名 session 串高亮
+  const multiServerSelectedSessionKey = selectedSessionId
   const [globalFolderIndex, setGlobalFolderIndex] = useState<number>(() => {
     const saved = localStorage.getItem('opencode-sidebar-global-folder-index')
     const parsed = saved ? Number.parseInt(saved, 10) : 0
@@ -579,7 +590,19 @@ export function SidePanel({
     return buildProjectGroups(savedDirectories)
   }, [buildProjectGroups, savedDirectories])
 
+  // 多服务器模式：项目选择器显示「焦点服务器」的工作区（替换本地项目）
+  const focusedServerWorkspaces = useMemo(() => {
+    if (!multiServerConfig.enabled) return [] as (typeof savedDirectories)[number][]
+    const serverId = multiServerStore.getFocusedServerId()
+    return multiServerStore
+      .getServerWorkspaces(serverId)
+      .map(dir => ({ path: dir, addedAt: 0 } as (typeof savedDirectories)[number]))
+  }, [multiServerConfig])
+
   const selectorProjectGroups = useMemo<ProjectItem[]>(() => {
+    if (multiServerConfig.enabled) {
+      return buildProjectGroups(focusedServerWorkspaces)
+    }
     const sortedDirectories = [...savedDirectories].sort((a, b) => {
       const aTime = recentProjects[a.path] || a.addedAt
       const bTime = recentProjects[b.path] || b.addedAt
@@ -587,7 +610,7 @@ export function SidePanel({
     })
 
     return buildProjectGroups(sortedDirectories)
-  }, [buildProjectGroups, recentProjects, savedDirectories])
+  }, [multiServerConfig.enabled, focusedServerWorkspaces, buildProjectGroups, recentProjects, savedDirectories])
 
   const globalProject = useMemo<ProjectItem>(
     () => ({
@@ -801,6 +824,17 @@ export function SidePanel({
       }
     },
     [currentDirectory, addDirectory, onSelectSession, onCloseMobile],
+  )
+
+  // 多服务器模式：从分组列表选择 session（serverId 已由 MultiServerFolderList 附加）
+  const handleSelectMultiServer = useCallback(
+    (session: ApiSession & { serverId?: string }) => {
+      onSelectSession(session)
+      if (window.innerWidth < 768 && onCloseMobile) {
+        onCloseMobile()
+      }
+    },
+    [onSelectSession, onCloseMobile],
   )
 
   // Active tab 专用：跨目录的 session 需要确保目录在项目列表中
@@ -1184,6 +1218,25 @@ export function SidePanel({
             </div>
             <div className="relative p-1 pt-1.5">
               <div className="pointer-events-none absolute inset-x-3 top-0 h-px bg-border-200/30" />
+              {/* 多服务器模式：当前「焦点服务器」— 与项目项同款样式（图标位=状态点） */}
+              {multiServerConfig.enabled && subscribedServerIds.length > 0 && (
+                <div className="group mb-1 flex w-full items-center gap-2 rounded-md bg-bg-200/40 px-2 py-1.5">
+                  <span className="relative w-5 h-5 flex items-center justify-center shrink-0">
+                    <span className="h-2 w-2 rounded-full bg-success-100" />
+                  </span>
+                  <div className="flex-1 min-w-0 text-left">
+                    <div className="text-left text-[length:var(--fs-sm)] text-text-200 truncate">
+                      {serverStore.getServer(multiServerStore.getFocusedServerId())?.name ??
+                        multiServerStore.getFocusedServerId()}
+                    </div>
+                    <div className="text-[length:var(--fs-xxs)] text-text-400 truncate opacity-70">
+                      {t('sidebar.focusServerHint', {
+                        defaultValue: '焦点服务器 · 点击列表中服务器节点切换',
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={onAddProject}
@@ -1365,7 +1418,26 @@ export function SidePanel({
               ref={recentsSelectionRootRef}
               className={`flex-1 overflow-hidden ${isEditMode ? 'select-none' : ''}`}
             >
-              {canShowFolderRecents ? (
+              {multiServerConfig.enabled ? (
+                subscribedServerIds.length > 0 ? (
+                  <MultiServerFolderList
+                    serverIds={subscribedServerIds}
+                    selectedSessionId={multiServerSelectedSessionKey}
+                    onSelectSession={handleSelectMultiServer}
+                  />
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-[length:var(--fs-xs)] text-text-400/70">
+                    <span>{t('sidebar.noSubscribedServers', { defaultValue: 'No servers subscribed yet.' })}</span>
+                    <button
+                      type="button"
+                      onClick={onOpenSettings}
+                      className="rounded-md px-2 py-1 text-[length:var(--fs-xs)] text-accent-main-100 hover:bg-accent-main-100/10 transition-colors"
+                    >
+                      {t('sidebar.openServerSettings', { defaultValue: 'Open Server Settings' })}
+                    </button>
+                  </div>
+                )
+              ) : canShowFolderRecents ? (
                 <FolderRecentList
                   projects={folderProjects}
                   {...commonFolderRecentListProps}

@@ -159,7 +159,7 @@ export async function updateProject(
 // Path API Functions
 // ============================================
 
-export async function getPath(): Promise<ApiPath> {
-  const sdk = getSDKClient()
+export async function getPath(serverId?: string): Promise<ApiPath> {
+  const sdk = getSDKClient(serverId)
   return requireRecord(unwrap(await sdk.path.get()), 'Invalid OpenCode path response') as unknown as ApiPath
 }

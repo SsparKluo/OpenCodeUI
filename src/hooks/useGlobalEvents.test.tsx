@@ -79,6 +79,7 @@ const {
 
 vi.mock('../api', () => ({
   subscribeToEvents: subscribeToEventsMock,
+  subscribeToServerEvents: (_serverId: string, cb: unknown) => subscribeToEventsMock(cb),
   getSessionStatus: getSessionStatusMock,
   getPendingPermissions: getPendingPermissionsMock,
   getPendingQuestions: getPendingQuestionsMock,
@@ -109,6 +110,8 @@ vi.mock('../store', () => ({
   paneLayoutStore: {
     getFocusedSessionId: getFocusedSessionIdMock,
     clearSession: clearPaneSessionMock,
+    allLeaves: () => [],
+    subscribe: () => () => {},
   },
   serverStore: {
     applyServerConnectedTimestamp: applyServerConnectedTimestampMock,
@@ -260,7 +263,7 @@ describe('useGlobalEvents', () => {
       callbacks = cb
       return vi.fn()
     })
-    getSessionAndDescendantsMock.mockReturnValue(['deleted-session', 'child-session'])
+    getSessionAndDescendantsMock.mockReturnValue(['local::deleted-session', 'local::child-session'])
 
     renderHook(() => useGlobalEvents())
 
@@ -268,9 +271,9 @@ describe('useGlobalEvents', () => {
 
     callbacks!.onSessionDeleted?.('deleted-session')
 
-    expect(clearSessionRuntimeStateMock).toHaveBeenCalledWith('deleted-session')
-    expect(clearPaneSessionMock).toHaveBeenCalledWith('deleted-session')
-    expect(clearPaneSessionMock).toHaveBeenCalledWith('child-session')
+    expect(clearSessionRuntimeStateMock).toHaveBeenCalledWith('local::deleted-session')
+    expect(clearPaneSessionMock).toHaveBeenCalledWith('local::deleted-session')
+    expect(clearPaneSessionMock).toHaveBeenCalledWith('local::child-session')
   })
 
   it('ignores stale initialization responses after directories change', async () => {
@@ -288,17 +291,17 @@ describe('useGlobalEvents', () => {
       initialProps: { directories: ['/one'] as string[] | undefined },
     })
 
-    await waitFor(() => expect(getSessionStatusMock).toHaveBeenCalledWith('/one'))
+    await waitFor(() => expect(getSessionStatusMock).toHaveBeenCalledWith('/one', 'local'))
 
     rerender({ directories: ['/two'] })
 
-    await waitFor(() => expect(getSessionStatusMock).toHaveBeenCalledWith('/two'))
+    await waitFor(() => expect(getSessionStatusMock).toHaveBeenCalledWith('/two', 'local'))
 
     statusDeferreds.get('/two')?.resolve({ 'new-session': { type: 'busy' } })
 
     await waitFor(() => {
       expect(activeSessionStoreMock.mergeStatusRefresh).toHaveBeenCalledTimes(1)
-      expect(activeSessionStoreMock.mergeStatusRefresh).toHaveBeenCalledWith({ 'new-session': { type: 'busy' } })
+      expect(activeSessionStoreMock.mergeStatusRefresh).toHaveBeenCalledWith({ 'local::new-session': { type: 'busy' } })
     })
 
     statusDeferreds.get('/one')?.resolve({ 'old-session': { type: 'idle' } })
@@ -306,7 +309,7 @@ describe('useGlobalEvents', () => {
     await Promise.resolve()
 
     expect(activeSessionStoreMock.mergeStatusRefresh).toHaveBeenCalledTimes(1)
-    expect(activeSessionStoreMock.mergeStatusRefresh).not.toHaveBeenCalledWith({ 'old-session': { type: 'idle' } })
+    expect(activeSessionStoreMock.mergeStatusRefresh).not.toHaveBeenCalledWith({ 'local::old-session': { type: 'idle' } })
   })
 
   it('replays pending requests that arrive while initialization is in flight', async () => {
@@ -323,7 +326,7 @@ describe('useGlobalEvents', () => {
 
     renderHook(() => useGlobalEvents(['/workspace']))
 
-    await waitFor(() => expect(getSessionStatusMock).toHaveBeenCalledWith('/workspace'))
+    await waitFor(() => expect(getSessionStatusMock).toHaveBeenCalledWith('/workspace', 'local'))
     await waitFor(() => expect(callbacks).toBeDefined())
 
     callbacks!.onPermissionAsked?.({
@@ -340,14 +343,14 @@ describe('useGlobalEvents', () => {
     expect(activeSessionStoreMock.addPendingRequest).toHaveBeenNthCalledWith(
       1,
       'perm-1',
-      'child-session',
+      'local::child-session',
       'permission',
       'edit: src/app.tsx',
     )
     expect(activeSessionStoreMock.addPendingRequest).toHaveBeenNthCalledWith(
       2,
       'perm-1',
-      'child-session',
+      'local::child-session',
       'permission',
       'edit: src/app.tsx',
     )
@@ -362,8 +365,8 @@ describe('useGlobalEvents', () => {
       return vi.fn()
     })
     activeSessionStoreMock.getSessionMeta.mockImplementation((sessionId?: string) => {
-      if (sessionId === 'child-session') return { title: 'Child Session', directory: '/one' }
-      if (sessionId === 'question-session') return { title: 'Question Session', directory: '/two' }
+      if (sessionId === 'local::child-session') return { title: 'Child Session', directory: '/one' }
+      if (sessionId === 'local::question-session') return { title: 'Question Session', directory: '/two' }
       return { title: 'Session', directory: '/workspace' }
     })
     getSessionStatusMock.mockImplementation(directory => {
@@ -379,7 +382,7 @@ describe('useGlobalEvents', () => {
       initialProps: { directories: ['/one'] as string[] | undefined },
     })
 
-    await waitFor(() => expect(getSessionStatusMock).toHaveBeenCalledWith('/one'))
+    await waitFor(() => expect(getSessionStatusMock).toHaveBeenCalledWith('/one', 'local'))
     await waitFor(() => expect(callbacks).toBeDefined())
 
     callbacks!.onPermissionAsked?.({
@@ -391,7 +394,7 @@ describe('useGlobalEvents', () => {
 
     rerender({ directories: ['/two'] })
 
-    await waitFor(() => expect(getSessionStatusMock).toHaveBeenCalledWith('/two'))
+    await waitFor(() => expect(getSessionStatusMock).toHaveBeenCalledWith('/two', 'local'))
 
     callbacks!.onQuestionAsked?.({
       id: 'question-1',
@@ -413,9 +416,9 @@ describe('useGlobalEvents', () => {
       callbacks = cb
       return vi.fn()
     })
-    getFocusedSessionIdMock.mockReturnValue('parent-session')
+    getFocusedSessionIdMock.mockReturnValue('local::parent-session')
     childBelongsToSessionMock.mockImplementation((sessionId: string, rootSessionId: string) => {
-      return sessionId === 'child-session' && rootSessionId === 'parent-session'
+      return sessionId === 'local::child-session' && rootSessionId === 'local::parent-session'
     })
 
     renderHook(() => useGlobalEvents())
@@ -463,12 +466,12 @@ describe('useGlobalEvents', () => {
       requestID: 'question-1',
     })
 
-    getFocusedSessionIdMock.mockReturnValue('parent-session')
+    getFocusedSessionIdMock.mockReturnValue('local::parent-session')
     childBelongsToSessionMock.mockImplementation((sessionId: string, rootSessionId: string) => {
-      return sessionId === 'child-session' && rootSessionId === 'parent-session'
+      return sessionId === 'local::child-session' && rootSessionId === 'local::parent-session'
     })
 
-    const unregister = registerSessionConsumer('pane-1', 'parent-session', {
+    const unregister = registerSessionConsumer('pane-1', 'local::parent-session', {
       onQuestionAsked: consumerAskedMock,
     })
 
@@ -481,7 +484,7 @@ describe('useGlobalEvents', () => {
 
     expect(consumerAskedMock).toHaveBeenCalledTimes(1)
     expect(consumerAskedMock).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'question-2', sessionID: 'child-session' }),
+      expect.objectContaining({ id: 'question-2', sessionID: 'local::child-session' }),
     )
 
     unregister()
@@ -489,7 +492,7 @@ describe('useGlobalEvents', () => {
 
   it('approves already waiting permissions when global full auto pending sweep is enabled', async () => {
     const consumerRepliedMock = vi.fn()
-    const unregister = registerSessionConsumer('pane-global', 'background-session', {
+    const unregister = registerSessionConsumer('pane-global', 'local::background-session', {
       onPermissionReplied: consumerRepliedMock,
     })
     autoApproveStoreMock.fullAutoMode = 'global'
@@ -513,11 +516,12 @@ describe('useGlobalEvents', () => {
         undefined,
         '/workspace',
         'background-session',
+        'local',
       )
     })
     expect(autoApproveStoreMock.claimAutoReply).toHaveBeenCalledWith('perm-global')
     await waitFor(() => {
-      expect(consumerRepliedMock).toHaveBeenCalledWith({ sessionID: 'background-session', requestID: 'perm-global' })
+      expect(consumerRepliedMock).toHaveBeenCalledWith({ sessionID: 'local::background-session', requestID: 'perm-global' })
     })
     expect(activeSessionStoreMock.resolvePendingRequest).toHaveBeenCalledWith('perm-global')
 
@@ -526,7 +530,7 @@ describe('useGlobalEvents', () => {
 
   it('broadcasts permission replied events to consumers even when the current session does not match', async () => {
     const consumerRepliedMock = vi.fn()
-    const unregister = registerSessionConsumer('pane-mismatch', 'other-session', {
+    const unregister = registerSessionConsumer('pane-mismatch', 'local::other-session', {
       onPermissionReplied: consumerRepliedMock,
     })
     autoApproveStoreMock.fullAutoMode = 'global'
@@ -550,10 +554,11 @@ describe('useGlobalEvents', () => {
         undefined,
         '/workspace',
         'background-session',
+        'local',
       )
     })
     await waitFor(() => {
-      expect(consumerRepliedMock).toHaveBeenCalledWith({ sessionID: 'background-session', requestID: 'perm-mismatch' })
+      expect(consumerRepliedMock).toHaveBeenCalledWith({ sessionID: 'local::background-session', requestID: 'perm-mismatch' })
     })
 
     unregister()
@@ -583,7 +588,7 @@ describe('useGlobalEvents', () => {
       callbacks = cb
       return vi.fn()
     })
-    getFocusedSessionIdMock.mockReturnValue('child-session')
+    getFocusedSessionIdMock.mockReturnValue('local::child-session')
 
     renderHook(() => useGlobalEvents())
 
@@ -606,7 +611,7 @@ describe('useGlobalEvents', () => {
       callbacks = cb
       return vi.fn()
     })
-    getFocusedSessionIdMock.mockReturnValue('child-session')
+    getFocusedSessionIdMock.mockReturnValue('local::child-session')
     isSystemEnabledMock.mockImplementation(type => type !== 'permission')
 
     renderHook(() => useGlobalEvents())
@@ -630,9 +635,9 @@ describe('useGlobalEvents', () => {
       callbacks = cb
       return vi.fn()
     })
-    getFocusedSessionIdMock.mockReturnValue('child-session')
+    getFocusedSessionIdMock.mockReturnValue('local::child-session')
     autoApproveStoreMock.getPaneFullAutoMode.mockImplementation(paneId => (paneId === 'test-pane' ? 'session' : 'off'))
-    const unregister = registerSessionConsumer('test-pane', 'child-session', {})
+    const unregister = registerSessionConsumer('test-pane', 'local::child-session', {})
 
     renderHook(() => useGlobalEvents())
 
@@ -658,11 +663,11 @@ describe('useGlobalEvents', () => {
       return vi.fn()
     })
     childBelongsToSessionMock.mockImplementation((sessionId, rootSessionId) => {
-      return sessionId === 'child-session' && rootSessionId === 'parent-session'
+      return sessionId === 'local::child-session' && rootSessionId === 'local::parent-session'
     })
-    getFocusedSessionIdMock.mockReturnValue('child-session')
+    getFocusedSessionIdMock.mockReturnValue('local::child-session')
     autoApproveStoreMock.getPaneFullAutoMode.mockImplementation(paneId => (paneId === 'test-pane' ? 'session' : 'off'))
-    const unregister = registerSessionConsumer('test-pane', 'parent-session', {})
+    const unregister = registerSessionConsumer('test-pane', 'local::parent-session', {})
 
     renderHook(() => useGlobalEvents())
 
@@ -687,10 +692,10 @@ describe('useGlobalEvents', () => {
       callbacks = cb
       return vi.fn()
     })
-    getFocusedSessionIdMock.mockReturnValue('other-session')
+    getFocusedSessionIdMock.mockReturnValue('local::other-session')
     autoApproveStoreMock.getPaneFullAutoMode.mockImplementation(paneId => (paneId === 'auto-pane' ? 'session' : 'off'))
-    const unregisterAutoPane = registerSessionConsumer('auto-pane', 'auto-session', {})
-    const unregisterOtherPane = registerSessionConsumer('other-pane', 'other-session', {})
+    const unregisterAutoPane = registerSessionConsumer('auto-pane', 'local::auto-session', {})
+    const unregisterOtherPane = registerSessionConsumer('other-pane', 'local::other-session', {})
 
     renderHook(() => useGlobalEvents())
 
@@ -729,7 +734,7 @@ describe('useGlobalEvents', () => {
       disabledType: 'completed',
       trigger: 'onSessionStatus',
       beforeTrigger: () => {
-        activeSessionStoreMock.getSnapshot.mockReturnValue({ statusMap: { 'background-session': { type: 'busy' } } })
+        activeSessionStoreMock.getSnapshot.mockReturnValue({ statusMap: { 'local::background-session': { type: 'busy' } } })
       },
       payload: { sessionID: 'background-session', status: { type: 'idle' } },
     },

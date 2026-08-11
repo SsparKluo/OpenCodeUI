@@ -48,9 +48,10 @@ async function isPermissionStillPending(
   requestId: string,
   directory?: string,
   sessionId?: string,
+  serverId?: string,
 ): Promise<boolean | undefined> {
   try {
-    const pending = await getPendingPermissions(sessionId, directory)
+    const pending = await getPendingPermissions(sessionId, directory, serverId)
     return pending.some(request => request.id === requestId)
   } catch {
     return undefined
@@ -76,7 +77,7 @@ async function withRetry<T>(fn: () => Promise<T>, retries = MAX_RETRIES, delay =
   throw lastError
 }
 
-export function usePermissionHandler(): UsePermissionHandlerResult {
+export function usePermissionHandler(serverId: string): UsePermissionHandlerResult {
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<ApiPermissionRequest[]>([])
   const [pendingQuestionRequests, setPendingQuestionRequests] = useState<ApiQuestionRequest[]>([])
   const [isReplying, setIsReplying] = useState(false)
@@ -96,14 +97,14 @@ export function usePermissionHandler(): UsePermissionHandlerResult {
       setIsReplying(true)
 
       try {
-        await withRetry(() => replyPermission(requestId, reply, undefined, directory, sessionId))
+        await withRetry(() => replyPermission(requestId, reply, undefined, directory, sessionId, serverId))
         setPendingPermissionRequests(prev =>
           prev.some(r => r.id === requestId) ? prev.filter(r => r.id !== requestId) : prev,
         )
         activeSessionStore.resolvePendingRequest(requestId)
         return true
       } catch (error) {
-        const stillPending = await isPermissionStillPending(requestId, directory, sessionId)
+        const stillPending = await isPermissionStillPending(requestId, directory, sessionId, serverId)
         if (stillPending === false) {
           setPendingPermissionRequests(prev =>
             prev.some(r => r.id === requestId) ? prev.filter(r => r.id !== requestId) : prev,
@@ -134,7 +135,7 @@ export function usePermissionHandler(): UsePermissionHandlerResult {
       setIsReplying(true)
 
       try {
-        await withRetry(() => replyQuestion(requestId, answers, directory))
+        await withRetry(() => replyQuestion(requestId, answers, directory, serverId))
         setPendingQuestionRequests(prev => prev.filter(r => r.id !== requestId))
         activeSessionStore.resolvePendingRequest(requestId)
         return true
@@ -160,7 +161,7 @@ export function usePermissionHandler(): UsePermissionHandlerResult {
     setIsReplying(true)
 
     try {
-      await withRetry(() => rejectQuestion(requestId, directory))
+      await withRetry(() => rejectQuestion(requestId, directory, serverId))
       setPendingQuestionRequests(prev => prev.filter(r => r.id !== requestId))
       activeSessionStore.resolvePendingRequest(requestId)
       return true
@@ -184,8 +185,8 @@ export function usePermissionHandler(): UsePermissionHandlerResult {
 
       // 只请求一次全量数据（不按 sessionId 分别请求）
       const [allPermissions, allQuestions] = await Promise.all([
-        getPendingPermissions(undefined, directory).catch(() => []),
-        getPendingQuestions(undefined, directory).catch(() => []),
+        getPendingPermissions(undefined, directory, serverId).catch(() => []),
+        getPendingQuestions(undefined, directory, serverId).catch(() => []),
       ])
 
       const nextPermissions =
@@ -213,7 +214,7 @@ export function usePermissionHandler(): UsePermissionHandlerResult {
     } catch (error) {
       permissionErrorHandler('refresh pending requests', error)
     }
-  }, [])
+  }, [serverId])
 
   const resetPendingRequests = useCallback(() => {
     setPendingPermissionRequests([])

@@ -98,11 +98,14 @@ describe('useSessions', () => {
       await Promise.resolve()
     })
 
-    expect(getSessionsMock).toHaveBeenCalledWith({
-      roots: true,
-      limit: 20,
-      directory: '/workspace/demo',
-    })
+    expect(getSessionsMock).toHaveBeenCalledWith(
+      {
+        roots: true,
+        limit: 20,
+        directory: '/workspace/demo',
+      },
+      undefined,
+    )
   })
 
   it('passes the scoped directory when removing a session', async () => {
@@ -121,7 +124,7 @@ describe('useSessions', () => {
       await result.current.remove('session-1')
     })
 
-    expect(deleteSessionMock).toHaveBeenCalledWith('session-1', '/workspace/demo')
+    expect(deleteSessionMock).toHaveBeenCalledWith('session-1', '/workspace/demo', undefined)
   })
 
   it('adds matching sessions from realtime events immediately', async () => {

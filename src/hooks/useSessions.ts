@@ -4,6 +4,7 @@ import {
   createSession,
   deleteSession,
   subscribeToEvents,
+  subscribeToServerEvents,
   type ApiSession,
   type SessionListParams,
 } from '../api'
@@ -22,6 +23,8 @@ interface UseSessionsOptions {
   directory?: string
   /** 延迟启用，用于懒加载 */
   enabled?: boolean
+  /** 指定服务器（缺省用活动服务器）。多服务器模式下每个服务器一个实例 */
+  serverId?: string
 }
 
 interface UseSessionsResult {
@@ -48,7 +51,7 @@ interface UseSessionsResult {
 }
 
 export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult {
-  const { pageSize = 20, initialSearch = '', rootsOnly = true, directory, enabled = true } = options
+  const { pageSize = 20, initialSearch = '', rootsOnly = true, directory, enabled = true, serverId } = options
 
   // 标准化 directory 路径 (移除末尾斜杠，统一正斜杠)
   const normalizedDirectory = directory ? directory.replace(/\\/g, '/').replace(/\/$/, '') : undefined
@@ -103,12 +106,15 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
       }
 
       try {
-        const data = await getSessions({
-          roots: rootsOnly,
-          limit: currentLimitRef.current,
-          directory: normalizedDirectory,
-          ...queryParams,
-        })
+        const data = await getSessions(
+          {
+            roots: rootsOnly,
+            limit: currentLimitRef.current,
+            directory: normalizedDirectory,
+            ...queryParams,
+          },
+          serverId,
+        )
 
         // 检查是否是最新的请求
         if (requestId !== requestIdRef.current) return
@@ -147,7 +153,7 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
         }
       }
     },
-    [rootsOnly, normalizedDirectory, enabled],
+    [rootsOnly, normalizedDirectory, enabled, serverId],
   )
 
   fetchSessionsRef.current = fetchSessions
@@ -188,7 +194,11 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
   useEffect(() => {
     if (!enabled) return
 
-    const unsubscribe = subscribeToEvents({
+    const subscribe = serverId
+      ? (cb: Parameters<typeof subscribeToServerEvents>[1]) => subscribeToServerEvents(serverId, cb)
+      : subscribeToEvents
+
+    const unsubscribe = subscribe({
       onSessionCreated: session => {
         if (session.parentID) return
         if (!matchesDirectory(session)) return
@@ -245,17 +255,20 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
     })
 
     return unsubscribe
-  }, [enabled, matchesDirectory, pageSize])
+  }, [enabled, matchesDirectory, pageSize, serverId])
 
   useEffect(() => {
     if (!enabled) return
+
+    // 固定服务器订阅（多服务器模式）：不随 active server 切换刷新
+    if (serverId) return
 
     return serverStore.onServerChange(() => {
       currentLimitRef.current = pageSize
       setSessions([])
       void fetchSessionsRef.current({ search: searchRef.current || undefined })
     })
-  }, [enabled, pageSize])
+  }, [enabled, pageSize, serverId])
 
   // 加载更多：递增 limit 重新拉取完整列表（与 SessionContext 一致）
   const loadMore = useCallback(async () => {
@@ -278,10 +291,13 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
   const create = useCallback(
     async (title?: string) => {
       // 创建时也要传 directory
-      const newSession = await createSession({
-        title,
-        directory: normalizedDirectory,
-      })
+      const newSession = await createSession(
+        {
+          title,
+          directory: normalizedDirectory,
+        },
+        serverId,
+      )
 
       if (searchRef.current) {
         void fetchSessionsRef.current({ search: searchRef.current || undefined })
@@ -294,17 +310,17 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
 
       return newSession
     },
-    [normalizedDirectory],
+    [normalizedDirectory, serverId],
   )
 
   // 删除会话
   const remove = useCallback(
     async (sessionId: string) => {
-      await deleteSession(sessionId, normalizedDirectory)
+      await deleteSession(sessionId, normalizedDirectory, serverId)
       pinnedSessionsStore.unpin(sessionId)
       setSessions(prev => prev.filter(s => s.id !== sessionId))
     },
-    [normalizedDirectory],
+    [normalizedDirectory, serverId],
   )
 
   const patchLocalSession = useCallback((sessionId: string, patch: Partial<ApiSession>) => {

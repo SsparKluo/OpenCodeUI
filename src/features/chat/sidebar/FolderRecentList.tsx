@@ -38,6 +38,10 @@ export interface FolderRecentProject {
 
 interface FolderRecentListProps {
   projects: FolderRecentProject[]
+  /** 数据服务器（多服务器模式；缺省用活动服务器） */
+  serverId?: string
+  /** 嵌套模式（多服务器服务器节点下）：外层负责滚动，本组件不设滚动容器/内边距 */
+  embedded?: boolean
   currentDirectory?: string
   selectedSessionId: string | null
   expandedProjectIds: string[]
@@ -186,7 +190,7 @@ function toggleProjectId(prev: string[], projectId: string) {
   return prev.includes(projectId) ? prev.filter(id => id !== projectId) : [...prev, projectId]
 }
 
-function createDirectoryProject(directory: string, sectionKind: FolderRecentProject['sectionKind'] = 'project') {
+export function createDirectoryProject(directory: string, sectionKind: FolderRecentProject['sectionKind'] = 'project') {
   return {
     id: directory,
     worktree: directory,
@@ -195,7 +199,7 @@ function createDirectoryProject(directory: string, sectionKind: FolderRecentProj
   } satisfies FolderRecentProject
 }
 
-function useCollapseExpandedIdsOnDrag(
+export function useCollapseExpandedIdsOnDrag(
   expandedIds: string[],
   setExpandedIds: React.Dispatch<React.SetStateAction<string[]>>,
 ) {
@@ -228,7 +232,7 @@ interface UseReorderableListOptions {
   onDragFinished?: () => void
 }
 
-function useReorderableList({ ids, canDrag, onCommit, onDragActivated, onDragFinished }: UseReorderableListOptions) {
+export function useReorderableList({ ids, canDrag, onCommit, onDragActivated, onDragFinished }: UseReorderableListOptions) {
   const refs = useRef<Map<string, HTMLDivElement>>(new Map())
   const [dragState, setDragState] = useState<ReorderState | null>(null)
   const dragStartY = useRef(0)
@@ -413,6 +417,8 @@ function useReorderableList({ ids, canDrag, onCommit, onDragActivated, onDragFin
 
 export function FolderRecentList({
   projects,
+  serverId,
+  embedded = false,
   currentDirectory,
   selectedSessionId,
   expandedProjectIds,
@@ -521,7 +527,9 @@ export function FolderRecentList({
 
   return (
     <>
-      <div className="h-full overflow-y-auto custom-scrollbar px-1.5 py-1 select-none">
+      <div
+        className={`custom-scrollbar select-none ${embedded ? '' : 'h-full overflow-y-auto px-1.5 py-1'}`}
+      >
         {projects.length === 0 && pinnedSessions.length === 0 && unavailablePinnedEntries.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center text-text-400 opacity-70">
             <p className="text-[length:var(--fs-sm)] font-medium text-text-300">{t('sidebar.noProjectFoldersYet')}</p>
@@ -574,6 +582,7 @@ export function FolderRecentList({
                 <FolderRecentSection
                   key={project.id}
                   project={project}
+                  serverId={serverId}
                   isExpanded={isExpanded}
                   folderStatus={folderStatusByProjectId.get(project.id) ?? null}
                   preferTouchUi={preferTouchUi}
@@ -779,6 +788,8 @@ function UnavailablePinnedSessionItem({ entry }: { entry: PinnedSessionEntry }) 
 
 interface FolderRecentSectionProps {
   project: FolderRecentProject
+  /** 数据服务器（多服务器模式；缺省用活动服务器） */
+  serverId?: string
   isExpanded: boolean
   folderStatus: FolderStatus | null
   preferTouchUi: boolean
@@ -821,6 +832,7 @@ interface FolderRecentSectionProps {
 
 function FolderRecentSection({
   project,
+  serverId,
   isExpanded,
   folderStatus,
   preferTouchUi,
@@ -861,7 +873,10 @@ function FolderRecentSection({
   const shouldRenderBody = useDelayedRender(isExpanded)
   const hasWorkspaceTree = workspaceDirectories.length > 0
   const workspaceFallbackName = getDirectoryName(project.worktree) || project.worktree
-  const { vcsInfo, isLoading: isBranchLoading } = useVcsInfo(sectionKind === 'workspace' ? project.worktree : undefined)
+  const isRemoteServer = !!serverId && serverId !== 'local'
+  const { vcsInfo, isLoading: isBranchLoading } = useVcsInfo(
+    isRemoteServer ? undefined : sectionKind === 'workspace' ? project.worktree : undefined,
+  )
 
   useEffect(() => {
     if (isExpanded && inView) {
@@ -874,6 +889,7 @@ function FolderRecentSection({
     directory: project.worktree,
     pageSize: DIRECTORY_PAGE_SIZE,
     enabled: hasActivated && !hasWorkspaceTree,
+    serverId,
   })
   const pinnedEntries = useSyncExternalStore(
     pinnedSessionsStore.subscribe,

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, memo } from 'react'
 import { SidePanel } from './sidebar/SidePanel'
 import { ProjectDialog } from './ProjectDialog'
+import { useMultiServerStore, multiServerStore } from '../../store/multiServerStore'
 import { useDirectory } from '../../hooks'
 import { type ApiSession } from '../../api'
 import { useChatViewport } from './chatViewport'
@@ -59,14 +60,20 @@ export const Sidebar = memo(function Sidebar({
   const rafRef = useRef<number>(0)
   const transitionResizeTimerRef = useRef<number | null>(null)
 
+  const multiServerConfig = useMultiServerStore()
   const handleAddProject = useCallback(
     (path: string) => {
-      addDirectory(path)
+      if (multiServerConfig.enabled) {
+        // 多服务器模式：添加到「焦点服务器」的工作区（项目管理面板支持服务器焦点）
+        multiServerStore.addServerWorkspace(multiServerStore.getFocusedServerId(), path)
+      } else {
+        addDirectory(path)
+      }
       if (!isOverlay) {
         onOpen()
       }
     },
-    [addDirectory, isOverlay, onOpen],
+    [addDirectory, isOverlay, onOpen, multiServerConfig.enabled],
   )
 
   const openProjectDialog = useCallback(() => {
@@ -302,6 +309,7 @@ export const Sidebar = memo(function Sidebar({
             onClose={closeProjectDialog}
             onSelect={handleAddProject}
             initialPath={projectDialogInitialPath}
+            serverId={multiServerConfig.enabled ? multiServerStore.getFocusedServerId() : undefined}
           />
         </>
       )
@@ -357,6 +365,7 @@ export const Sidebar = memo(function Sidebar({
           onClose={closeProjectDialog}
           onSelect={handleAddProject}
           initialPath={projectDialogInitialPath}
+          serverId={multiServerConfig.enabled ? multiServerStore.getFocusedServerId() : undefined}
         />
       </>
     )
@@ -411,6 +420,7 @@ export const Sidebar = memo(function Sidebar({
         onClose={closeProjectDialog}
         onSelect={handleAddProject}
         initialPath={projectDialogInitialPath}
+        serverId={multiServerConfig.enabled ? multiServerStore.getFocusedServerId() : undefined}
       />
     </>
   )

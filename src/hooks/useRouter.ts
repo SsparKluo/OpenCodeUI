@@ -4,15 +4,16 @@ import { STORAGE_KEY_LAST_DIRECTORY } from '../constants/storage'
 import { useIsMobile } from './useIsMobile'
 
 /**
- * Hash 路由，支持 directory 参数
- * 格式: #/session/{sessionId}?dir={path} 或 #/?dir={path}
+ * Hash 路由。sessionId 使用「服务器作用域复合 key」（serverId::sessionId），
+ * 直接在 URL 中携带服务器身份，不再需要独立 server 参数，避免参数与
+ * pane 实际状态不一致导致的 URL 振荡。
  *
- * 这里使用模块级 route store，而不是每个 useRouter() 各自 useState。
- * 原因：App、DirectoryProvider、Settings 都会消费路由；如果各自持有本地 state，
- * replaceState 只会更新当前实例，其他实例看不到，导致侧边栏目录/项目高亮错乱。
+ * 格式: #/session/{serverId}::{sessionId}?dir={path} 或 #/?dir={path}
+ * 旧格式（无 :: 前缀的原始 sessionId）自动兼容：视为活动服务器。
  */
 
 interface RouteState {
+  /** 服务器作用域复合 key（serverId::sessionId）或 null */
   sessionId: string | null
   directory: string | undefined
 }
@@ -121,11 +122,11 @@ export function useRouter() {
     isMobileRef.current = isMobile
   }, [isMobile])
 
-  const navigateToSession = useCallback((sessionId: string, directory?: string) => {
+  const navigateToSession = useCallback((sessionKey: string, directory?: string) => {
     const currentRoute = getSnapshot()
     const dir = directory !== undefined ? normalizeToForwardSlash(directory) || undefined : currentRoute.directory
-    const next = { sessionId, directory: dir }
-    const newHash = buildHash(sessionId, dir)
+    const next = { sessionId: sessionKey, directory: dir }
+    const newHash = buildHash(sessionKey, dir)
     if (isMobileRef.current) {
       window.history.replaceState(null, '', newHash)
     } else {
@@ -146,12 +147,12 @@ export function useRouter() {
     emitRoute(next)
   }, [])
 
-  const replaceSession = useCallback((sessionId: string | null, directory?: string) => {
+  const replaceSession = useCallback((sessionKey: string | null, directory?: string) => {
     const currentRoute = getSnapshot()
     const dir = directory !== undefined ? normalizeToForwardSlash(directory) || undefined : currentRoute.directory
-    const newHash = buildHash(sessionId, dir)
+    const newHash = buildHash(sessionKey, dir)
     window.history.replaceState(null, '', newHash)
-    emitRoute({ sessionId, directory: dir })
+    emitRoute({ sessionId: sessionKey, directory: dir })
   }, [])
 
   const setDirectory = useCallback((directory: string | undefined) => {

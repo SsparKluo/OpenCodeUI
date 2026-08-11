@@ -17,12 +17,12 @@ function isRootDirectoryPath(path: string): boolean {
   return path === '' || path === '.' || path === './'
 }
 
-function getRootDirectoryCacheKey(directory?: string): string {
-  return `${serverStore.getActiveServerId()}::${formatPathForApi(directory) ?? ''}`
+function getRootDirectoryCacheKey(directory?: string, serverId?: string): string {
+  return `${serverId ?? serverStore.getActiveServerId()}::${formatPathForApi(directory) ?? ''}`
 }
 
-async function fetchDirectory(path: string, directory?: string): Promise<FileNode[]> {
-  const sdk = getSDKClient()
+async function fetchDirectory(path: string, directory?: string, serverId?: string): Promise<FileNode[]> {
+  const sdk = getSDKClient(serverId)
   const isAbsolute = /^[a-zA-Z]:/.test(path) || path.startsWith('/')
 
   if (isAbsolute && !directory) {
@@ -57,12 +57,12 @@ export async function searchFiles(
 /**
  * 列出目录内容
  */
-export async function listDirectory(path: string, directory?: string): Promise<FileNode[]> {
+export async function listDirectory(path: string, directory?: string, serverId?: string): Promise<FileNode[]> {
   if (!isRootDirectoryPath(path)) {
-    return fetchDirectory(path, directory)
+    return fetchDirectory(path, directory, serverId)
   }
 
-  const key = getRootDirectoryCacheKey(directory)
+  const key = getRootDirectoryCacheKey(directory, serverId)
   const now = Date.now()
   const cached = rootDirectoryCache.get(key)
   if (cached && cached.expiresAt > now) {
@@ -74,7 +74,7 @@ export async function listDirectory(path: string, directory?: string): Promise<F
     return inflight
   }
 
-  const request = fetchDirectory(path === '' ? '.' : path, directory)
+  const request = fetchDirectory(path === '' ? '.' : path, directory, serverId)
     .then(data => {
       rootDirectoryCache.set(key, { data, expiresAt: Date.now() + ROOT_DIRECTORY_CACHE_TTL_MS })
       return data
@@ -87,8 +87,8 @@ export async function listDirectory(path: string, directory?: string): Promise<F
   return request
 }
 
-export async function prefetchRootDirectory(directory?: string): Promise<void> {
-  await listDirectory('.', directory)
+export async function prefetchRootDirectory(directory?: string, serverId?: string): Promise<void> {
+  await listDirectory('.', directory, serverId)
 }
 
 /**
