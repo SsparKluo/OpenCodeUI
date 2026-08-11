@@ -103,10 +103,13 @@ export const RightPanel = memo(function RightPanel({
 
       return (
         <>
-          {/* Keep files mounted so expanded folders and previews survive tab switches. */}
+          {/* Keep files mounted so expanded folders and previews survive tab switches.
+              切换服务器（serverId 变化）时重挂载：文件树展开/选中/预览整体重置，
+              与单服务器模式切换工作区的"侧边栏整个变"体验一致 */}
           <div className={activeTab.type === 'files' ? 'h-full' : 'hidden'}>
             <Suspense fallback={<PanelFallback />}>
               <FilesContent
+                key={serverId ?? 'default'}
                 activeTab={activeTab}
                 directory={normalizedDirectory}
                 isPanelResizing={isPanelResizing}
@@ -120,6 +123,7 @@ export const RightPanel = memo(function RightPanel({
             <div className={activeTab.type === 'changes' ? 'h-full' : 'hidden'}>
               <Suspense fallback={<PanelFallback />}>
                 <ChangesContent
+                  key={serverId ?? 'default'}
                   activeTab={activeTab}
                   directory={normalizedDirectory}
                   sessionId={sessionId}
