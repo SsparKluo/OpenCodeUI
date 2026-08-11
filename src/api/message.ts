@@ -68,14 +68,6 @@ export async function getSessionMessages(
   )
 }
 
-/**
- * 获取 session 的消息数量
- */
-export async function getSessionMessageCount(sessionId: string, serverId?: string): Promise<number> {
-  const messages = await getSessionMessages(sessionId, undefined, undefined, serverId)
-  return messages.length
-}
-
 // ============================================
 // Message Content Extraction
 // ============================================
