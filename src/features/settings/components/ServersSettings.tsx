@@ -533,7 +533,7 @@ export function ServersSettings() {
   const { t } = useTranslation(['settings', 'common'])
   const [addingServer, setAddingServer] = useState(false)
   const multiServerConfig = useMultiServerStore()
-  const subscribedCount = multiServerStore.getSubscribedServerIds().length
+  const subscribedCount = multiServerConfig.subscribedServerIds.length
   const {
     servers,
     activeServer,

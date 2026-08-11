@@ -374,7 +374,7 @@ async function connectViaTauri(conn: ServerConnection) {
           // 每次连接成功都通知订阅者刷新数据
           // 覆盖场景：首次连接（先开 UI 后开 server）、网络重连、服务器切换
           const reason = serverSwitchFlags.get(serverId) ? ('server-switch' as const) : ('network' as const)
-          serverSwitchFlags.set(serverId, false)
+          serverSwitchFlags.delete(serverId)
           broadcastReconnected(conn, reason)
           break
         }
@@ -486,7 +486,7 @@ function connectViaBrowser(conn: ServerConnection) {
       // 每次连接成功都通知订阅者刷新数据
       // 覆盖场景：首次连接（先开 UI 后开 server）、网络重连、服务器切换
       const reason = serverSwitchFlags.get(serverId) ? ('server-switch' as const) : ('network' as const)
-      serverSwitchFlags.set(serverId, false)
+      serverSwitchFlags.delete(serverId)
       broadcastReconnected(conn, reason)
 
       const reader = response.body?.getReader()
