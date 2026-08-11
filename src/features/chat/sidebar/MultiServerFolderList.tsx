@@ -167,6 +167,10 @@ function ServerFolderGroup({
   )
 
   const displayName = server?.name ?? serverId
+  // 非焦点服务器不传全局 currentDirectory：避免 FolderRecentList 的 reconcile effect
+  // 用焦点服务器的目录强制展开/高亮本服务器同路径文件夹（焦点变化时由父级重渲染驱动重新计算）
+  const isFocusedServer = multiServerStore.getFocusedServerId() === serverId
+  const effectiveCurrentDirectory = isFocusedServer ? currentDirectory : undefined
 
   return (
     <div
@@ -229,7 +233,7 @@ function ServerFolderGroup({
             key={serverId}
             serverId={serverId}
             projects={projects}
-              currentDirectory={currentDirectory}
+              currentDirectory={effectiveCurrentDirectory}
               selectedSessionId={localSelectedSessionId}
               expandedProjectIds={expandedProjectIds}
               onExpandedProjectIdsChange={setExpandedProjectIds}
