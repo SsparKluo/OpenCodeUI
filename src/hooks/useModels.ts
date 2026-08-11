@@ -1,13 +1,14 @@
-import { useSyncExternalStore, useCallback } from 'react'
+import { useSyncExternalStore, useCallback, useEffect } from 'react'
 import { getActiveModels, type ModelInfo } from '../api'
 import { getSDKClientAsync } from '../api/sdk'
 import { serverStore } from '../store/serverStore'
 
 // ============================================
-// Global singleton so every ChatPane shares one models array.
-// Prevents duplicate API requests and the race condition where a
-// late-mounting pane sees an empty models list, falls back to
-// models[0], and overwrites the persisted model selection.
+// Per-server models cache — 每个服务器独立维护模型列表。
+//
+// 多服务器模式：每个 pane 绑定自己的服务器，模型选择器必须显示
+// 该 pane 服务器的模型（而不是活动服务器的）。
+// 单例缓存避免重复 API 请求与"后挂载 pane 看到空列表"的竞态。
 // ============================================
 
 interface ModelsState {
@@ -18,56 +19,66 @@ interface ModelsState {
 
 type Listener = () => void
 
-let _state: ModelsState = { models: [], isLoading: true, error: null }
-let _fetchPromise: Promise<void> | null = null
-let _fetchGeneration = 0
+const _states = new Map<string, ModelsState>()
+const _fetchPromises = new Map<string, Promise<void> | null>()
+const _fetchGenerations = new Map<string, number>()
 const _listeners = new Set<Listener>()
+
+function _getState(serverId: string): ModelsState {
+  return _states.get(serverId) ?? { models: [], isLoading: true, error: null }
+}
 
 function _notify() {
   for (const fn of _listeners) fn()
 }
 
-function _setState(patch: Partial<ModelsState>) {
-  _state = { ..._state, ...patch }
+function _setState(serverId: string, patch: Partial<ModelsState>) {
+  const next = { ..._getState(serverId), ...patch }
+  _states.set(serverId, next)
   _notify()
 }
 
-async function _fetchModels(force = false) {
-  if (_fetchPromise && !force) return _fetchPromise
+async function _fetchModels(serverId: string, force = false) {
+  const existing = _fetchPromises.get(serverId)
+  if (existing && !force) return existing
 
-  const generation = ++_fetchGeneration
+  const generation = (_fetchGenerations.get(serverId) ?? 0) + 1
+  _fetchGenerations.set(serverId, generation)
 
-  _fetchPromise = (async () => {
-    _setState({ isLoading: true, error: null })
+  const promise = (async () => {
+    _setState(serverId, { isLoading: true, error: null })
     try {
-      await getSDKClientAsync()
-      const data = await getActiveModels()
-      if (generation === _fetchGeneration) {
-        _setState({ models: data, isLoading: false })
+      await getSDKClientAsync(serverId)
+      const data = await getActiveModels(undefined, serverId)
+      if (generation === _fetchGenerations.get(serverId)) {
+        _setState(serverId, { models: data, isLoading: false })
       }
     } catch (e) {
-      if (generation === _fetchGeneration) {
-        _setState({ error: e instanceof Error ? e : new Error('Failed to fetch models'), isLoading: false })
+      if (generation === _fetchGenerations.get(serverId)) {
+        _setState(serverId, { error: e instanceof Error ? e : new Error('Failed to fetch models'), isLoading: false })
       }
     } finally {
-      if (generation === _fetchGeneration) {
-        _fetchPromise = null
+      if (generation === _fetchGenerations.get(serverId)) {
+        _fetchPromises.set(serverId, null)
       }
     }
   })()
 
-  return _fetchPromise
+  _fetchPromises.set(serverId, promise)
+  return promise
 }
 
-export function refreshModels() {
-  return _fetchModels(true)
+/** 强制刷新指定服务器（缺省 = 活动服务器）的模型列表 */
+export function refreshModels(serverId?: string) {
+  const sid = serverId ?? serverStore.getActiveServerId()
+  return _fetchModels(sid, true)
 }
 
-// First fetch on module load — models are ready before any component mounts.
-_fetchModels()
+// 预取活动服务器的模型 — 组件挂载前模型就已就绪
+_fetchModels(serverStore.getActiveServerId())
 
-serverStore.onServerChange(() => {
-  void refreshModels()
+serverStore.onServerChange(newServerId => {
+  void refreshModels(newServerId)
 })
 
 function _subscribe(listener: Listener) {
@@ -75,12 +86,8 @@ function _subscribe(listener: Listener) {
   return () => _listeners.delete(listener)
 }
 
-function _getSnapshot(): ModelsState {
-  return _state
-}
-
 // ============================================
-// Hook — drop-in replacement, same return type
+// Hook — 指定服务器（缺省跟随活动服务器）
 // ============================================
 
 interface UseModelsResult {
@@ -90,9 +97,26 @@ interface UseModelsResult {
   refetch: () => Promise<void>
 }
 
-export function useModels(): UseModelsResult {
-  const state = useSyncExternalStore(_subscribe, _getSnapshot)
-  const refetch = useCallback(() => refreshModels(), [])
+export function useModels(serverId?: string): UseModelsResult {
+  const activeServerId = useSyncExternalStore(
+    cb => serverStore.subscribe(cb),
+    () => serverStore.getActiveServerId(),
+    () => serverStore.getActiveServerId(),
+  )
+  const resolvedServerId = serverId ?? activeServerId
+
+  const state = useSyncExternalStore(
+    _subscribe,
+    () => _getState(resolvedServerId),
+    () => _getState(resolvedServerId),
+  )
+
+  // 首次挂载或服务器变化时确保已拉取
+  useEffect(() => {
+    void _fetchModels(resolvedServerId)
+  }, [resolvedServerId])
+
+  const refetch = useCallback(() => refreshModels(resolvedServerId), [resolvedServerId])
 
   return {
     models: state.models,

@@ -637,7 +637,15 @@ export function ServersSettings() {
               subscribed={multiServerStore.isSubscribed(s.id)}
               multiServerEnabled={multiServerConfig.enabled}
               onSelect={() => handleSelectServer(s.id)}
-              onDelete={() => removeServer(s.id)}
+              onDelete={() => {
+                // 删除服务器时同步移出多服务器白名单（避免残留订阅连到已删地址）
+                if (multiServerStore.isSubscribed(s.id)) {
+                  multiServerStore.setSubscribedServerIds(
+                    multiServerStore.getSubscribedServerIds().filter(id => id !== s.id),
+                  )
+                }
+                removeServer(s.id)
+              }}
               onEdit={updates => {
                 const auth = updates.password
                   ? { username: updates.username || 'opencode', password: updates.password }

@@ -157,10 +157,21 @@ export const ChatPane = memo(function ChatPane({
   const modelSelectorRef = useRef<ModelSelectorHandle>(null)
   const { addDirectory } = useDirectory()
 
+  // 当前 pane 绑定的服务器（sessionId 为复合 key，split 出 serverId；home 状态跟随 active server 实时变化）
+  const activeServerId = useSyncExternalStore(
+    cb => serverStore.subscribe(cb),
+    () => serverStore.getActiveServerId(),
+    () => serverStore.getActiveServerId(),
+  )
+  const paneServerId = useMemo(
+    () => (sessionId ? sessionKeyToServerId(sessionId) : activeServerId),
+    [sessionId, activeServerId],
+  )
+
   // ============================================
-  // Models
+  // Models（per-server：模型列表跟随当前 pane 绑定的服务器）
   // ============================================
-  const { models, isLoading: modelsLoading, refetch: refetchModels } = useModels()
+  const { models, isLoading: modelsLoading, refetch: refetchModels } = useModels(paneServerId)
   const { activeServer, getHealth } = useServerStore()
   const activeServerHealth = activeServer ? getHealth(activeServer.id) : null
   const hiddenModelKeys = useHiddenModelKeys()
@@ -202,17 +213,6 @@ export const ChatPane = memo(function ChatPane({
   // ============================================
   // Pane-local navigation
   // ============================================
-  /** 当前 pane 绑定的服务器（sessionId 为复合 key，split 出 serverId；home 状态跟随 active server 实时变化） */
-  const activeServerId = useSyncExternalStore(
-    cb => serverStore.subscribe(cb),
-    () => serverStore.getActiveServerId(),
-    () => serverStore.getActiveServerId(),
-  )
-  const paneServerId = useMemo(
-    () => (sessionId ? sessionKeyToServerId(sessionId) : activeServerId),
-    [sessionId, activeServerId],
-  )
-
   /** 规范化 session 标识为复合 key：已是复合 key 则原样，原始 id 用 pane 的服务器合成 */
   const normalizeSessionKey = useCallback(
     (sid: string): string => {

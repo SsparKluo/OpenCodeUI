@@ -294,7 +294,8 @@ function collectActiveServerIds(): string[] {
   }
   if (ids.size === 0) ids.add(serverStore.getActiveServerId())
   if (multiServerStore.isEnabled()) {
-    // 多服务器模式：所有白名单服务器保持连接 + 至少 active server
+    // 多服务器模式：白名单服务器保持连接 + 至少 active server
+    // （白名单的清理在删除服务器时由设置页同步处理）
     for (const serverId of multiServerStore.getSubscribedServerIds()) {
       ids.add(serverId)
     }

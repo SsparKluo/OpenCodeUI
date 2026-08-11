@@ -50,8 +50,8 @@ export * from './lsp'
 // 基于 SDK: config.providers()
 // ============================================
 
-export async function getActiveModels(directory?: string): Promise<ModelInfo[]> {
-  const sdk = getSDKClient()
+export async function getActiveModels(directory?: string, serverId?: string): Promise<ModelInfo[]> {
+  const sdk = getSDKClient(serverId)
   const data = requireRecord(
     unwrap(await sdk.config.providers({ directory: formatPathForApi(directory) })),
     'Invalid OpenCode providers response',
