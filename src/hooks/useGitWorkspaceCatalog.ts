@@ -21,7 +21,7 @@ export function requestGitWorkspaceCatalogRefresh() {
   refreshListeners.forEach(listener => listener())
 }
 
-export function useGitWorkspaceCatalog(directories: string[]) {
+export function useGitWorkspaceCatalog(directories: string[], serverId?: string) {
   const [catalog, setCatalog] = useState<GitWorkspaceCatalog>(new Map())
   const [isLoading, setIsLoading] = useState(false)
   const mountedRef = useRef(true)
@@ -53,7 +53,7 @@ export function useGitWorkspaceCatalog(directories: string[]) {
       const projectResults = await Promise.allSettled(
         normalizedDirectories.map(async directory => ({
           directory,
-          project: await getCurrentProject(directory),
+          project: await getCurrentProject(directory, serverId),
         })),
       )
 
@@ -107,7 +107,7 @@ export function useGitWorkspaceCatalog(directories: string[]) {
       const workspaceResults = await Promise.allSettled(
         rootDirectoryList.map(async rootDirectory => ({
           rootDirectory,
-          worktrees: await listWorktrees(rootDirectory),
+          worktrees: await listWorktrees(rootDirectory, serverId),
         })),
       )
 
@@ -144,7 +144,7 @@ export function useGitWorkspaceCatalog(directories: string[]) {
         setIsLoading(false)
       }
     }
-  }, [directories, setCatalogState])
+  }, [directories, serverId, setCatalogState])
 
   useEffect(() => {
     mountedRef.current = true

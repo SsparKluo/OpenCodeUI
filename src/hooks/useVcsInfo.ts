@@ -17,7 +17,7 @@ export interface UseVcsInfoResult {
   refresh: () => void
 }
 
-export function useVcsInfo(directory?: string): UseVcsInfoResult {
+export function useVcsInfo(directory?: string, serverId?: string): UseVcsInfoResult {
   const [vcsInfo, setVcsInfo] = useState<VcsInfo | null>(null)
   const [isLoading, setIsLoading] = useState(Boolean(directory))
   const [error, setError] = useState<string | null>(null)
@@ -38,7 +38,7 @@ export function useVcsInfo(directory?: string): UseVcsInfoResult {
 
     setIsLoading(true)
     try {
-      const info = await getVcsInfo(directory)
+      const info = await getVcsInfo(directory, serverId)
       if (mountedRef.current && requestId === requestIdRef.current) {
         setVcsInfo(info)
         setError(null)
@@ -53,9 +53,9 @@ export function useVcsInfo(directory?: string): UseVcsInfoResult {
         setIsLoading(false)
       }
     }
-  }, [directory])
+  }, [directory, serverId])
 
-  // 初始加载 + 目录变化时重新获取
+  // 初始加载 + 目录/服务器变化时重新获取
   useEffect(() => {
     mountedRef.current = true
     setVcsInfo(null)
@@ -65,7 +65,7 @@ export function useVcsInfo(directory?: string): UseVcsInfoResult {
     return () => {
       mountedRef.current = false
     }
-  }, [directory, fetchVcs])
+  }, [directory, serverId, fetchVcs])
 
   // 轮询
   useEffect(() => {
@@ -73,7 +73,7 @@ export function useVcsInfo(directory?: string): UseVcsInfoResult {
 
     const timer = setInterval(fetchVcs, POLL_INTERVAL)
     return () => clearInterval(timer)
-  }, [directory, fetchVcs])
+  }, [directory, serverId, fetchVcs])
 
   useEffect(() => {
     if (!directory) return
@@ -83,7 +83,7 @@ export function useVcsInfo(directory?: string): UseVcsInfoResult {
       setError(null)
       void fetchVcs()
     })
-  }, [directory, fetchVcs])
+  }, [directory, serverId, fetchVcs])
 
   return { vcsInfo, isLoading, error, refresh: fetchVcs }
 }

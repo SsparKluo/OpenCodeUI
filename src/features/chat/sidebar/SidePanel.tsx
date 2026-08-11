@@ -4,6 +4,7 @@ import { SessionList } from '../../sessions'
 import { FolderRecentList } from './FolderRecentList'
 import { MultiServerFolderList } from './MultiServerFolderList'
 import { useMultiServerStore, multiServerStore } from '../../../store/multiServerStore'
+import { useServerStore } from '../../../hooks/useServerStore'
 import { getProjectGroupIdentity } from './projectGrouping'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 import { ActiveSessionItem } from './ActiveSessionItem'
@@ -140,13 +141,22 @@ export function SidePanel({
       ),
     [savedDirectories, currentDirectory],
   )
-  const { catalog: gitWorkspaceCatalog, isLoading: isGitWorkspaceCatalogLoading } =
-    useGitWorkspaceCatalog(catalogDirectories)
-  const { vcsInfo: currentDirectoryVcsInfo, isLoading: isCurrentDirectoryVcsLoading } = useVcsInfo(currentDirectory)
-  const { sidebarFolderRecents, sidebarShowChildSessions } = useLayoutStore()
-
   // 多服务器订阅模式配置
   const multiServerConfig = useMultiServerStore()
+  // 多服务器模式：Git/路径信息跟随「焦点服务器」（焦点缺省 = 活动服务器）
+  const { activeServer } = useServerStore()
+  const catalogServerId = multiServerConfig.enabled
+    ? (multiServerConfig.focusedServerId ?? activeServer?.id)
+    : undefined
+  const { catalog: gitWorkspaceCatalog, isLoading: isGitWorkspaceCatalogLoading } = useGitWorkspaceCatalog(
+    catalogDirectories,
+    catalogServerId,
+  )
+  const { vcsInfo: currentDirectoryVcsInfo, isLoading: isCurrentDirectoryVcsLoading } = useVcsInfo(
+    currentDirectory,
+    catalogServerId,
+  )
+  const { sidebarFolderRecents, sidebarShowChildSessions } = useLayoutStore()
   // per-server storage 版本（添加/排序工作区时刷新项目选择器；版本号递增触发重渲染）
   const storageVersionSnapshot = useSyncExternalStore(
     subscribePerServerStorageVersion,

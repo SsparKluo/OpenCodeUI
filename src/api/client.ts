@@ -113,16 +113,16 @@ export async function getDefaultModels(directory?: string): Promise<Record<strin
 /**
  * 获取当前项目
  */
-export async function getCurrentProject(directory?: string): Promise<ApiProject> {
-  const sdk = getSDKClient()
+export async function getCurrentProject(directory?: string, serverId?: string): Promise<ApiProject> {
+  const sdk = getSDKClient(serverId)
   return unwrap(await sdk.project.current({ directory: formatPathForApi(directory) }))
 }
 
 /**
  * 获取项目列表
  */
-export async function getProjects(directory?: string): Promise<ApiProject[]> {
-  const sdk = getSDKClient()
+export async function getProjects(directory?: string, serverId?: string): Promise<ApiProject[]> {
+  const sdk = getSDKClient(serverId)
   return requireArray<ApiProject>(unwrap(await sdk.project.list({ directory: formatPathForApi(directory) })), 'Invalid OpenCode project list response')
 }
 
