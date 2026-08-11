@@ -10,6 +10,7 @@ import { notificationStore, useHasUnreadCompletedNotification } from '../../stor
 import { SessionChildrenSlot } from '../chat/sidebar/SessionChildrenSlot'
 import type { ApiSession } from '../../api'
 import { startInternalDrag } from '../../lib/internalDragCore'
+import { splitSessionKey } from '../../utils/sessionKey'
 import { pinnedSessionsStore, type PinnedSessionEntry } from '../../store/pinnedSessionsStore'
 
 interface SessionListProps {
@@ -375,6 +376,8 @@ export interface SessionListItemProps {
   density?: 'default' | 'compact' | 'minimal'
   showStats?: boolean
   showDirectory?: boolean
+  /** 活跃标记查询用复合 key（serverId::sessionId，多服务器模式传入；缺省用 session.id） */
+  activeSessionKey?: string
   // ---- 编辑模式 ----
   isEditMode?: boolean
   isChecked?: boolean
@@ -395,6 +398,7 @@ export function SessionListItem({
   density = 'default',
   showStats = true,
   showDirectory = false,
+  activeSessionKey,
   isEditMode = false,
   isChecked = false,
   checkedPrev = false,
@@ -409,8 +413,8 @@ export function SessionListItem({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const touchMoved = useRef(false)
 
-  // 活跃状态标记
-  const activeEntry = useSessionActiveEntry(session.id)
+  // 活跃状态标记（多服务器模式用复合 key 查询；activeSessionStore 的 key 是 serverId::sessionId）
+  const activeEntry = useSessionActiveEntry(activeSessionKey ?? session.id)
   const activeStatus = activeEntry
     ? activeEntry.pendingAction?.type === 'permission'
       ? { dot: 'bg-warning-100', label: t('chat:activeSession.awaitingPermission'), pulse: false }
@@ -420,7 +424,7 @@ export function SessionListItem({
           ? { dot: 'bg-warning-100', label: t('chat:activeSession.retrying'), pulse: false }
           : { dot: 'bg-success-100', label: t('chat:activeSession.working'), pulse: true }
     : null
-  const hasUnreadCompletedNotification = useHasUnreadCompletedNotification(session.id)
+  const hasUnreadCompletedNotification = useHasUnreadCompletedNotification(activeSessionKey ?? session.id)
   const itemRef = useRef<HTMLDivElement>(null)
   const isCompact = density === 'compact'
   const isMinimal = density === 'minimal'
@@ -555,7 +559,7 @@ export function SessionListItem({
       setShowActions(false)
       return
     }
-    notificationStore.markSessionNotificationsRead(session.id, 'completed')
+    notificationStore.markSessionNotificationsRead(activeSessionKey ?? session.id, 'completed')
     onSelect()
   }
 
@@ -576,6 +580,7 @@ export function SessionListItem({
       {
         kind: 'session',
         sessionId: session.id,
+        serverId: activeSessionKey ? splitSessionKey(activeSessionKey).serverId : undefined,
         directory: session.directory,
       },
     )

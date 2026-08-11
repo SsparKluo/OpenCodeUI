@@ -8,7 +8,7 @@
 // 3. 追踪子 session 关系（用于权限请求冒泡）
 // 4. 与具体 session 无关，处理所有 session 的事件
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { messageStore, childSessionStore, paneLayoutStore, serverStore } from '../store'
 import { activeSessionStore } from '../store/activeSessionStore'
 import { notificationStore } from '../store/notificationStore'
@@ -20,6 +20,7 @@ import { subscribeToServerEvents, getSessionStatus, getPendingPermissions, getPe
 import type { EventCallbacks } from '../types/api/event'
 import { replyPermission } from '../api/permission'
 import { autoApproveStore } from '../store/autoApproveStore'
+import { multiServerStore } from '../store/multiServerStore'
 import type { ApiMessage, ApiPart, ApiPermissionRequest, ApiQuestionRequest } from '../api/types'
 import type { SessionStatusMap } from '../types/api/session'
 
@@ -281,7 +282,10 @@ function isSessionDirectlyOpen(sessionId: string): boolean {
 }
 
 /**
- * 收集当前活跃服务器：所有 pane 打开的 session 所属 server + active server
+ * 收集当前活跃服务器：
+ * - 所有 pane 打开的 session 所属 server
+ * - active server
+ * - 多服务器模式：白名单订阅的服务器（即使没有 pane 打开也要保持 SSE 连接，避免列表断连）
  */
 function collectActiveServerIds(): string[] {
   const ids = new Set<string>()
@@ -289,6 +293,13 @@ function collectActiveServerIds(): string[] {
     if (leaf.sessionId) ids.add(sessionKeyToServerId(leaf.sessionId))
   }
   if (ids.size === 0) ids.add(serverStore.getActiveServerId())
+  if (multiServerStore.isEnabled()) {
+    // 多服务器模式：所有白名单服务器保持连接 + 至少 active server
+    for (const serverId of multiServerStore.getSubscribedServerIds()) {
+      ids.add(serverId)
+    }
+    ids.add(serverStore.getActiveServerId())
+  }
   return Array.from(ids)
 }
 
@@ -299,6 +310,15 @@ export function useGlobalEvents(directories?: string[]) {
 
   // 活跃服务器集合：所有 pane 打开的 session 所属 server + active server
   const [activeServerIds, setActiveServerIds] = useState<string[]>(() => collectActiveServerIds())
+
+  // 内容不变时保持引用稳定，避免 useGlobalEvents effect 因新数组引用重跑导致 SSE 全量重连
+  const updateActiveServerIds = useCallback(() => {
+    setActiveServerIds(prev => {
+      const next = collectActiveServerIds()
+      if (prev.length === next.length && prev.every((id, index) => id === next[index])) return prev
+      return next
+    })
+  }, [])
   const activeServerIdsRef = useRef(activeServerIds)
 
   useEffect(() => {
@@ -308,12 +328,16 @@ export function useGlobalEvents(directories?: string[]) {
   // pane 布局变化（打开/关闭 session、切换 server）时重算活跃服务器
   useEffect(() => {
     const unsubscribeLayout = paneLayoutStore.subscribe(() => {
-      setActiveServerIds(collectActiveServerIds())
+      updateActiveServerIds()
+    })
+    const unsubscribeMulti = multiServerStore.subscribe(() => {
+      updateActiveServerIds()
     })
     return () => {
       unsubscribeLayout()
+      unsubscribeMulti()
     }
-  }, [])
+  }, [updateActiveServerIds])
 
   useEffect(() => {
     // 节流滚动
@@ -353,14 +377,15 @@ export function useGlobalEvents(directories?: string[]) {
     // 拉取 session 状态 + pending requests（初始化 & 重连共用，按 server）
     // ============================================
 
-    const fetchAndInitialize = (serverId: string, strategy: 'replace' | 'merge' = 'replace') => {
+    const fetchAndInitialize = (serverId: string, strategy?: 'replace' | 'merge') => {
+      const effectiveStrategy = strategy ?? (multiServerStore.isEnabled() ? 'merge' : 'replace')
       const currentVersion = (fetchVersions.get(serverId) ?? 0) + 1
       fetchVersions.set(serverId, currentVersion)
       activeFetchVersions.set(serverId, currentVersion)
       void fetchActiveScopeData(directoriesRef.current, serverId)
         .then(({ statusMap, permissions, questions, sessionMetaEntries }) => {
           if (disposed || currentVersion !== fetchVersions.get(serverId)) return
-          if (strategy === 'merge') {
+          if (effectiveStrategy === 'merge') {
             activeSessionStore.mergeStatusRefresh(statusMap)
             activeSessionStore.mergePendingRequests(permissions, questions)
           } else {

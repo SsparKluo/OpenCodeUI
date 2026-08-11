@@ -7,22 +7,27 @@
 //   ● 服务器2
 //      ...
 //
-// 实现方式：根容器与 FolderRecentList 相同的 px-1.5 内边距（保证图标对齐）；
-// 服务器节点行复用文件夹行的结构与 useReorderableList 拖拽 + 拖拽时收起；
-// 展开后原封不动挂载 FolderRecentList（仅透传 serverId 让 sessions 从该服务器拉取）。
+// 工作区数据统一复用 per-server storage 的 saved-directories（与单服务器模式
+// 完全相同的存储），多服务器只是显示层面的按服务器分组，不做独立存储。
 // ============================================
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useServerStore } from '../../../hooks/useServerStore'
-import { useDirectory } from '../../../contexts/useDirectory'
-import { isSameDirectory } from '../../../utils'
 import { serverStore } from '../../../store/serverStore'
 import { multiServerStore } from '../../../store/multiServerStore'
 import { subscribeToServerConnectionState, getServerConnectionInfo, type ConnectionInfo } from '../../../api/events'
 import { ExpandableSection } from '../../../components/ui'
 import { GripVerticalIcon } from '../../../components/Icons'
-import type { ApiSession } from '../../../api'
+import { subscribePerServerStorageVersion } from '../../../utils/perServerStorage'
+import {
+  readServerWorkspaces,
+  addServerWorkspace,
+  reorderServerWorkspaces,
+} from '../../../utils/serverWorkspaces'
+import { deleteSession, updateSession, type ApiSession } from '../../../api'
+import { clearSessionRuntimeState } from '../../../utils/sessionLifecycle'
+import { uiErrorHandler } from '../../../utils'
 import {
   FolderRecentList,
   createDirectoryProject,
@@ -34,7 +39,10 @@ import {
 interface MultiServerFolderListProps {
   serverIds: string[]
   selectedSessionId: string | null
+  currentDirectory?: string
   onSelectSession: (session: ApiSession & { serverId?: string }) => void
+  /** 点击服务器节点：切焦点服务器并进入该服务器的新建会话页 */
+  onNewSession: () => void
 }
 
 function useServerConnectionState(serverId: string): ConnectionInfo {
@@ -61,7 +69,9 @@ function statusDotClass(state: ConnectionInfo['state']): string {
 function ServerFolderGroup({
   serverId,
   selectedSessionId,
+  currentDirectory,
   onSelectSession,
+  onNewSession,
   isExpanded,
   onToggleExpanded,
   isDragged,
@@ -73,7 +83,9 @@ function ServerFolderGroup({
 }: {
   serverId: string
   selectedSessionId: string | null
+  currentDirectory?: string
   onSelectSession: (session: ApiSession & { serverId?: string }) => void
+  onNewSession: () => void
   isExpanded: boolean
   onToggleExpanded: () => void
   isDragged: boolean
@@ -85,30 +97,37 @@ function ServerFolderGroup({
 }) {
   // 与 FolderRecentList / SidePanel 一致的 namespace，保证 t('sidebar.global') 等翻译正确
   const { t } = useTranslation(['chat', 'common'])
-  const { activeServer, getHealth } = useServerStore()
+  const { getHealth } = useServerStore()
   const server = serverStore.getServer(serverId)
   const health = getHealth(serverId)
   const connectionState = useServerConnectionState(serverId)
-  const { currentDirectory, setCurrentDirectory } = useDirectory()
   const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([])
 
-  // 与文件夹模式一致的点击行为：点击目录文件夹 → 切换项目选择器焦点；
-  // 已在焦点目录则只展开/收起（FolderRecentSection 内部已 toggle）
-  const handleSelectProject = useCallback(
-    (project: FolderRecentProject) => {
-      // 项目选择器焦点同步到该文件夹所在的服务器
-      multiServerStore.setFocusedServerId(serverId)
-      if (!project.worktree) {
-        // 全局文件夹：回到全局
-        if (!currentDirectory) return
-        setCurrentDirectory(undefined)
-        return
-      }
-      if (currentDirectory && isSameDirectory(currentDirectory, project.worktree)) return
-      setCurrentDirectory(project.worktree)
-    },
-    [currentDirectory, setCurrentDirectory, serverId],
+  // 该服务器的工作区 = 该服务器 per-server storage 的 saved-directories（与单服务器模式同一套存储）
+  const storageVersion = useSyncExternalStore(
+    listener => subscribePerServerStorageVersion(listener),
+    () => 0,
+    () => 0,
   )
+  const workspaces = useMemo(() => {
+    void storageVersion
+    return readServerWorkspaces(serverId)
+  }, [serverId, storageVersion])
+
+  // 展示顺序：global 固定第一，工作区按存储顺序
+  const projects = useMemo<FolderRecentProject[]>(() => {
+    const globalProject: FolderRecentProject = {
+      id: 'global',
+      worktree: '',
+      name: t('sidebar.global'),
+      sectionKind: 'project',
+      canReorder: true,
+    }
+    return [
+      globalProject,
+      ...workspaces.map(dir => ({ ...createDirectoryProject(dir, 'project'), canReorder: true })),
+    ]
+  }, [workspaces, t])
 
   // 仅当当前选中的 session 属于本服务器时才高亮（复合 key 前缀匹配），
   // 避免多个服务器连同一后端时同名 session 串高亮
@@ -119,35 +138,23 @@ function ServerFolderGroup({
       : null
   }, [serverId, selectedSessionId])
 
-  // 该服务器的工作区 = 用户通过项目管理面板添加的目录（按服务器持久化）
-  const multiServerSnapshot = useSyncExternalStore(
-    listener => multiServerStore.subscribe(listener),
-    () => multiServerStore.getSnapshot(),
-    () => multiServerStore.getSnapshot(),
+  // 与文件夹模式一致的点击行为：点击目录文件夹 → 切换项目选择器焦点；
+  // 已在焦点目录则只展开/收起（FolderRecentSection 内部已 toggle）
+  const { setCurrentDirectory } = useDirectoryCtx()
+  const handleSelectProject = useCallback(
+    (project: FolderRecentProject) => {
+      // 项目选择器焦点同步到该文件夹所在的服务器
+      multiServerStore.setFocusedServerId(serverId)
+      if (!project.worktree) {
+        setCurrentDirectory(undefined)
+        return
+      }
+      setCurrentDirectory(project.worktree)
+    },
+    [serverId, setCurrentDirectory],
   )
-  const order = useMemo(() => {
-    void multiServerSnapshot
-    return multiServerStore.getServerWorkspacesOrder(serverId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverId, multiServerSnapshot])
-
-  // 展示顺序（含 'global' 占位）——与文件夹模式一致，全局文件夹也可拖拽排序
-  const projects = useMemo<FolderRecentProject[]>(() => {
-    const globalProject: FolderRecentProject = {
-      id: 'global',
-      worktree: '',
-      name: t('sidebar.global'),
-      sectionKind: 'project',
-      canReorder: true,
-    }
-    return order.map(item => {
-      if (item === 'global') return globalProject
-      return { ...createDirectoryProject(item, 'project'), canReorder: true }
-    })
-  }, [order, t])
 
   const displayName = server?.name ?? serverId
-  const isActiveServer = activeServer?.id === serverId
 
   return (
     <div
@@ -166,14 +173,13 @@ function ServerFolderGroup({
         <button
           type="button"
           onClick={() => {
-            // 项目选择器焦点同步到该服务器。
-            // 已在焦点 → 展开/收起；未在焦点 → 只切焦点（保持/展开节点），不收起
+            // 本身就在这个节点 → 展开/收起；不在这个节点 → 切焦点服务器 + 进入该服务器新建会话页
             const wasFocused = multiServerStore.getFocusedServerId() === serverId
             multiServerStore.setFocusedServerId(serverId)
             if (wasFocused) {
               onToggleExpanded()
-            } else if (!isExpanded) {
-              onToggleExpanded()
+            } else {
+              onNewSession()
             }
           }}
           className="flex flex-1 min-w-0 items-center gap-2 pl-2 pr-2 py-1.5 text-left cursor-default select-none"
@@ -190,7 +196,6 @@ function ServerFolderGroup({
           </span>
           <span className="min-w-0 flex-1 truncate text-[length:var(--fs-sm)] font-medium text-text-300">
             {displayName}
-            {isActiveServer && <span className="ml-1.5 text-[length:var(--fs-xxs)] text-text-400">●</span>}
             {health?.status === 'online' && health.version ? ` · v${health.version}` : ''}
           </span>
         </button>
@@ -205,45 +210,59 @@ function ServerFolderGroup({
         </span>
       </div>
 
-      {/* 展开内容：文件夹缩进在服务器节点下，内部滚动限制最大高度（工作区多时不会撑太长） */}
+      {/* 展开内容：文件夹缩进在服务器节点下（内容自然展开，随外层滚动） */}
       <ExpandableSection show={isExpanded}>
         <div className="pl-3">
-          <div className="max-h-[45vh] overflow-y-auto">
           <FolderRecentList
             key={serverId}
             serverId={serverId}
             projects={projects}
-          selectedSessionId={localSelectedSessionId}
-          expandedProjectIds={expandedProjectIds}
-          onExpandedProjectIdsChange={setExpandedProjectIds}
-          onSelectProject={handleSelectProject}
-          onSelectSession={session => onSelectSession({ ...session, serverId } as ApiSession & { serverId?: string })}
-          onRenameSession={async () => {}}
-          onDeleteSession={async () => {}}
-          onReorderProject={(draggedPath, targetPath) => {
-            const currentOrder = multiServerStore.getServerWorkspacesOrder(serverId)
-            const next = [...currentOrder]
-            const from = next.indexOf(draggedPath)
-            const to = next.indexOf(targetPath)
-            if (from !== -1 && to !== -1) {
-              next.splice(from, 1)
-              next.splice(to, 0, draggedPath)
-              multiServerStore.setServerWorkspacesOrder(serverId, next)
-            }
-          }}
-          pinnedSessions={[]}
-          />
-          </div>
+              currentDirectory={currentDirectory}
+              selectedSessionId={localSelectedSessionId}
+              expandedProjectIds={expandedProjectIds}
+              onExpandedProjectIdsChange={setExpandedProjectIds}
+              onSelectProject={handleSelectProject}
+              onSelectSession={session => {
+                // 全局文件夹（无工作区归属）点 session：自动把目录加入该服务器工作区（与文件夹模式一致）
+                if (session.directory) {
+                  addServerWorkspace(serverId, session.directory)
+                }
+                onSelectSession({ ...session, serverId } as ApiSession & { serverId?: string })
+              }}
+              onRenameSession={async session => {
+                await updateSession(session.id, { title: session.title }, session.directory, serverId)
+              }}
+              onDeleteSession={async session => {
+                try {
+                  await deleteSession(session.id, session.directory, serverId)
+                  clearSessionRuntimeState(`${serverId}::${session.id}`)
+                } catch (e) {
+                  uiErrorHandler('delete session', e)
+                }
+              }}
+              onReorderProject={(draggedPath, targetPath) => {
+                reorderServerWorkspaces(serverId, draggedPath, targetPath)
+              }}
+              pinnedSessions={[]}
+            />
         </div>
       </ExpandableSection>
     </div>
   )
 }
 
+/** 轻量 useDirectory 取值（只取 setCurrentDirectory，避免整棵 context 订阅） */
+import { useDirectory } from '../../../contexts/useDirectory'
+function useDirectoryCtx() {
+  return useDirectory()
+}
+
 export function MultiServerFolderList({
   serverIds,
   selectedSessionId,
+  currentDirectory,
   onSelectSession,
+  onNewSession,
 }: MultiServerFolderListProps) {
   // 服务器展开状态（父级管理，拖拽时自动收起/恢复 — 与文件夹模式对齐）
   const [expandedServerIds, setExpandedServerIds] = useState<string[]>(() => [...serverIds])
@@ -298,7 +317,9 @@ export function MultiServerFolderList({
           key={serverId}
           serverId={serverId}
           selectedSessionId={selectedSessionId}
+          currentDirectory={currentDirectory}
           onSelectSession={onSelectSession}
+          onNewSession={onNewSession}
           isExpanded={expandedServerIds.includes(serverId)}
           onToggleExpanded={() => handleToggleServer(serverId)}
           isDragged={draggedId === serverId}

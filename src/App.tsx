@@ -17,7 +17,6 @@ import type { KeybindingHandlers } from './hooks/useKeybindings'
 import { keybindingStore } from './store/keybindingStore'
 import {
   layoutStore,
-  messageStore,
   paneLayoutStore,
   useLayoutStore,
   usePaneController,
@@ -62,6 +61,7 @@ function App() {
   const router = useRouter()
   const {
     sessionId: routeSessionId,
+    serverId: routeServerId,
     directory: routeDirectory,
     navigateToSession: navigateRouteToSession,
     navigateHome: navigateRouteHome,
@@ -75,8 +75,7 @@ function App() {
     return makeSessionKey(serverStore.getActiveServerId(), routeSessionId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeSessionId])
-  const { currentDirectory, savedDirectories, sidebarExpanded, setSidebarExpanded, setCurrentDirectory } =
-    useDirectory()
+  const { currentDirectory, savedDirectories, sidebarExpanded, setSidebarExpanded } = useDirectory()
   const { rightPanelOpen, rightPanelWidth, wakeLock } = useLayoutStore()
   const { surfaceRef, value: chatViewport } = useChatViewportController({
     sidebarExpanded,
@@ -144,16 +143,22 @@ function App() {
     paneLayoutStore.setFocusedSession(routeSessionKey)
   }, [routeSessionKey])
 
+  // home（无 session）且 URL 指定了服务器：同步 active server（恢复链接/新建会话的服务器上下文）
+  useEffect(() => {
+    if (routeSessionKey || !routeServerId) return
+    if (serverStore.getActiveServerId() === routeServerId) return
+    serverStore.setActiveServer(routeServerId)
+  }, [routeSessionKey, routeServerId])
+
   // 多服务器模式：项目选择器焦点跟随当前聚焦 pane 的 session（切换 pane / 分屏聚焦时同步）
   useEffect(() => {
     if (!multiServerStore.isEnabled()) return
     const focusedSessionKey = paneLayout.focusedSessionId
     if (!focusedSessionKey) return
-    const { serverId } = splitSessionKey(focusedSessionKey)
-    multiServerStore.setFocusedServerId(serverId)
-    const sessionDirectory = messageStore.getSessionDirectory(focusedSessionKey)
-    if (sessionDirectory) setCurrentDirectory(sessionDirectory)
-  }, [paneLayout.focusedSessionId, setCurrentDirectory])
+    // 只同步焦点服务器；目录由 URL 派生（pane -> URL 同步会写入对应 dir，不再手动 setCurrentDirectory
+    // 以免清掉 session 路由）
+    multiServerStore.setFocusedServerId(splitSessionKey(focusedSessionKey).serverId)
+  }, [paneLayout.focusedSessionId])
 
   // focused pane session -> URL（路由只反映当前 focused pane）
   useEffect(() => {
@@ -180,21 +185,31 @@ function App() {
       paneLayoutStore.focusPane(paneId)
       paneLayoutStore.setPaneSession(paneId, sessionKey)
       // 项目选择器焦点跟随打开的 session：服务器 + 工作区目录
+      // （注意：不用 setCurrentDirectory——它会把 URL 清成 #/?dir= 导致 session 路由丢失；
+      //  目录通过 navigateRouteToSession 写入 URL，currentDirectory 由 URL 派生自动跟随）
       const { serverId } = splitSessionKey(sessionKey)
       multiServerStore.setFocusedServerId(serverId)
-      if (multiServerStore.isEnabled() && directory) {
-        setCurrentDirectory(directory)
-      }
       navigateRouteToSession(sessionKey, directory)
     },
-    [navigateRouteToSession, setCurrentDirectory],
+    [navigateRouteToSession],
   )
 
   const navigatePaneHome = useCallback(
     (paneId: string) => {
       paneLayoutStore.focusPane(paneId)
       paneLayoutStore.setPaneSession(paneId, null)
-      navigateRouteHome()
+      // 多服务器模式：进入 home（新建对话）时切到焦点服务器。
+      // 切到不同服务器：server-switch 会清掉 currentDirectory/目录参数（新服务器不一定有旧目录）；
+      // 同一服务器内新建：保留当前工作区目录
+      if (multiServerStore.isEnabled()) {
+        const focusedServerId = multiServerStore.getFocusedServerId()
+        if (serverStore.getActiveServerId() !== focusedServerId) {
+          serverStore.setActiveServer(focusedServerId)
+        }
+        navigateRouteHome(focusedServerId)
+      } else {
+        navigateRouteHome()
+      }
     },
     [navigateRouteHome],
   )

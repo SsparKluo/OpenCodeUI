@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, memo } from 'react'
 import { SidePanel } from './sidebar/SidePanel'
 import { ProjectDialog } from './ProjectDialog'
 import { useMultiServerStore, multiServerStore } from '../../store/multiServerStore'
+import { addServerWorkspace } from '../../utils/serverWorkspaces'
 import { useDirectory } from '../../hooks'
 import { type ApiSession } from '../../api'
 import { useChatViewport } from './chatViewport'
@@ -64,8 +65,8 @@ export const Sidebar = memo(function Sidebar({
   const handleAddProject = useCallback(
     (path: string) => {
       if (multiServerConfig.enabled) {
-        // 多服务器模式：添加到「焦点服务器」的工作区（项目管理面板支持服务器焦点）
-        multiServerStore.addServerWorkspace(multiServerStore.getFocusedServerId(), path)
+        // 多服务器模式：写入「焦点服务器」的 saved-directories（与单服务器模式同一套存储）
+        addServerWorkspace(multiServerStore.getFocusedServerId(), path)
       } else {
         addDirectory(path)
       }

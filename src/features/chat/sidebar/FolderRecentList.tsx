@@ -1103,6 +1103,7 @@ function FolderRecentSection({
                     <div key={session.id}>
                       <SessionListItem
                         session={session}
+                        activeSessionKey={serverId ? `${serverId}::${session.id}` : undefined}
                         isSelected={session.id === selectedSessionId}
                         onSelect={() => onSelectSession(session)}
                         onRename={newTitle => handleRename(session.id, newTitle)}

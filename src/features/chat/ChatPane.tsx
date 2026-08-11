@@ -618,11 +618,14 @@ export const ChatPane = memo(function ChatPane({
   )
 
   const handleSessionDrop = useCallback(
-    (payload: { sessionId: string; directory?: string }, zone: DropZone) => {
+    (payload: { sessionId: string; serverId?: string; directory?: string }, zone: DropZone) => {
       resetDropState()
       cancelPendingSplitSessionNavigation()
 
-      const sessionKey = normalizeSessionKey(payload.sessionId)
+      // 拖拽 payload 带源服务器：用它合成复合 key（否则会用目标 pane 的服务器，拖错服务器）
+      const sessionKey = payload.serverId
+        ? makeSessionKey(payload.serverId, payload.sessionId)
+        : normalizeSessionKey(payload.sessionId)
       if (sessionKey === routeSessionId && zone === 'center') return
 
       if (zone === 'center') {
@@ -671,6 +674,7 @@ export const ChatPane = memo(function ChatPane({
       handleSessionDrop(
         {
           sessionId: event.payload.sessionId,
+          serverId: event.payload.serverId,
           directory: event.payload.directory,
         },
         zone,
