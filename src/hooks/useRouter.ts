@@ -62,14 +62,20 @@ function parseHash(): RouteState {
 
   const sessionMatch = path.match(/^#\/session\/(.+)$/)
   if (sessionMatch) {
-    return { sessionId: sessionMatch[1], serverId, directory }
+    let sessionKey = sessionMatch[1]
+    try {
+      sessionKey = decodeURIComponent(sessionKey)
+    } catch {
+      // 保持原样（非法编码时）
+    }
+    return { sessionId: sessionKey, serverId, directory }
   }
 
   return { sessionId: null, serverId, directory }
 }
 
 function buildHash(sessionId: string | null, serverId: string | null | undefined, directory: string | undefined): string {
-  const path = sessionId ? `#/session/${sessionId}` : '#/'
+  const path = sessionId ? `#/session/${encodeURIComponent(sessionId)}` : '#/'
   const params: string[] = []
   // 仅 home（无 session）写 server 参数；session URL 的复合 key 已携带服务器
   if (!sessionId && serverId) {

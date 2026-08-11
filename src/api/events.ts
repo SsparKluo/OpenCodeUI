@@ -91,7 +91,9 @@ function getOrCreateConnection(serverId: string): ServerConnection {
 }
 
 function updateConnectionState(serverId: string, update: Partial<ConnectionInfo>) {
-  const conn = getOrCreateConnection(serverId)
+  // 不隐式创建连接：无连接时直接返回（避免断开后残留空壳连接）
+  const conn = connections.get(serverId)
+  if (!conn) return
   conn.info = { ...conn.info, ...update }
   connectionListeners.get(serverId)?.forEach(fn => {
     fn(conn.info)
@@ -237,6 +239,16 @@ function disconnectTauri(bridgeId: string): Promise<void> {
   return p
 }
 
+/** 断开并清理连接的传输层（Tauri bridge / browser fetch），不更新状态 */
+function teardownConnectionTransport(conn: ServerConnection): void {
+  void disconnectTauri(bridgeIdFor(conn.serverId))
+  if (conn.controller) {
+    conn.controller.abort()
+    conn.controller = null
+  }
+  conn.isConnecting = false
+}
+
 function resetHeartbeat(conn: ServerConnection) {
   if (conn.heartbeatTimer) clearTimeout(conn.heartbeatTimer)
 
@@ -290,11 +302,7 @@ function connectServer(serverId: string) {
         )
       }
       conn.generation++
-      void disconnectTauri(bridgeIdFor(serverId))
-      if (conn.controller) {
-        conn.controller.abort()
-        conn.controller = null
-      }
+      teardownConnectionTransport(conn)
       updateConnectionState(serverId, { state: 'disconnected' })
     } else {
       return // 连接确实还活着
@@ -603,13 +611,8 @@ function startBackgroundKeepalive() {
         console.warn(`[SSE] Background keepalive: ${serverId} appears dead, forcing reconnect`)
 
         // 断开旧连接
-        void disconnectTauri(bridgeIdFor(serverId))
-        if (conn.controller) {
-          conn.controller.abort()
-          conn.controller = null
-        }
-        conn.isConnecting = false
         conn.generation++
+        teardownConnectionTransport(conn)
 
         updateConnectionState(serverId, { state: 'disconnected', error: 'Background keepalive timeout' })
         scheduleReconnect(conn)
@@ -641,17 +644,9 @@ function disconnectServerConnection(conn: ServerConnection) {
   if (conn.reconnectTimer) clearTimeout(conn.reconnectTimer)
   stopBackgroundKeepalive()
 
-  // Tauri: 调用 Rust 侧断开命令
-  void disconnectTauri(bridgeIdFor(serverId))
-
-  // Browser: abort fetch
-  if (conn.controller) {
-    conn.controller.abort()
-    conn.controller = null
-  }
-
-  conn.isConnecting = false
+  // 断开传输层（Tauri bridge / browser fetch）
   conn.generation++
+  teardownConnectionTransport(conn)
   connections.delete(serverId)
   connectionListeners.delete(serverId)
 
@@ -725,12 +720,7 @@ function forceReconnectNow(conn: ServerConnection) {
 
   // 断开旧连接
   conn.generation++
-  void disconnectTauri(bridgeIdFor(conn.serverId))
-  if (conn.controller) {
-    conn.controller.abort()
-    conn.controller = null
-  }
-  conn.isConnecting = false
+  teardownConnectionTransport(conn)
 
   connectServer(conn.serverId)
 }
@@ -754,12 +744,7 @@ function handleOffline() {
   for (const conn of connections.values()) {
     if (conn.info.state === 'connected' || conn.info.state === 'connecting') {
       conn.generation++
-      void disconnectTauri(bridgeIdFor(conn.serverId))
-      if (conn.controller) {
-        conn.controller.abort()
-        conn.controller = null
-      }
-      conn.isConnecting = false
+      teardownConnectionTransport(conn)
       if (conn.heartbeatTimer) clearTimeout(conn.heartbeatTimer)
       if (conn.reconnectTimer) clearTimeout(conn.reconnectTimer)
       stopBackgroundKeepalive()
@@ -944,13 +929,7 @@ export function reconnectServerSSE(serverId: string) {
 
   // 递增连接代次，使旧连接的事件回调自动失效
   conn.generation++
-
-  void disconnectTauri(bridgeIdFor(serverId))
-  if (conn.controller) {
-    conn.controller.abort()
-    conn.controller = null
-  }
-  conn.isConnecting = false
+  teardownConnectionTransport(conn)
 
   // 重置重连计数
   updateConnectionState(serverId, {
@@ -975,8 +954,10 @@ export function reconnectSSE() {
  */
 export function disconnectServerSSE(serverId: string, error?: string) {
   const conn = connections.get(serverId)
-  if (conn) disconnectServerConnection(conn)
+  if (!conn) return
+  // 先广播状态再断开并移除连接，避免 updateConnectionState 隐式重建空壳连接
   updateConnectionState(serverId, { state: error ? 'error' : 'disconnected', error, reconnectAttempt: 0 })
+  disconnectServerConnection(conn)
 }
 
 /**

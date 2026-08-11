@@ -19,7 +19,8 @@ import { multiServerStore } from '../../../store/multiServerStore'
 import { subscribeToServerConnectionState, getServerConnectionInfo, type ConnectionInfo } from '../../../api/events'
 import { ExpandableSection } from '../../../components/ui'
 import { GripVerticalIcon } from '../../../components/Icons'
-import { subscribePerServerStorageVersion } from '../../../utils/perServerStorage'
+import { subscribePerServerStorageVersion, getStorageVersion } from '../../../utils/perServerStorage'
+import { useDirectory } from '../../../contexts/useDirectory'
 import {
   readServerWorkspaces,
   addServerWorkspace,
@@ -46,11 +47,13 @@ interface MultiServerFolderListProps {
 }
 
 function useServerConnectionState(serverId: string): ConnectionInfo {
-  return useSyncExternalStore(
-    onStoreChange => (serverId ? subscribeToServerConnectionState(serverId, onStoreChange) : () => {}),
-    () => getServerConnectionInfo(serverId),
-    () => getServerConnectionInfo(serverId),
+  const subscribe = useCallback(
+    (onStoreChange: () => void) =>
+      serverId ? subscribeToServerConnectionState(serverId, onStoreChange) : () => {},
+    [serverId],
   )
+  const getSnapshot = useCallback(() => getServerConnectionInfo(serverId), [serverId])
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
 function statusDotClass(state: ConnectionInfo['state']): string {
@@ -104,10 +107,11 @@ function ServerFolderGroup({
   const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([])
 
   // 该服务器的工作区 = 该服务器 per-server storage 的 saved-directories（与单服务器模式同一套存储）
+  // 版本号在写入时递增 → 触发重渲染并重读数据
   const storageVersion = useSyncExternalStore(
-    listener => subscribePerServerStorageVersion(listener),
-    () => 0,
-    () => 0,
+    subscribePerServerStorageVersion,
+    getStorageVersion,
+    getStorageVersion,
   )
   const workspaces = useMemo(() => {
     void storageVersion
@@ -251,8 +255,7 @@ function ServerFolderGroup({
   )
 }
 
-/** 轻量 useDirectory 取值（只取 setCurrentDirectory，避免整棵 context 订阅） */
-import { useDirectory } from '../../../contexts/useDirectory'
+/** 轻量 useDirectory 取值（只取 setCurrentDirectory） */
 function useDirectoryCtx() {
   return useDirectory()
 }

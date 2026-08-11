@@ -22,7 +22,7 @@ function makeKey(key: string, serverId?: string): string {
   return `srv:${sid}:${key}`
 }
 
-// 存储版本（指定服务器写入时递增，供多服务器列表等订阅刷新）
+// 存储版本（写入时递增，供订阅者通过 getStorageVersion 感知变化触发刷新）
 let storageVersion = 0
 const versionListeners = new Set<() => void>()
 
@@ -31,10 +31,17 @@ function bumpVersion(): void {
   versionListeners.forEach(fn => fn())
 }
 
+/**
+ * 当前存储版本（作为 useSyncExternalStore 的 getSnapshot，
+ * 写入时版本递增 → 订阅组件重渲染并重新读取数据）
+ */
+export function getStorageVersion(): number {
+  return storageVersion
+}
+
 /** 订阅 per-server storage 的写入事件（返回取消订阅函数） */
 export function subscribePerServerStorageVersion(fn: () => void): () => void {
   versionListeners.add(fn)
-  fn()
   return () => versionListeners.delete(fn)
 }
 
@@ -56,6 +63,7 @@ export const serverStorage = {
   set(key: string, value: string): void {
     try {
       localStorage.setItem(makeKey(key), value)
+      bumpVersion()
     } catch {
       // ignore
     }
@@ -67,6 +75,7 @@ export const serverStorage = {
   remove(key: string): void {
     try {
       localStorage.removeItem(makeKey(key))
+      bumpVersion()
     } catch {
       // ignore
     }

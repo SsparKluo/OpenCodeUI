@@ -33,8 +33,8 @@ import { useBusySessions, useBusyCount } from '../../../store/activeSessionStore
 import { notificationStore, useNotifications, useUnreadNotificationCount } from '../../../store/notificationStore'
 import { pinnedSessionsStore } from '../../../store/pinnedSessionsStore'
 import { serverStore } from '../../../store/serverStore'
-import { readServerWorkspaces } from '../../../utils/serverWorkspaces'
-import { subscribePerServerStorageVersion } from '../../../utils/perServerStorage'
+import { readServerWorkspaces, addServerWorkspace } from '../../../utils/serverWorkspaces'
+import { subscribePerServerStorageVersion, getStorageVersion } from '../../../utils/perServerStorage'
 import type { NotificationEntry } from '../../../store/notificationStore'
 import {
   updateSession,
@@ -147,11 +147,11 @@ export function SidePanel({
 
   // 多服务器订阅模式配置
   const multiServerConfig = useMultiServerStore()
-  // per-server storage 版本（添加/排序工作区时刷新项目选择器）
+  // per-server storage 版本（添加/排序工作区时刷新项目选择器；版本号递增触发重渲染）
   const storageVersionSnapshot = useSyncExternalStore(
-    listener => subscribePerServerStorageVersion(listener),
-    () => 0,
-    () => 0,
+    subscribePerServerStorageVersion,
+    getStorageVersion,
+    getStorageVersion,
   )
   const subscribedServerIds = useMemo(() => {
     // 白名单精确生效：只展示用户在设置里勾选的服务器
@@ -863,7 +863,12 @@ export function SidePanel({
   const handleSelectActive = useCallback(
     (session: ApiSession & { serverId?: string }) => {
       if (session.directory) {
-        addDirectory(session.directory)
+        if (session.serverId) {
+          // 多服务器模式：写入该 session 所属服务器的工作区（避免污染活动服务器）
+          addServerWorkspace(session.serverId, session.directory)
+        } else {
+          addDirectory(session.directory)
+        }
       }
       // 多服务器模式：session 附带 serverId（App 用它合成复合 key 打开）
       onSelectSession(session)
@@ -871,7 +876,7 @@ export function SidePanel({
         onCloseMobile()
       }
     },
-    [addDirectory, onSelectSession, onCloseMobile],
+    [addDirectory, addServerWorkspace, onSelectSession, onCloseMobile],
   )
 
   const renderActiveSessionNode = useCallback(

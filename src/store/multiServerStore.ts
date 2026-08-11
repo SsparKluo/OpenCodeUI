@@ -13,10 +13,6 @@ const STORAGE_KEY = 'opencode-multi-server'
 interface PersistedShape {
   enabled: boolean
   subscribedServerIds: string[]
-  /** serverId -> 用户为该服务器添加的工作区目录 */
-  serverWorkspaces: Record<string, string[]>
-  /** serverId -> 展示顺序（含 'global' 占位；与文件夹模式一致，全局文件夹也可拖拽排序） */
-  serverWorkspaceOrder: Record<string, string[]>
   /** 项目管理面板当前聚焦的服务器（添加目录时的目标服务器） */
   focusedServerId: string | null
 }
@@ -31,18 +27,12 @@ function loadPersisted(): PersistedShape {
       return {
         enabled: parsed.enabled === true,
         subscribedServerIds: Array.isArray(parsed.subscribedServerIds) ? parsed.subscribedServerIds : [],
-        serverWorkspaces:
-          parsed.serverWorkspaces && typeof parsed.serverWorkspaces === 'object' ? parsed.serverWorkspaces : {},
-        serverWorkspaceOrder:
-          parsed.serverWorkspaceOrder && typeof parsed.serverWorkspaceOrder === 'object'
-            ? parsed.serverWorkspaceOrder
-            : {},
         focusedServerId: typeof parsed.focusedServerId === 'string' ? parsed.focusedServerId : null,
       }
     }
-    return { enabled: false, subscribedServerIds: [], serverWorkspaces: {}, serverWorkspaceOrder: {}, focusedServerId: null }
+    return { enabled: false, subscribedServerIds: [], focusedServerId: null }
   } catch {
-    return { enabled: false, subscribedServerIds: [], serverWorkspaces: {}, serverWorkspaceOrder: {}, focusedServerId: null }
+    return { enabled: false, subscribedServerIds: [], focusedServerId: null }
   }
 }
 
@@ -119,93 +109,6 @@ class MultiServerStore {
     const next = Array.from(new Set(serverIds))
     if (JSON.stringify(next) === JSON.stringify(this.settings.subscribedServerIds)) return
     this.settings.subscribedServerIds = next
-    this.notify()
-  }
-
-  // ============================================
-  // 服务器工作区（用户添加的目录）
-  // ============================================
-
-  /** 获取某服务器的工作区目录列表（顺序即展示顺序） */
-  getServerWorkspaces(serverId: string): string[] {
-    return [...(this.settings.serverWorkspaces[serverId] ?? [])]
-  }
-
-  /** 添加工作区目录 */
-  addServerWorkspace(serverId: string, directory: string): boolean {
-    const normalized = directory.replace(/\\/g, '/').replace(/\/+$/, '') || ''
-    if (!normalized) return false
-    const current = this.settings.serverWorkspaces[serverId] ?? []
-    if (current.some(dir => dir === normalized)) return false
-    this.settings.serverWorkspaces = {
-      ...this.settings.serverWorkspaces,
-      [serverId]: [...current, normalized],
-    }
-    this.notify()
-    return true
-  }
-
-  /** 移除工作区目录 */
-  removeServerWorkspace(serverId: string, directory: string): void {
-    const current = this.settings.serverWorkspaces[serverId] ?? []
-    const next = current.filter(dir => dir !== directory)
-    if (next.length === current.length) return
-    this.settings.serverWorkspaces = {
-      ...this.settings.serverWorkspaces,
-      [serverId]: next,
-    }
-    const order = this.settings.serverWorkspaceOrder[serverId]
-    if (order) {
-      this.settings.serverWorkspaceOrder = {
-        ...this.settings.serverWorkspaceOrder,
-        [serverId]: order.filter(item => item !== directory),
-      }
-    }
-    this.notify()
-  }
-
-  /** 整体替换某服务器的工作区列表（拖拽排序用，不含 global 占位） */
-  setServerWorkspaces(serverId: string, directories: string[]): void {
-    const current = this.settings.serverWorkspaces[serverId] ?? []
-    if (JSON.stringify(directories) === JSON.stringify(current)) return
-    this.settings.serverWorkspaces = {
-      ...this.settings.serverWorkspaces,
-      [serverId]: directories,
-    }
-    // 同步更新展示顺序（保留 global 与未在列表中的目录）
-    const order = this.settings.serverWorkspaceOrder[serverId]
-    if (order) {
-      const nextOrder = order.filter(item => item === 'global' || directories.includes(item))
-      const missing = directories.filter(dir => !nextOrder.includes(dir))
-      this.settings.serverWorkspaceOrder = {
-        ...this.settings.serverWorkspaceOrder,
-        [serverId]: [...nextOrder, ...missing],
-      }
-    }
-    this.notify()
-  }
-
-  /** 获取某服务器的展示顺序（含 'global' 占位；新目录自动追加到末尾） */
-  getServerWorkspacesOrder(serverId: string): string[] {
-    const order = this.settings.serverWorkspaceOrder[serverId]
-    const workspaces = this.settings.serverWorkspaces[serverId] ?? []
-    if (order && order.length > 0) {
-      // 清理已删除的目录，补上新添加的
-      const valid = order.filter(item => item === 'global' || workspaces.includes(item))
-      const missing = workspaces.filter(dir => !valid.includes(dir))
-      return [...valid, ...missing]
-    }
-    return ['global', ...workspaces]
-  }
-
-  /** 整体替换某服务器的展示顺序（含 'global'，拖拽排序用） */
-  setServerWorkspacesOrder(serverId: string, order: string[]): void {
-    const current = this.settings.serverWorkspaceOrder[serverId]
-    if (JSON.stringify(order) === JSON.stringify(current)) return
-    this.settings.serverWorkspaceOrder = {
-      ...this.settings.serverWorkspaceOrder,
-      [serverId]: order,
-    }
     this.notify()
   }
 
