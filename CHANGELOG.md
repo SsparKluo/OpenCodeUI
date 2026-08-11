@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.6.41] - 2026-08-11
+
+- fix(multi-server): force auto path style while multi-server mode is enabled (247f12ed)
+- fix(tauri): terminal bridge connects the pty's own server, not the active one (7dd92778)
+
 ## [v0.6.40] - 2026-08-11
 
 - fix(multi-server): terminal tabs keep their own server; connections no longer break after focus switch (3bd25276)
