@@ -41,9 +41,10 @@ export async function searchFiles(
     directory?: string
     type?: 'file' | 'directory'
     limit?: number
+    serverId?: string
   } = {},
 ): Promise<string[]> {
-  const sdk = getSDKClient()
+  const sdk = getSDKClient(options.serverId)
   return unwrap(
     await sdk.find.files({
       query,
@@ -94,16 +95,16 @@ export async function prefetchRootDirectory(directory?: string, serverId?: strin
 /**
  * 读取文件内容
  */
-export async function getFileContent(path: string, directory?: string): Promise<FileContent> {
-  const sdk = getSDKClient()
+export async function getFileContent(path: string, directory?: string, serverId?: string): Promise<FileContent> {
+  const sdk = getSDKClient(serverId)
   return unwrap(await sdk.file.read({ path, directory: formatPathForApi(directory) }))
 }
 
 /**
  * 获取文件 git 状态
  */
-export async function getFileStatus(directory?: string): Promise<FileStatusItem[]> {
-  const sdk = getSDKClient()
+export async function getFileStatus(directory?: string, serverId?: string): Promise<FileStatusItem[]> {
+  const sdk = getSDKClient(serverId)
   return unwrap(await sdk.file.status({ directory: formatPathForApi(directory) }))
 }
 
@@ -118,8 +119,8 @@ export async function searchSymbols(query: string, directory?: string): Promise<
 /**
  * 搜索文件正文内容
  */
-export async function searchText(pattern: string, directory?: string): Promise<TextSearchMatch[]> {
-  const sdk = getSDKClient()
+export async function searchText(pattern: string, directory?: string, serverId?: string): Promise<TextSearchMatch[]> {
+  const sdk = getSDKClient(serverId)
   return unwrap(await sdk.find.text({ pattern, directory: formatPathForApi(directory) }))
 }
 

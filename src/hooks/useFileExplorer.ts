@@ -20,6 +20,8 @@ export interface UseFileExplorerOptions {
   directory?: string
   autoLoad?: boolean
   sessionId?: string
+  /** 数据所属服务器（缺省用活动服务器；右侧面板跟随焦点 session 时传入） */
+  serverId?: string
   /** 唯一标识，用于注册 SSE 消费者，避免多实例冲突 */
   consumerId?: string
 }
@@ -53,7 +55,7 @@ export interface UseFileExplorerResult {
 }
 
 export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileExplorerResult {
-  const { directory, autoLoad = true, sessionId, consumerId = 'file-explorer' } = options
+  const { directory, autoLoad = true, sessionId, serverId, consumerId = 'file-explorer' } = options
   const { t } = useTranslation(['components'])
   const changeMode = useSessionChangeScope(sessionId ?? null)
   const directoryRef = useRef(directory)
@@ -92,7 +94,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
     setError(null)
 
     try {
-      const nodes = await listDirectory('', directory)
+      const nodes = await listDirectory('', directory, serverId)
 
       // 检查请求是否过时
       if (loadId !== loadIdRef.current) return
@@ -122,7 +124,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
 
     try {
       if (!sessionId) {
-        const status = await getFileStatus(directory)
+        const status = await getFileStatus(directory, serverId)
         if (loadId !== statusLoadIdRef.current) return
 
         status.forEach(item => {
@@ -133,10 +135,10 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
       } else {
         const diffs =
           changeMode === 'git' || changeMode === 'branch'
-            ? await getVcsDiff(changeMode, directory)
+            ? await getVcsDiff(changeMode, directory, serverId)
             : changeMode === 'turn'
-              ? await getLastTurnDiff(sessionId, directory)
-              : await getSessionDiff(sessionId, directory)
+              ? await getLastTurnDiff(sessionId, directory, serverId)
+              : await getSessionDiff(sessionId, directory, serverId)
 
         if (loadId !== statusLoadIdRef.current) return
 
@@ -179,7 +181,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
       )
 
       try {
-        const nodes = await listDirectory(parentPath, directory)
+        const nodes = await listDirectory(parentPath, directory, serverId)
         if (!isCurrentLoad()) return
 
         const sorted = sortNodes(nodes)
@@ -285,7 +287,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
       }
 
       try {
-        const content = await getFileContent(path, directory)
+        const content = await getFileContent(path, directory, serverId)
         if (loadId !== previewLoadIdRef.current) return
         previewCacheRef.current.set(path, content)
         setPreviewContent(content)
@@ -368,7 +370,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
     setPreviewContent(null)
     setPreviewError(null)
     setPreviewLoading(false)
-  }, [directory, sessionId])
+  }, [directory, sessionId, serverId])
 
   return {
     tree,

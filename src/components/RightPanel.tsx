@@ -30,11 +30,19 @@ function PanelFallback() {
 interface RightPanelProps {
   directory?: string
   sessionId?: string | null
+  /** 数据所属服务器（跟随焦点 session；缺省用活动服务器） */
+  serverId?: string
   inline?: boolean
   renderPanelContent?: boolean
 }
 
-export const RightPanel = memo(function RightPanel({ directory, sessionId, inline = false, renderPanelContent = true }: RightPanelProps) {
+export const RightPanel = memo(function RightPanel({
+  directory,
+  sessionId,
+  serverId,
+  inline = false,
+  renderPanelContent = true,
+}: RightPanelProps) {
   const { t } = useTranslation(['components', 'common'])
   const { rightPanelOpen, rightPanelWidth } = useLayoutStore()
   const { interaction, layout } = useChatViewport()
@@ -57,19 +65,19 @@ export const RightPanel = memo(function RightPanel({ directory, sessionId, inlin
   const handleCloseTerminal = useCallback(
     async (ptyId: string) => {
       try {
-        await removePtySession(ptyId, normalizedDirectory)
+        await removePtySession(ptyId, normalizedDirectory, serverId)
       } catch {
         // ignore cleanup errors
       }
     },
-    [normalizedDirectory],
+    [normalizedDirectory, serverId],
   )
 
   // 创建新终端
   const handleNewTerminal = useCallback(async () => {
     try {
-      logger.log('[RightPanel] Creating PTY session, directory:', normalizedDirectory)
-      const pty = await createPtySession({ cwd: normalizedDirectory }, normalizedDirectory)
+      logger.log('[RightPanel] Creating PTY session, directory:', normalizedDirectory, 'server:', serverId)
+      const pty = await createPtySession({ cwd: normalizedDirectory }, normalizedDirectory, serverId)
       logger.log('[RightPanel] PTY created:', pty)
       const tab: TerminalTab = {
         id: pty.id,
@@ -80,7 +88,7 @@ export const RightPanel = memo(function RightPanel({ directory, sessionId, inlin
     } catch (error) {
       uiErrorHandler('create terminal', error)
     }
-  }, [normalizedDirectory])
+  }, [normalizedDirectory, serverId])
 
   // 渲染内容
   const renderContent = useCallback(
@@ -103,6 +111,7 @@ export const RightPanel = memo(function RightPanel({ directory, sessionId, inlin
                 directory={normalizedDirectory}
                 isPanelResizing={isPanelResizing}
                 sessionId={sessionId}
+                serverId={serverId}
               />
             </Suspense>
           </div>
@@ -115,6 +124,7 @@ export const RightPanel = memo(function RightPanel({ directory, sessionId, inlin
                   directory={normalizedDirectory}
                   sessionId={sessionId}
                   isPanelResizing={isPanelResizing}
+                  serverId={serverId}
                 />
               </Suspense>
             </div>
@@ -126,7 +136,7 @@ export const RightPanel = memo(function RightPanel({ directory, sessionId, inlin
 
           {activeTab.type === 'terminal' ? (
             <Suspense fallback={<PanelFallback />}>
-              <TerminalContent activeTab={activeTab} directory={normalizedDirectory} />
+              <TerminalContent activeTab={activeTab} directory={normalizedDirectory} serverId={serverId} />
             </Suspense>
           ) : null}
 
@@ -201,9 +211,10 @@ export const RightPanel = memo(function RightPanel({ directory, sessionId, inlin
 interface TerminalContentProps {
   activeTab: PanelTab
   directory?: string
+  serverId?: string
 }
 
-const TerminalContent = memo(function TerminalContent({ activeTab, directory }: TerminalContentProps) {
+const TerminalContent = memo(function TerminalContent({ activeTab, directory, serverId }: TerminalContentProps) {
   const { panelTabs } = useLayoutStore()
 
   // 获取所有 right 位置的 terminal tabs
@@ -212,7 +223,7 @@ const TerminalContent = memo(function TerminalContent({ activeTab, directory }: 
   return (
     <>
       {terminalTabs.map(tab => (
-        <Terminal key={tab.id} ptyId={tab.id} directory={directory} isActive={tab.id === activeTab.id} />
+        <Terminal key={tab.id} ptyId={tab.id} directory={directory} serverId={serverId} isActive={tab.id === activeTab.id} />
       ))}
     </>
   )
@@ -223,6 +234,7 @@ interface FilesContentProps {
   directory?: string
   isPanelResizing?: boolean
   sessionId?: string | null
+  serverId?: string
 }
 
 const FilesContent = memo(function FilesContent({
@@ -230,6 +242,7 @@ const FilesContent = memo(function FilesContent({
   directory,
   isPanelResizing = false,
   sessionId,
+  serverId,
 }: FilesContentProps) {
   const { panelTabs } = useLayoutStore()
   const fileTabs = panelTabs.filter(t => t.position === 'right' && t.type === 'files')
@@ -241,6 +254,7 @@ const FilesContent = memo(function FilesContent({
           <FileExplorer
             panelTabId={tab.id}
             directory={directory}
+            serverId={serverId}
             previewFile={tab.previewFile ?? null}
             previewFiles={tab.previewFiles ?? []}
             position="right"
@@ -258,6 +272,7 @@ interface ChangesContentProps {
   directory?: string
   sessionId: string
   isPanelResizing?: boolean
+  serverId?: string
 }
 
 const ChangesContent = memo(function ChangesContent({
@@ -265,6 +280,7 @@ const ChangesContent = memo(function ChangesContent({
   directory,
   sessionId,
   isPanelResizing = false,
+  serverId,
 }: ChangesContentProps) {
   const { panelTabs } = useLayoutStore()
   const changeTabs = panelTabs.filter(t => t.position === 'right' && t.type === 'changes')
@@ -276,6 +292,7 @@ const ChangesContent = memo(function ChangesContent({
           <SessionChangesPanel
             sessionId={sessionId}
             directory={directory}
+            serverId={serverId}
             position="right"
             isResizing={isPanelResizing}
           />
