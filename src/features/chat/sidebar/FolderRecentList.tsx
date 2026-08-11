@@ -234,6 +234,10 @@ interface UseReorderableListOptions {
 
 export function useReorderableList({ ids, canDrag, onCommit, onDragActivated, onDragFinished }: UseReorderableListOptions) {
   const refs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const registerRef = useCallback((id: string, element: HTMLDivElement | null) => {
+    if (element) refs.current.set(id, element)
+    else refs.current.delete(id)
+  }, [])
   const [dragState, setDragState] = useState<ReorderState | null>(null)
   const dragStartY = useRef(0)
   const dragActive = useRef(false)
@@ -408,10 +412,7 @@ export function useReorderableList({ ids, canDrag, onCommit, onDragActivated, on
     handleTouchStart,
     handleTouchMove,
     handleTouchEnd,
-    registerRef: (id: string, element: HTMLDivElement | null) => {
-      if (element) refs.current.set(id, element)
-      else refs.current.delete(id)
-    },
+    registerRef,
   }
 }
 

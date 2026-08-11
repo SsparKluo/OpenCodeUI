@@ -11,7 +11,7 @@
 // 完全相同的存储），多服务器只是显示层面的按服务器分组，不做独立存储。
 // ============================================
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useServerStore } from '../../../hooks/useServerStore'
 import { serverStore } from '../../../store/serverStore'
@@ -70,7 +70,7 @@ function statusDotClass(state: ConnectionInfo['state']): string {
   }
 }
 
-function ServerFolderGroup({
+const ServerFolderGroup = memo(function ServerFolderGroup({
   serverId,
   selectedSessionId,
   currentDirectory,
@@ -167,10 +167,6 @@ function ServerFolderGroup({
   )
 
   const displayName = server?.name ?? serverId
-  // 非焦点服务器不传全局 currentDirectory：避免 FolderRecentList 的 reconcile effect
-  // 用焦点服务器的目录强制展开/高亮本服务器同路径文件夹（焦点变化时由父级重渲染驱动重新计算）
-  const isFocusedServer = multiServerStore.getFocusedServerId() === serverId
-  const effectiveCurrentDirectory = isFocusedServer ? currentDirectory : undefined
 
   return (
     <div
@@ -233,7 +229,7 @@ function ServerFolderGroup({
             key={serverId}
             serverId={serverId}
             projects={projects}
-              currentDirectory={effectiveCurrentDirectory}
+              currentDirectory={currentDirectory}
               selectedSessionId={localSelectedSessionId}
               expandedProjectIds={expandedProjectIds}
               onExpandedProjectIdsChange={setExpandedProjectIds}
@@ -265,7 +261,7 @@ function ServerFolderGroup({
       </ExpandableSection>
     </div>
   )
-}
+})
 
 /** 轻量 useDirectory 取值（取 currentDirectory + setCurrentDirectory） */
 function useDirectoryCtx() {
@@ -324,6 +320,27 @@ export function MultiServerFolderList({
     setExpandedServerIds(prev => (prev.includes(serverId) ? prev.filter(id => id !== serverId) : [...prev, serverId]))
   }, [])
 
+  // 稳定回调（ServerFolderGroup 是 memo 组件：内联箭头会让每次父级重渲染都穿透 memo）
+  const makeToggleExpanded = useCallback(
+    (serverId: string) => () => handleToggleServer(serverId),
+    [handleToggleServer],
+  )
+  const makeRegisterRef = useCallback(
+    (serverId: string) => (el: HTMLDivElement | null) => registerRef(serverId, el),
+    [registerRef],
+  )
+  const makeDragStart = useCallback(
+    (serverId: string) => (e: React.PointerEvent) => handlePointerStart(serverId, e),
+    [handlePointerStart],
+  )
+  const makeTouchDragStart = useCallback(
+    (serverId: string) => (e: React.TouchEvent) => handleTouchStart(serverId, e),
+    [handleTouchStart],
+  )
+
+  // 焦点服务器 id（快照；ServerFolderGroup 内部已用 memo，这里只需在父级重渲染时更新）
+  const focusedServerId = multiServerStore.getFocusedServerId()
+
   return (
     // 根容器与 FolderRecentList 相同的 px-1.5 内边距，保证服务器行图标与文件夹图标对齐
     <div className="h-full overflow-y-auto custom-scrollbar px-1.5">
@@ -332,15 +349,17 @@ export function MultiServerFolderList({
           key={serverId}
           serverId={serverId}
           selectedSessionId={selectedSessionId}
-          currentDirectory={currentDirectory}
+          // 非焦点服务器不传全局 currentDirectory：避免 reconcile effect 强制展开/高亮同路径文件夹，
+          // 同时让 memo 对非焦点组保持 currentDirectory 恒 undefined（父级重渲染时跳过）
+          currentDirectory={serverId === focusedServerId ? currentDirectory : undefined}
           onSelectSession={onSelectSession}
           onNewSession={onNewSession}
           isExpanded={expandedServerIds.includes(serverId)}
-          onToggleExpanded={() => handleToggleServer(serverId)}
+          onToggleExpanded={makeToggleExpanded(serverId)}
           isDragged={draggedId === serverId}
-          registerRef={el => registerRef(serverId, el)}
-          onDragStart={e => handlePointerStart(serverId, e)}
-          onTouchDragStart={e => handleTouchStart(serverId, e)}
+          registerRef={makeRegisterRef(serverId)}
+          onDragStart={makeDragStart(serverId)}
+          onTouchDragStart={makeTouchDragStart(serverId)}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         />
