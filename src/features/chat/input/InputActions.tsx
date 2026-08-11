@@ -137,7 +137,7 @@ export const CollapsedCapsule = memo(function CollapsedCapsule({
 }: CollapsedCapsuleProps) {
   const { t } = useTranslation(['chat', 'common'])
   return (
-    <div className="flex items-center justify-center gap-2 pointer-events-none">
+    <div className="flex items-center justify-center gap-4 pointer-events-none">
       <button
         type="button"
         onClick={onExpand}
