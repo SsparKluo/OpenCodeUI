@@ -673,6 +673,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, serverId, isA
               ptyId,
               directory: terminalDirectory,
               cursor,
+              serverId,
               onConnected: handleConnected,
               onMessage: chunk => {
                 if (!mountedRef.current) return
