@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next'
 import { getSessions, type ApiSession } from '../../../api'
 import { makeSessionKey } from '../../../utils/sessionKey'
 import { serverStore } from '../../../store/serverStore'
-import { multiServerStore } from '../../../store/multiServerStore'
+import { multiServerStore, useMultiServerStore } from '../../../store/multiServerStore'
 import { useDirectory } from '../../../contexts/useDirectory'
 import { readServerWorkspaces } from '../../../utils/serverWorkspaces'
 import { getStorageVersion, subscribePerServerStorageVersion } from '../../../utils/perServerStorage'
@@ -264,15 +264,16 @@ export function SearchResults({ search, selectedSessionId, onSelectSession }: Se
     () => serverStore.getActiveServerId(),
     () => serverStore.getActiveServerId(),
   )
-  const multiServerEnabled = multiServerStore.isEnabled()
+  // 响应式订阅多服务器配置：白名单增删 / 拖拽重排 / 开关切换都会重算服务器集合
+  const multiServerConfig = useMultiServerStore()
 
   // 多服务器模式：白名单服务器（过滤已删除的）；单服务器：活动服务器
   const serverIds = useMemo(() => {
-    if (multiServerEnabled) {
-      return multiServerStore.getSubscribedServerIds().filter(id => serverStore.getServers().some(s => s.id === id))
+    if (multiServerConfig.enabled) {
+      return multiServerConfig.subscribedServerIds.filter(id => serverStore.getServers().some(s => s.id === id))
     }
     return [activeServerId]
-  }, [multiServerEnabled, activeServerId])
+  }, [multiServerConfig, activeServerId])
 
   if (splitTerms(search).length === 0) return null
 
@@ -288,7 +289,7 @@ export function SearchResults({ search, selectedSessionId, onSelectSession }: Se
           search={search}
           selectedSessionId={selectedSessionId}
           onSelectSession={onSelectSession}
-          showHeader={multiServerEnabled}
+          showHeader={multiServerConfig.enabled}
         />
       ))}
       <div className="px-2 py-3 text-center text-[length:var(--fs-xs)] text-text-400/70">
