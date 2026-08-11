@@ -32,14 +32,14 @@ const commandCache = new Map<string, { data: Command[]; expiresAt: number }>()
 const commandInflight = new Map<string, Promise<Command[]>>()
 
 function getCommandCacheKey(directory?: string, serverId?: string): string {
-  return `${serverId ?? serverStore.getActiveServerId()}::${i18n.resolvedLanguage || i18n.language}::${formatPathForApi(directory) ?? ''}`
+  return `${serverId ?? serverStore.getActiveServerId()}::${i18n.resolvedLanguage || i18n.language}::${formatPathForApi(directory, serverId) ?? ''}`
 }
 
 async function fetchCommands(directory?: string, serverId?: string): Promise<Command[]> {
   let apiCommands: ApiCommand[] = []
   try {
     const sdk = getSDKClient(serverId)
-    apiCommands = unwrap(await sdk.command.list({ directory: formatPathForApi(directory) })) ?? []
+    apiCommands = unwrap(await sdk.command.list({ directory: formatPathForApi(directory, serverId) })) ?? []
   } catch {
     // Backend unreachable — frontend commands still available
   }
@@ -91,7 +91,7 @@ export async function executeCommand(
   return unwrap(
     await sdk.session.command({
       sessionID: target.sessionId,
-      directory: formatPathForApi(directory),
+      directory: formatPathForApi(directory, target.serverId),
       command,
       arguments: args,
     }),

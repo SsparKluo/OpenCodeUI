@@ -120,7 +120,8 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
         if (requestId !== requestIdRef.current) return
 
         if (data.length > 0 && data[0].directory) {
-          autoDetectPathStyle(data[0].directory)
+          // 按服务器记录路径风格（多服务器连不同操作系统时互不干扰）
+          autoDetectPathStyle(data[0].directory, serverId)
         }
 
         setSessions(data)

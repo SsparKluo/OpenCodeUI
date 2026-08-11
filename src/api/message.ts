@@ -62,7 +62,7 @@ export async function getSessionMessages(
   return unwrap<ApiMessageWithParts[]>(
     await sdk.session.messages({
       sessionID: target.sessionId,
-      directory: formatPathForApi(directory),
+      directory: formatPathForApi(directory, target.serverId),
       limit,
     }),
   )
@@ -158,7 +158,7 @@ function toFileUrl(path: string): string {
 /**
  * 构建 SDK 发送消息所需的参数
  */
-function buildPromptParams(params: SendMessageParams): PromptParams {
+function buildPromptParams(params: SendMessageParams, serverId?: string): PromptParams {
   const { sessionId, text, attachments, model, agent, variant, directory } = params
 
   const parts: NonNullable<PromptParams['parts']> = []
@@ -215,7 +215,7 @@ function buildPromptParams(params: SendMessageParams): PromptParams {
 
   return {
     sessionID: sessionId,
-    directory: formatPathForApi(directory),
+    directory: formatPathForApi(directory, serverId),
     parts,
     model,
     agent,
@@ -229,7 +229,7 @@ function buildPromptParams(params: SendMessageParams): PromptParams {
 export async function sendMessage(params: SendMessageParams, serverId?: string): Promise<SendMessageResponse> {
   const target = resolveSessionTarget(params.sessionId, serverId)
   const sdk = getSDKClient(target.serverId)
-  return unwrap<SendMessageResponse>(await sdk.session.prompt(buildPromptParams({ ...params, sessionId: target.sessionId })))
+  return unwrap<SendMessageResponse>(await sdk.session.prompt(buildPromptParams({ ...params, sessionId: target.sessionId }, target.serverId)))
 }
 
 /**
@@ -238,5 +238,5 @@ export async function sendMessage(params: SendMessageParams, serverId?: string):
 export async function sendMessageAsync(params: SendMessageParams, serverId?: string): Promise<void> {
   const target = resolveSessionTarget(params.sessionId, serverId)
   const sdk = getSDKClient(target.serverId)
-  unwrap(await sdk.session.promptAsync(buildPromptParams({ ...params, sessionId: target.sessionId })))
+  unwrap(await sdk.session.promptAsync(buildPromptParams({ ...params, sessionId: target.sessionId }, target.serverId)))
 }

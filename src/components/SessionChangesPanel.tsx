@@ -466,7 +466,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
     setError(null)
 
     try {
-      const nextProject = await initGitProject(directory)
+      const nextProject = await initGitProject(directory, serverId)
       setProject(nextProject)
       setVcsInfo(null)
       setGitDiffs([])

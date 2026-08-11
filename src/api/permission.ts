@@ -21,7 +21,7 @@ export async function getPendingPermissions(
   serverId?: string,
 ): Promise<ApiPermissionRequest[]> {
   const sdk = getSDKClient(serverId)
-  const permissions = unwrap(await sdk.permission.list({ directory: formatPathForApi(directory) }))
+  const permissions = unwrap(await sdk.permission.list({ directory: formatPathForApi(directory, serverId) }))
   if (!sessionId) return permissions
   const target = resolveSessionTarget(sessionId, serverId)
   return permissions.filter((p: ApiPermissionRequest) => p.sessionID === target.sessionId)
@@ -46,7 +46,7 @@ export async function replyPermission(
       await sdk.permission.respond({
         sessionID: target.sessionId,
         permissionID: requestId,
-        directory: formatPathForApi(directory),
+        directory: formatPathForApi(directory, serverId),
         response: reply,
       }),
     )
@@ -56,7 +56,7 @@ export async function replyPermission(
   unwrap(
     await sdk.permission.reply({
       requestID: requestId,
-      directory: formatPathForApi(directory),
+      directory: formatPathForApi(directory, serverId),
       reply,
       message,
     }),
@@ -77,7 +77,7 @@ export async function getPendingQuestions(
   serverId?: string,
 ): Promise<ApiQuestionRequest[]> {
   const sdk = getSDKClient(serverId)
-  const questions = unwrap(await sdk.question.list({ directory: formatPathForApi(directory) }))
+  const questions = unwrap(await sdk.question.list({ directory: formatPathForApi(directory, serverId) }))
   if (!sessionId) return questions
   const target = resolveSessionTarget(sessionId, serverId)
   return questions.filter((q: ApiQuestionRequest) => q.sessionID === target.sessionId)
@@ -96,7 +96,7 @@ export async function replyQuestion(
   unwrap(
     await sdk.question.reply({
       requestID: requestId,
-      directory: formatPathForApi(directory),
+      directory: formatPathForApi(directory, serverId),
       answers,
     }),
   )
@@ -111,7 +111,7 @@ export async function rejectQuestion(requestId: string, directory?: string, serv
   unwrap(
     await sdk.question.reject({
       requestID: requestId,
-      directory: formatPathForApi(directory),
+      directory: formatPathForApi(directory, serverId),
     }),
   )
   return true

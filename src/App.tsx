@@ -1002,7 +1002,7 @@ function App() {
                 </section>
               </div>
 
-              <BottomPanel directory={focusedDirectory} />
+              <BottomPanel directory={focusedDirectory} serverId={focusedServerId} />
             </>
           ) : (
             <>
@@ -1033,7 +1033,7 @@ function App() {
                     />
                   </div>
 
-                  <BottomPanel directory={focusedDirectory} />
+                  <BottomPanel directory={focusedDirectory} serverId={focusedServerId} />
                 </div>
 
                 <RightPanel

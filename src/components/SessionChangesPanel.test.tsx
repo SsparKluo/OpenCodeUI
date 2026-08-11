@@ -294,7 +294,7 @@ describe('SessionChangesPanel', () => {
       await Promise.resolve()
     })
 
-    expect(initGitProject).toHaveBeenCalledWith('/repo')
+    expect(initGitProject).toHaveBeenCalledWith('/repo', undefined)
     expect(getLastTurnDiff).toHaveBeenCalledWith('session-1', '/repo', undefined)
   })
 

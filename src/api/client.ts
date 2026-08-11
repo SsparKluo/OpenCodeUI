@@ -53,7 +53,7 @@ export * from './lsp'
 export async function getActiveModels(directory?: string, serverId?: string): Promise<ModelInfo[]> {
   const sdk = getSDKClient(serverId)
   const data = requireRecord(
-    unwrap(await sdk.config.providers({ directory: formatPathForApi(directory) })),
+    unwrap(await sdk.config.providers({ directory: formatPathForApi(directory, serverId) })),
     'Invalid OpenCode providers response',
   )
   const providers = requireArray<Record<string, unknown>>(data.providers, 'Invalid OpenCode providers response')
@@ -115,7 +115,7 @@ export async function getDefaultModels(directory?: string): Promise<Record<strin
  */
 export async function getCurrentProject(directory?: string, serverId?: string): Promise<ApiProject> {
   const sdk = getSDKClient(serverId)
-  return unwrap(await sdk.project.current({ directory: formatPathForApi(directory) }))
+  return unwrap(await sdk.project.current({ directory: formatPathForApi(directory, serverId) }))
 }
 
 /**
@@ -123,15 +123,15 @@ export async function getCurrentProject(directory?: string, serverId?: string): 
  */
 export async function getProjects(directory?: string, serverId?: string): Promise<ApiProject[]> {
   const sdk = getSDKClient(serverId)
-  return requireArray<ApiProject>(unwrap(await sdk.project.list({ directory: formatPathForApi(directory) })), 'Invalid OpenCode project list response')
+  return requireArray<ApiProject>(unwrap(await sdk.project.list({ directory: formatPathForApi(directory, serverId) })), 'Invalid OpenCode project list response')
 }
 
 /**
  * 初始化 Git 仓库
  */
-export async function initGitProject(directory?: string): Promise<ApiProject> {
-  const sdk = getSDKClient()
-  return unwrap(await sdk.project.initGit({ directory: formatPathForApi(directory) }))
+export async function initGitProject(directory?: string, serverId?: string): Promise<ApiProject> {
+  const sdk = getSDKClient(serverId)
+  return unwrap(await sdk.project.initGit({ directory: formatPathForApi(directory, serverId) }))
 }
 
 /**

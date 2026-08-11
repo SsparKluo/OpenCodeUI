@@ -3,11 +3,12 @@
 // 管理文件树状态、展开/折叠、文件预览
 // ============================================
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { listDirectory, getFileContent, getFileStatus, getSessionDiff, getLastTurnDiff, getVcsDiff } from '../api'
 import type { FileNode, FileContent, FileStatusItem, FileDiff } from '../api/types'
 import { useSessionChangeScope } from '../store/changeScopeStore'
+import { activeSessionStore } from '../store/activeSessionStore'
 import { useAutoRefresh } from './useAutoRefresh'
 
 export interface FileTreeNode extends FileNode {
@@ -58,8 +59,17 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
   const { directory, autoLoad = true, sessionId, serverId, consumerId = 'file-explorer' } = options
   const { t } = useTranslation(['components'])
   const changeMode = useSessionChangeScope(sessionId ?? null)
-  const directoryRef = useRef(directory)
-  directoryRef.current = directory
+
+  // 多服务器模式：session 可能属于远端服务器，其工作区目录是远端路径（session 创建时的工作区）。
+  // 文件树/文件状态应使用 session 自身目录，而不是本地 URL/currentDirectory 派生的目录。
+  const sessionDirectory = useSyncExternalStore(
+    cb => activeSessionStore.subscribe(cb),
+    () => (sessionId ? activeSessionStore.getSessionMeta(sessionId)?.directory : undefined),
+    () => (sessionId ? activeSessionStore.getSessionMeta(sessionId)?.directory : undefined),
+  )
+  const effectiveDirectory = sessionId && sessionDirectory ? sessionDirectory : directory
+  const directoryRef = useRef(effectiveDirectory)
+  directoryRef.current = effectiveDirectory
 
   // 文件树状态
   const [tree, setTree] = useState<FileTreeNode[]>([])
@@ -87,14 +97,14 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
 
   // 加载根目录
   const loadRoot = useCallback(async () => {
-    if (!directory) return
+    if (!effectiveDirectory) return
 
     const loadId = ++loadIdRef.current
     setIsLoading(true)
     setError(null)
 
     try {
-      const nodes = await listDirectory('', directory, serverId)
+      const nodes = await listDirectory('', effectiveDirectory, serverId)
 
       // 检查请求是否过时
       if (loadId !== loadIdRef.current) return
@@ -111,10 +121,10 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
         setIsLoading(false)
       }
     }
-  }, [directory, t])
+  }, [effectiveDirectory, t])
 
   const loadStatuses = useCallback(async () => {
-    if (!directory) {
+    if (!effectiveDirectory) {
       setFileStatus(new Map())
       return
     }
@@ -124,7 +134,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
 
     try {
       if (!sessionId) {
-        const status = await getFileStatus(directory, serverId)
+        const status = await getFileStatus(effectiveDirectory, serverId)
         if (loadId !== statusLoadIdRef.current) return
 
         status.forEach(item => {
@@ -135,10 +145,10 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
       } else {
         const diffs =
           changeMode === 'git' || changeMode === 'branch'
-            ? await getVcsDiff(changeMode, directory, serverId)
+            ? await getVcsDiff(changeMode, effectiveDirectory, serverId)
             : changeMode === 'turn'
-              ? await getLastTurnDiff(sessionId, directory, serverId)
-              : await getSessionDiff(sessionId, directory, serverId)
+              ? await getLastTurnDiff(sessionId, effectiveDirectory, serverId)
+              : await getSessionDiff(sessionId, effectiveDirectory, serverId)
 
         if (loadId !== statusLoadIdRef.current) return
 
@@ -159,18 +169,18 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
       if (loadId !== statusLoadIdRef.current) return
       setFileStatus(new Map())
     }
-  }, [changeMode, directory, sessionId])
+  }, [changeMode, effectiveDirectory, sessionId])
 
   // 加载子目录
   const loadChildren = useCallback(
     async (parentPath: string) => {
-      if (!directory) return
+      if (!effectiveDirectory) return
 
-      const loadKey = `${directory}\0${parentPath}`
+      const loadKey = `${effectiveDirectory}\0${parentPath}`
       const loadId = (childLoadIdsRef.current.get(loadKey) ?? 0) + 1
       childLoadIdsRef.current.set(loadKey, loadId)
 
-      const isCurrentLoad = () => directoryRef.current === directory && childLoadIdsRef.current.get(loadKey) === loadId
+      const isCurrentLoad = () => directoryRef.current === effectiveDirectory && childLoadIdsRef.current.get(loadKey) === loadId
 
       // 更新树，标记为加载中
       setTree(prev =>
@@ -181,7 +191,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
       )
 
       try {
-        const nodes = await listDirectory(parentPath, directory, serverId)
+        const nodes = await listDirectory(parentPath, effectiveDirectory, serverId)
         if (!isCurrentLoad()) return
 
         const sorted = sortNodes(nodes)
@@ -207,20 +217,20 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
         )
       }
     },
-    [directory],
+    [effectiveDirectory],
   )
 
   const updateExpandedPaths = useCallback(
     (updater: (prev: Set<string>) => Set<string>) => {
       setExpandedPaths(prev => {
         const next = updater(prev)
-        if (directory) {
-          expandedPathsByDirectoryRef.current.set(directory, new Set(next))
+        if (effectiveDirectory) {
+          expandedPathsByDirectoryRef.current.set(effectiveDirectory, new Set(next))
         }
         return next
       })
     },
-    [directory],
+    [effectiveDirectory],
   )
 
   // 切换展开/折叠
@@ -270,7 +280,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
   // 加载文件预览
   const loadPreview = useCallback(
     async (path: string) => {
-      if (!directory) return
+      if (!effectiveDirectory) return
 
       const loadId = ++previewLoadIdRef.current
 
@@ -287,7 +297,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
       }
 
       try {
-        const content = await getFileContent(path, directory, serverId)
+        const content = await getFileContent(path, effectiveDirectory, serverId)
         if (loadId !== previewLoadIdRef.current) return
         previewCacheRef.current.set(path, content)
         setPreviewContent(content)
@@ -301,7 +311,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
         }
       }
     },
-    [directory, t],
+    [effectiveDirectory, t],
   )
 
   const clearPreview = useCallback(() => {
@@ -313,14 +323,14 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
 
   // 刷新
   const refresh = useCallback(async () => {
-    if (directory) {
-      expandedPathsByDirectoryRef.current.delete(directory)
+    if (effectiveDirectory) {
+      expandedPathsByDirectoryRef.current.delete(effectiveDirectory)
     }
     setExpandedPaths(new Set())
     previewCacheRef.current.clear()
     setPreviewContent(null)
     await Promise.all([loadRoot(), loadStatuses()])
-  }, [directory, loadRoot, loadStatuses])
+  }, [effectiveDirectory, loadRoot, loadStatuses])
 
   // 软刷新：重新加载根目录和状态，但保留展开路径和预览
   const softRefresh = useCallback(async () => {
@@ -328,33 +338,33 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
   }, [loadRoot, loadStatuses])
 
   // 自动刷新：session idle / 窗口聚焦 / SSE 重连
-  useAutoRefresh(consumerId, sessionId ?? null, softRefresh, !!directory)
+  useAutoRefresh(consumerId, sessionId ?? null, softRefresh, !!effectiveDirectory)
 
   // 初始加载
   useEffect(() => {
-    if (autoLoad && directory) {
+    if (autoLoad && effectiveDirectory) {
       loadRoot()
     }
-  }, [autoLoad, directory, loadRoot])
+  }, [autoLoad, effectiveDirectory, loadRoot])
 
   useEffect(() => {
-    if (autoLoad && directory) {
+    if (autoLoad && effectiveDirectory) {
       loadStatuses()
     }
-  }, [autoLoad, directory, loadStatuses])
+  }, [autoLoad, effectiveDirectory, loadStatuses])
 
   useEffect(() => {
-    if (!directory) {
+    if (!effectiveDirectory) {
       setExpandedPaths(new Set())
       return
     }
 
-    const storedPaths = expandedPathsByDirectoryRef.current.get(directory)
+    const storedPaths = expandedPathsByDirectoryRef.current.get(effectiveDirectory)
     setExpandedPaths(storedPaths ? new Set(storedPaths) : new Set())
-  }, [directory])
+  }, [effectiveDirectory])
 
   useEffect(() => {
-    if (!directory || tree.length === 0 || expandedPaths.size === 0) return
+    if (!effectiveDirectory || tree.length === 0 || expandedPaths.size === 0) return
 
     const pendingPaths = collectPendingExpandedDirectoryPaths(tree, expandedPaths)
     if (pendingPaths.length === 0) return
@@ -362,7 +372,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
     pendingPaths.forEach(path => {
       void loadChildren(path)
     })
-  }, [directory, expandedPaths, loadChildren, tree])
+  }, [effectiveDirectory, expandedPaths, loadChildren, tree])
 
   useEffect(() => {
     previewCacheRef.current.clear()
@@ -370,7 +380,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
     setPreviewContent(null)
     setPreviewError(null)
     setPreviewLoading(false)
-  }, [directory, sessionId, serverId])
+  }, [effectiveDirectory, sessionId, serverId])
 
   return {
     tree,

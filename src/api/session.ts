@@ -27,7 +27,7 @@ function normalizeSessionList(value: unknown): ApiSession[] {
  */
 export async function getSessionStatus(directory?: string, serverId?: string): Promise<SessionStatusMap> {
   const sdk = getSDKClient(serverId)
-  return unwrap(await sdk.session.status({ directory: formatPathForApi(directory) }))
+  return unwrap(await sdk.session.status({ directory: formatPathForApi(directory, serverId) }))
 }
 
 /**
@@ -46,7 +46,7 @@ export async function getSessionDiff(
     unwrap(
       await sdk.session.diff({
         sessionID: target.sessionId,
-        directory: formatPathForApi(directory),
+        directory: formatPathForApi(directory, target.serverId),
         messageID: messageId,
       }),
     ),
@@ -88,7 +88,7 @@ export async function getSessions(params: SessionListParams = {}, serverId?: str
   return normalizeSessionList(
     unwrap(
       await sdk.session.list({
-        directory: formatPathForApi(directory),
+        directory: formatPathForApi(directory, serverId),
         roots,
         start,
         search,
@@ -104,7 +104,7 @@ export async function getSessions(params: SessionListParams = {}, serverId?: str
 export async function getSession(sessionId: string, directory?: string, serverId?: string): Promise<ApiSession> {
   const target = resolveSessionTarget(sessionId, serverId)
   const sdk = getSDKClient(target.serverId)
-  return unwrap(await sdk.session.get({ sessionID: target.sessionId, directory: formatPathForApi(directory) }))
+  return unwrap(await sdk.session.get({ sessionID: target.sessionId, directory: formatPathForApi(directory, target.serverId) }))
 }
 
 /**
@@ -122,7 +122,7 @@ export async function createSession(
   const { directory, title, parentID } = params
   return unwrap(
     await sdk.session.create({
-      directory: formatPathForApi(directory),
+      directory: formatPathForApi(directory, serverId),
       title,
       parentID,
     }),
@@ -143,7 +143,7 @@ export async function updateSession(
   return unwrap(
     await sdk.session.update({
       sessionID: target.sessionId,
-      directory: formatPathForApi(directory),
+      directory: formatPathForApi(directory, target.serverId),
       ...params,
     }),
   )
@@ -155,7 +155,7 @@ export async function updateSession(
 export async function deleteSession(sessionId: string, directory?: string, serverId?: string): Promise<boolean> {
   const target = resolveSessionTarget(sessionId, serverId)
   const sdk = getSDKClient(target.serverId)
-  unwrap(await sdk.session.delete({ sessionID: target.sessionId, directory: formatPathForApi(directory) }))
+  unwrap(await sdk.session.delete({ sessionID: target.sessionId, directory: formatPathForApi(directory, target.serverId) }))
   return true
 }
 
@@ -169,7 +169,7 @@ export async function deleteSession(sessionId: string, directory?: string, serve
 export async function abortSession(sessionId: string, directory?: string, serverId?: string): Promise<boolean> {
   const target = resolveSessionTarget(sessionId, serverId)
   const sdk = getSDKClient(target.serverId)
-  unwrap(await sdk.session.abort({ sessionID: target.sessionId, directory: formatPathForApi(directory) }))
+  unwrap(await sdk.session.abort({ sessionID: target.sessionId, directory: formatPathForApi(directory, target.serverId) }))
   return true
 }
 
@@ -188,7 +188,7 @@ export async function revertMessage(
   return unwrap(
     await sdk.session.revert({
       sessionID: target.sessionId,
-      directory: formatPathForApi(directory),
+      directory: formatPathForApi(directory, target.serverId),
       messageID: messageId,
       partID: partId,
     }),
@@ -201,7 +201,7 @@ export async function revertMessage(
 export async function unrevertSession(sessionId: string, directory?: string, serverId?: string): Promise<ApiSession> {
   const target = resolveSessionTarget(sessionId, serverId)
   const sdk = getSDKClient(target.serverId)
-  return unwrap(await sdk.session.unrevert({ sessionID: target.sessionId, directory: formatPathForApi(directory) }))
+  return unwrap(await sdk.session.unrevert({ sessionID: target.sessionId, directory: formatPathForApi(directory, target.serverId) }))
 }
 
 /**
@@ -210,7 +210,7 @@ export async function unrevertSession(sessionId: string, directory?: string, ser
 export async function shareSession(sessionId: string, directory?: string, serverId?: string): Promise<ApiSession> {
   const target = resolveSessionTarget(sessionId, serverId)
   const sdk = getSDKClient(target.serverId)
-  return unwrap(await sdk.session.share({ sessionID: target.sessionId, directory: formatPathForApi(directory) }))
+  return unwrap(await sdk.session.share({ sessionID: target.sessionId, directory: formatPathForApi(directory, target.serverId) }))
 }
 
 /**
@@ -219,7 +219,7 @@ export async function shareSession(sessionId: string, directory?: string, server
 export async function unshareSession(sessionId: string, directory?: string, serverId?: string): Promise<ApiSession> {
   const target = resolveSessionTarget(sessionId, serverId)
   const sdk = getSDKClient(target.serverId)
-  return unwrap(await sdk.session.unshare({ sessionID: target.sessionId, directory: formatPathForApi(directory) }))
+  return unwrap(await sdk.session.unshare({ sessionID: target.sessionId, directory: formatPathForApi(directory, target.serverId) }))
 }
 
 /**
@@ -231,7 +231,7 @@ export async function forkSession(sessionId: string, messageId?: string, directo
   return unwrap(
     await sdk.session.fork({
       sessionID: target.sessionId,
-      directory: formatPathForApi(directory),
+      directory: formatPathForApi(directory, target.serverId),
       messageID: messageId,
     }),
   )
@@ -251,7 +251,7 @@ export async function summarizeSession(
   unwrap(
     await sdk.session.summarize({
       sessionID: target.sessionId,
-      directory: formatPathForApi(directory),
+      directory: formatPathForApi(directory, target.serverId),
       ...params,
     }),
   )
@@ -264,7 +264,7 @@ export async function summarizeSession(
 export async function getSessionChildren(sessionId: string, directory?: string, serverId?: string): Promise<ApiSession[]> {
   const target = resolveSessionTarget(sessionId, serverId)
   const sdk = getSDKClient(target.serverId)
-  return unwrap(await sdk.session.children({ sessionID: target.sessionId, directory: formatPathForApi(directory) }))
+  return unwrap(await sdk.session.children({ sessionID: target.sessionId, directory: formatPathForApi(directory, target.serverId) }))
 }
 
 /**
@@ -279,6 +279,6 @@ export type ApiTodo = TodoItem
 export async function getSessionTodos(sessionId: string, directory?: string, serverId?: string): Promise<ApiTodo[]> {
   const target = resolveSessionTarget(sessionId, serverId)
   const sdk = getSDKClient(target.serverId)
-  const todos = unwrap(await sdk.session.todo({ sessionID: target.sessionId, directory: formatPathForApi(directory) }))
+  const todos = unwrap(await sdk.session.todo({ sessionID: target.sessionId, directory: formatPathForApi(directory, target.serverId) }))
   return normalizeTodoItems(todos)
 }

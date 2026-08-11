@@ -37,7 +37,7 @@ function normalizePty(pty: LegacyPty): Pty {
  */
 export async function listPtySessions(directory?: string, serverId?: string): Promise<Pty[]> {
   const sdk = getSDKClient(serverId)
-  return unwrap(await sdk.pty.list({ directory: formatPathForApi(directory) })).map(pty =>
+  return unwrap(await sdk.pty.list({ directory: formatPathForApi(directory, serverId) })).map(pty =>
     normalizePty(pty as LegacyPty),
   )
 }
@@ -47,7 +47,7 @@ export async function listPtySessions(directory?: string, serverId?: string): Pr
  */
 export async function listAvailableShells(directory?: string, serverId?: string): Promise<ShellInfo[]> {
   const sdk = getSDKClient(serverId)
-  return unwrap(await sdk.pty.shells({ directory: formatPathForApi(directory) }))
+  return unwrap(await sdk.pty.shells({ directory: formatPathForApi(directory, serverId) }))
 }
 
 /**
@@ -55,7 +55,7 @@ export async function listAvailableShells(directory?: string, serverId?: string)
  */
 export async function createPtySession(params: PtyCreateParams, directory?: string, serverId?: string): Promise<Pty> {
   const sdk = getSDKClient(serverId)
-  return normalizePty(unwrap(await sdk.pty.create({ directory: formatPathForApi(directory), ...params })) as LegacyPty)
+  return normalizePty(unwrap(await sdk.pty.create({ directory: formatPathForApi(directory, serverId), ...params })) as LegacyPty)
 }
 
 /**
@@ -63,7 +63,7 @@ export async function createPtySession(params: PtyCreateParams, directory?: stri
  */
 export async function getPtySession(ptyId: string, directory?: string, serverId?: string): Promise<Pty> {
   const sdk = getSDKClient(serverId)
-  return normalizePty(unwrap(await sdk.pty.get({ ptyID: ptyId, directory: formatPathForApi(directory) })) as LegacyPty)
+  return normalizePty(unwrap(await sdk.pty.get({ ptyID: ptyId, directory: formatPathForApi(directory, serverId) })) as LegacyPty)
 }
 
 /**
@@ -77,7 +77,7 @@ export async function updatePtySession(
 ): Promise<Pty> {
   const sdk = getSDKClient(serverId)
   return normalizePty(
-    unwrap(await sdk.pty.update({ ptyID: ptyId, directory: formatPathForApi(directory), ...params })) as LegacyPty,
+    unwrap(await sdk.pty.update({ ptyID: ptyId, directory: formatPathForApi(directory, serverId), ...params })) as LegacyPty,
   )
 }
 
@@ -86,7 +86,7 @@ export async function updatePtySession(
  */
 export async function removePtySession(ptyId: string, directory?: string, serverId?: string): Promise<boolean> {
   const sdk = getSDKClient(serverId)
-  unwrap(await sdk.pty.remove({ ptyID: ptyId, directory: formatPathForApi(directory) }))
+  unwrap(await sdk.pty.remove({ ptyID: ptyId, directory: formatPathForApi(directory, serverId) }))
   return true
 }
 
@@ -113,7 +113,7 @@ export function getPtyConnectUrl(
       : undefined
 
   const auth = serverId ? serverStore.getServerAuth(serverId) : serverStore.getActiveAuth()
-  const formatted = formatPathForApi(directory)
+  const formatted = formatPathForApi(directory, serverId)
 
   // Tauri bridge 不需要在 URL 里放认证
   if (!includeAuthInUrl) {
