@@ -86,6 +86,7 @@ export const BottomPanel = memo(function BottomPanel({ directory, serverId }: Bo
             id: pty.id,
             title: pty.title || 'Terminal',
             status: pty.status === 'running' ? 'connecting' : 'exited',
+            serverId,
           })),
         )
       } catch (error) {
@@ -113,6 +114,7 @@ export const BottomPanel = memo(function BottomPanel({ directory, serverId }: Bo
         id: pty.id,
         title: pty.title || 'Terminal',
         status: 'connecting',
+        serverId,
       }
       layoutStore.addTerminalTab(tab)
     } catch (error) {
@@ -263,7 +265,7 @@ const TerminalContent = memo(function TerminalContent({ activeTab, directory, se
   return (
     <>
       {terminalTabs.map(tab => (
-        <Terminal key={tab.id} ptyId={tab.id} directory={directory} serverId={serverId} isActive={tab.id === activeTab.id} />
+        <Terminal key={tab.id} ptyId={tab.id} directory={directory} serverId={tab.serverId ?? serverId} isActive={tab.id === activeTab.id} />
       ))}
     </>
   )
