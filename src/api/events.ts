@@ -1029,8 +1029,22 @@ export function subscribeToServerEvents(serverId: string, callbacks: EventCallba
 }
 
 /**
- * 订阅活动服务器 SSE 事件（兼容旧 API）
+ * 订阅活动服务器 SSE 事件（兼容旧 API）。
+ * 订阅跟随 active server：切换服务器时自动迁移订阅（恢复改动前的单例语义）。
  */
 export function subscribeToEvents(callbacks: EventCallbacks): () => void {
-  return subscribeToServerEvents(serverStore.getActiveServerId(), callbacks)
+  let currentServerId = serverStore.getActiveServerId()
+  let unsubscribe = subscribeToServerEvents(currentServerId, callbacks)
+
+  const offServerChange = serverStore.onServerChange(newServerId => {
+    if (newServerId === currentServerId) return
+    unsubscribe()
+    currentServerId = newServerId
+    unsubscribe = subscribeToServerEvents(currentServerId, callbacks)
+  })
+
+  return () => {
+    offServerChange()
+    unsubscribe()
+  }
 }
