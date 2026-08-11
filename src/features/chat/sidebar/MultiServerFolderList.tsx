@@ -149,14 +149,18 @@ function ServerFolderGroup({
   const { setCurrentDirectory } = useDirectoryCtx()
   const handleSelectProject = useCallback(
     (project: FolderRecentProject) => {
+      const wasFocusedServer = multiServerStore.getFocusedServerId() === serverId
       // 项目选择器焦点同步到该文件夹所在的服务器
       multiServerStore.setFocusedServerId(serverId)
       if (!project.worktree) {
-        if (!currentDirectory) return
+        // global 文件夹：已在 global 且焦点本就在该服务器 → 跳过（点击=收起）；否则清目录
+        if (wasFocusedServer && !currentDirectory) return
         setCurrentDirectory(undefined)
         return
       }
-      if (currentDirectory && isSameDirectory(currentDirectory, project.worktree)) return
+      // 仅「同一服务器 + 已在当前目录」才跳过（让 FolderRow 的 toggle 收起生效）。
+      // 跨服务器即使路径相同也要切换目录上下文（A/B 同后端时路径相同但服务器不同）
+      if (wasFocusedServer && currentDirectory && isSameDirectory(currentDirectory, project.worktree)) return
       setCurrentDirectory(project.worktree)
     },
     [serverId, currentDirectory, setCurrentDirectory],
