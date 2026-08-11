@@ -27,6 +27,7 @@ import {
   reorderServerWorkspaces,
 } from '../../../utils/serverWorkspaces'
 import { deleteSession, updateSession, type ApiSession } from '../../../api'
+import { isSameDirectory } from '../../../utils'
 import { clearSessionRuntimeState } from '../../../utils/sessionLifecycle'
 import { uiErrorHandler } from '../../../utils'
 import {
@@ -142,20 +143,23 @@ function ServerFolderGroup({
       : null
   }, [serverId, selectedSessionId])
 
-  // 与文件夹模式一致的点击行为：点击目录文件夹 → 切换项目选择器焦点；
-  // 已在焦点目录则只展开/收起（FolderRecentSection 内部已 toggle）
+  // 与文件夹模式（SidePanel.handleSelectFolderProject）完全一致的点击行为：
+  // 已在当前目录 → 跳过 setCurrentDirectory（否则 currentDirectory 值变化会触发
+  // FolderRecentList 的 reconcile effect 把目录强制展开，吞掉「点击已展开文件夹=收起」）
   const { setCurrentDirectory } = useDirectoryCtx()
   const handleSelectProject = useCallback(
     (project: FolderRecentProject) => {
       // 项目选择器焦点同步到该文件夹所在的服务器
       multiServerStore.setFocusedServerId(serverId)
       if (!project.worktree) {
+        if (!currentDirectory) return
         setCurrentDirectory(undefined)
         return
       }
+      if (currentDirectory && isSameDirectory(currentDirectory, project.worktree)) return
       setCurrentDirectory(project.worktree)
     },
-    [serverId, setCurrentDirectory],
+    [serverId, currentDirectory, setCurrentDirectory],
   )
 
   const displayName = server?.name ?? serverId
@@ -255,7 +259,7 @@ function ServerFolderGroup({
   )
 }
 
-/** 轻量 useDirectory 取值（只取 setCurrentDirectory） */
+/** 轻量 useDirectory 取值（取 currentDirectory + setCurrentDirectory） */
 function useDirectoryCtx() {
   return useDirectory()
 }
