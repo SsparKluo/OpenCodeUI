@@ -1,5 +1,25 @@
 # Changelog
 
+## [v0.6.37] - 2026-08-11
+
+- fix(mobile): restore gap between collapsed reply capsule and scroll-to-bottom button (e202887a)
+- perf(multi-server): memoize server folder groups with stable callbacks (38c2f5aa)
+- fix(search): react to whitelist changes in result server set (30a2d24d)
+- fix(search): highlight only the exact server::session match (b61ab0cd)
+- feat(multi-server): global sidebar search matches servers, folders, and chats (4a704236)
+- fix(sse): subscribeToEvents follows active server (restore single-server parity) (9d98e6b2)
+- fix(multi-server): non-focused server folders no longer force-expand on global cwd (d45d955e)
+- fix(multi-server): git/vcs/path info follows focused server (fa0bfa25)
+- fix(multi-server): cross-server same-path folder click switches server context (d7b2c851)
+- fix(multi-server): folder click in current directory toggles collapse again (d9df63e8)
+- fix(multi-server): per-server model list, clean whitelist on server delete (4abda442)
+- chore(api): drop unused getSessionMessageCount, verify serverId param convention is uniform (d31cec04)
+- chore(multi-server): reactive subscribed count, drop stale server-switch flag entries (17d6eb36)
+- refactor(multi-server): fix ineffective storage version subscription, clean up dead code (6c1705ed)
+- feat(multi-server): unified workspace storage, per-server active list, project selector & routing polish (9b1a2db3)
+- feat(multi-server): subscribe to multiple OpenCode servers simultaneously (75a00b64)
+- fix(mobile): keep the input box usable after select-all-delete with an IME (d71ff404)
+
 ## [v0.6.36] - 2026-08-10
 
 - perf(ui): reduce streaming work and sync window controls (871a9726)
