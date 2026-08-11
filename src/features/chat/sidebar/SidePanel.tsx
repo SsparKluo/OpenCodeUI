@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { SessionList } from '../../sessions'
 import { FolderRecentList } from './FolderRecentList'
 import { MultiServerFolderList } from './MultiServerFolderList'
+import { SearchResults } from './SearchResults'
 import { useMultiServerStore, multiServerStore } from '../../../store/multiServerStore'
 import { useServerStore } from '../../../hooks/useServerStore'
 import { getProjectGroupIdentity } from './projectGrouping'
@@ -1470,13 +1471,21 @@ export function SidePanel({
             >
               {multiServerConfig.enabled ? (
                 subscribedServerIds.length > 0 ? (
-                  <MultiServerFolderList
-                    serverIds={subscribedServerIds}
-                    selectedSessionId={multiServerSelectedSessionKey}
-                    currentDirectory={currentDirectory}
-                    onSelectSession={handleSelectMultiServer}
-                    onNewSession={onNewSession}
-                  />
+                  search ? (
+                    <SearchResults
+                      search={search}
+                      selectedSessionId={multiServerSelectedSessionKey}
+                      onSelectSession={handleSelectMultiServer}
+                    />
+                  ) : (
+                    <MultiServerFolderList
+                      serverIds={subscribedServerIds}
+                      selectedSessionId={multiServerSelectedSessionKey}
+                      currentDirectory={currentDirectory}
+                      onSelectSession={handleSelectMultiServer}
+                      onNewSession={onNewSession}
+                    />
+                  )
                 ) : (
                   <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-[length:var(--fs-xs)] text-text-400/70">
                     <span>{t('sidebar.noSubscribedServers', { defaultValue: 'No servers subscribed yet.' })}</span>

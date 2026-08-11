@@ -164,7 +164,13 @@
     "batchRemoveProjectsConfirm": "Remove {{count}} project(s) from the list? This only removes them from the sidebar — no sessions will be deleted and no files on disk will be affected.",
     "noSubscribedServers": "No servers subscribed yet",
     "openServerSettings": "Open Server Settings",
-    "focusServerHint": "Focused server · click a server node in the list to switch"
+    "focusServerHint": "Focused server · click a server node in the list to switch",
+    "searchResults": "Search results",
+    "searchHint": "Search by server, folder, or chat name",
+    "searchFolderUnit": " folders",
+    "searchSessionUnit": " chats",
+    "searchServerMatchHint": "Server match · click the header to switch focus",
+    "searchingSessions": "Searching chats…"
   },
   "activeSession": {
     "awaitingPermission": "Awaiting Permission",
