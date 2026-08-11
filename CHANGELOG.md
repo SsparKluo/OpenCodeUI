@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.39] - 2026-08-11
+
+- fix(multi-server): per-server path style detection (Windows/Linux coexistence) (15491eb7)
+
 ## [v0.6.38] - 2026-08-11
 
 - fix(right-panel): remount file/diff content when the server changes (77dee66e)
