@@ -45,6 +45,10 @@ interface MultiServerFolderListProps {
   onSelectSession: (session: ApiSession & { serverId?: string }) => void
   /** 点击服务器节点：切焦点服务器并进入该服务器的新建会话页 */
   onNewSession: () => void
+  /** 子会话展示（SidePanel 按选中/活跃计算；key 为原始 id，与列表 session.id 一致） */
+  expandedChildSessionIds?: Set<string>
+  inlineChildSessions?: Map<string, ApiSession[]>
+  onSelectChildSession?: (session: ApiSession) => void
 }
 
 function useServerConnectionState(serverId: string): ConnectionInfo {
@@ -76,6 +80,9 @@ const ServerFolderGroup = memo(function ServerFolderGroup({
   currentDirectory,
   onSelectSession,
   onNewSession,
+  expandedChildSessionIds,
+  inlineChildSessions,
+  onSelectChildSession,
   isExpanded,
   onToggleExpanded,
   isDragged,
@@ -90,6 +97,9 @@ const ServerFolderGroup = memo(function ServerFolderGroup({
   currentDirectory?: string
   onSelectSession: (session: ApiSession & { serverId?: string }) => void
   onNewSession: () => void
+  expandedChildSessionIds?: Set<string>
+  inlineChildSessions?: Map<string, ApiSession[]>
+  onSelectChildSession?: (session: ApiSession) => void
   isExpanded: boolean
   onToggleExpanded: () => void
   isDragged: boolean
@@ -255,6 +265,9 @@ const ServerFolderGroup = memo(function ServerFolderGroup({
               onReorderProject={(draggedPath, targetPath) => {
                 reorderServerWorkspaces(serverId, draggedPath, targetPath)
               }}
+              expandedChildSessionIds={expandedChildSessionIds}
+              inlineChildSessions={inlineChildSessions}
+              onSelectChildSession={onSelectChildSession}
               pinnedSessions={[]}
             />
         </div>
@@ -274,6 +287,9 @@ export function MultiServerFolderList({
   currentDirectory,
   onSelectSession,
   onNewSession,
+  expandedChildSessionIds,
+  inlineChildSessions,
+  onSelectChildSession,
 }: MultiServerFolderListProps) {
   // 服务器展开状态（父级管理，拖拽时自动收起/恢复 — 与文件夹模式对齐）
   const [expandedServerIds, setExpandedServerIds] = useState<string[]>(() => [...serverIds])
@@ -362,6 +378,9 @@ export function MultiServerFolderList({
           onTouchDragStart={makeTouchDragStart(serverId)}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
+          expandedChildSessionIds={expandedChildSessionIds}
+          inlineChildSessions={inlineChildSessions}
+          onSelectChildSession={onSelectChildSession}
         />
       ))}
     </div>

@@ -507,12 +507,21 @@ export function SidePanel({
   // 开关开 → 拉 /children 全量：选中的 root 或选中子 session 时保持其父展开
   const expandedChildSessionIds = useMemo(() => {
     if (search || !sidebarShowChildSessions || !selectedSessionId) return undefined
+    if (multiServerConfig.enabled) {
+      // 多服务器模式：选中 session 属于任意服务器，直接用全服务器的 childSessionStore 判断
+      if (childSessionStore.getChildSessionIds(selectedSessionId).length > 0) {
+        return new Set([splitSessionKey(selectedSessionId).sessionId])
+      }
+      const pid = findParentId(selectedSessionId)
+      if (pid) return new Set([pid])
+      return undefined
+    }
     const selectedRaw = splitSessionKey(selectedSessionId).sessionId
     if (rootSessionIds.has(selectedRaw)) return new Set([selectedRaw])
     const pid = findParentId(selectedSessionId)
     if (pid && rootSessionIds.has(pid)) return new Set([pid])
     return undefined
-  }, [search, sidebarShowChildSessions, selectedSessionId, rootSessionIds, findParentId])
+  }, [search, sidebarShowChildSessions, selectedSessionId, rootSessionIds, findParentId, multiServerConfig.enabled])
 
   // 开关关 → 只挂活跃的 + 选中的子 session
   const inlineChildSessions = useMemo(() => {
@@ -529,9 +538,16 @@ export function SidePanel({
     }
     for (const entry of busySessions) {
       const pid = findParentId(entry.sessionId)
-      if (pid && rootSessionIds.has(pid)) {
-        // entry.sessionId 是复合 key，sessionLookup 以原始 id 存储
-        const s = sessionLookup.get(splitSessionKey(entry.sessionId).sessionId)
+      // 单服务器：父必须在当前列表（rootSessionIds）；多服务器：父在各自服务器列表，放宽
+      const pidOk = multiServerConfig.enabled ? !!pid : (pid ? rootSessionIds.has(pid) : false)
+      if (pid && pidOk) {
+        const rawId = splitSessionKey(entry.sessionId).sessionId
+        // sessionLookup 只含 active 服务器会话；其他服务器的子 session 用 entry 构造
+        const s =
+          sessionLookup.get(rawId) ??
+          (entry.title || entry.directory
+            ? ({ id: rawId, title: entry.title, directory: entry.directory } as ApiSession)
+            : undefined)
         if (s) add(pid, s)
       }
     }
@@ -556,6 +572,7 @@ export function SidePanel({
     expandedChildSessionIds,
     sessionLookup,
     findParentId,
+    multiServerConfig.enabled,
   ])
 
   const activeSessionTree = useMemo(
@@ -913,7 +930,8 @@ export function SidePanel({
               directory: entry.directory,
             } as ApiSession)
           : undefined)
-      const childEntries = activeSessionTree.childrenByParent.get(entry.sessionId) ?? []
+      // childrenByParent 以原始 id 为 key（buildActiveSessionTree 统一）
+      const childEntries = activeSessionTree.childrenByParent.get(sessionId) ?? []
 
       return (
         <div key={entry.sessionId} style={level > 0 ? { marginLeft: level * 12 } : undefined}>
@@ -1494,6 +1512,9 @@ export function SidePanel({
                       currentDirectory={currentDirectory}
                       onSelectSession={handleSelectMultiServer}
                       onNewSession={onNewSession}
+                      expandedChildSessionIds={expandedChildSessionIds}
+                      inlineChildSessions={inlineChildSessions}
+                      onSelectChildSession={handleSelectActive}
                     />
                   )
                 ) : (
