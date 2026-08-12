@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.6.42] - 2026-08-12
+
+- fix(sessions): remaining composite-key mismatches in selection, busy & unread markers (8de12315)
+- fix(sessions): child sessions under parent no longer broken (composite-key mismatch) (f245160f)
+
 ## [v0.6.41] - 2026-08-11
 
 - fix(multi-server): force auto path style while multi-server mode is enabled (247f12ed)
