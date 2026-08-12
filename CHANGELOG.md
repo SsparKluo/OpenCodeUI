@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.6.43] - 2026-08-12
+
+- fix(permissions): refresh can't load pending permissions (composite vs raw family check) (69633740)
+- fix(permissions): clear stale pending requests when switching sessions (e04c8e6d)
+- fix(permissions): refresh must not drop SSE-known permission dialogs (15702579)
+- fix(active-tab): busy session tree now nests children under parents again (70e100d5)
+- fix(sessions): task-child permission matching, sub-session view, child abort use composite keys (6b30fec0)
+- fix(permissions): pending permission/question requests filtered out by key mismatch (14b36811)
+
 ## [v0.6.42] - 2026-08-12
 
 - fix(sessions): remaining composite-key mismatches in selection, busy & unread markers (8de12315)
