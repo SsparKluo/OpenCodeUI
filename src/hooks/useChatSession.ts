@@ -572,9 +572,10 @@ export function useChatSession({
   // Load child sessions and pending permissions on session change
   // 页面刷新时 childSessionStore 是空的，需要先从 API 恢复子 session 关系
   // 然后再加载权限请求（包括子 session 的权限）
+  // 切换 session 时同样要清空旧 session 的 pending 权限/问题，否则 A 会话的请求会残留在 B 会话
   useEffect(() => {
+    resetPendingRequests()
     if (!routeSessionId) {
-      resetPendingRequests()
       return
     }
 
