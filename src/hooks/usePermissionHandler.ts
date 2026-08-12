@@ -15,6 +15,7 @@ import {
   type QuestionAnswer,
 } from '../api'
 import { activeSessionStore } from '../store'
+import { makeSessionKey } from '../utils/sessionKey'
 import { permissionErrorHandler } from '../utils'
 
 export interface UsePermissionHandlerResult {
@@ -180,8 +181,14 @@ export function usePermissionHandler(serverId: string): UsePermissionHandlerResu
   // 一次拉取全量数据，用 sessionFamily 过滤后直接替换本地状态
   const refreshPendingRequests = useCallback(async (sessionIds?: string | string[], directory?: string) => {
     try {
-      // 规范化为 Set 用于过滤
+      // 规范化为 Set 用于过滤（family 是复合 key；API 返回的 sessionID 是原始 id）
       const familySet = new Set(sessionIds ? (Array.isArray(sessionIds) ? sessionIds : [sessionIds]) : [])
+      // 原始 id → 复合 key（按当前 pane 的服务器），两种形式都匹配
+      const matchesFamily = (rawSessionId: string) => {
+        if (familySet.size === 0) return true
+        if (familySet.has(rawSessionId)) return true
+        return familySet.has(makeSessionKey(serverId, rawSessionId))
+      }
 
       // 只请求一次全量数据（不按 sessionId 分别请求）
       const [allPermissions, allQuestions] = await Promise.all([
@@ -191,7 +198,7 @@ export function usePermissionHandler(serverId: string): UsePermissionHandlerResu
 
       const nextPermissions =
         familySet.size > 0
-          ? allPermissions.filter(p => familySet.has(p.sessionID) && !replyingIdsRef.current.has(p.id))
+          ? allPermissions.filter(p => matchesFamily(p.sessionID) && !replyingIdsRef.current.has(p.id))
           : allPermissions.filter(p => !replyingIdsRef.current.has(p.id))
 
       // OMO background subagents can emit permission.asked over SSE before /permission
@@ -201,14 +208,14 @@ export function usePermissionHandler(serverId: string): UsePermissionHandlerResu
         const merged = new Map(nextPermissions.map(p => [p.id, p]))
         for (const request of prev) {
           if (replyingIdsRef.current.has(request.id)) continue
-          if (familySet.size > 0 && !familySet.has(request.sessionID)) continue
+          if (familySet.size > 0 && !matchesFamily(request.sessionID)) continue
           if (!merged.has(request.id)) merged.set(request.id, request)
         }
         return Array.from(merged.values())
       })
       setPendingQuestionRequests(
         familySet.size > 0
-          ? allQuestions.filter(q => familySet.has(q.sessionID) && !replyingIdsRef.current.has(q.id))
+          ? allQuestions.filter(q => matchesFamily(q.sessionID) && !replyingIdsRef.current.has(q.id))
           : allQuestions.filter(q => !replyingIdsRef.current.has(q.id)),
       )
     } catch (error) {
