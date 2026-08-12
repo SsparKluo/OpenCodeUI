@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getSessionChildren, updateSession, deleteSession as apiDeleteSession, type ApiSession } from '../../../api'
+import { splitSessionKey } from '../../../utils/sessionKey'
 import { SpinnerIcon } from '../../../components/Icons'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 import { useInputCapabilities } from '../../../hooks/useInputCapabilities'
@@ -92,7 +93,9 @@ export function SessionChildrenSlot({
       await apiDeleteSession(id, parentSession.directory, serverId)
       pinnedSessionsStore.unpin(id)
       setFetched(prev => prev.filter(s => s.id !== id))
-      if (selectedSessionId === id) onDeleteSelected?.()
+      if (selectedSessionId && (selectedSessionId === id || splitSessionKey(selectedSessionId).sessionId === id)) {
+        onDeleteSelected?.()
+      }
     } catch (e) {
       uiErrorHandler('delete session', e)
     }
@@ -121,7 +124,7 @@ export function SessionChildrenSlot({
           <SessionListItem
             key={child.id}
             session={child}
-            isSelected={child.id === selectedSessionId}
+            isSelected={!!selectedSessionId && child.id === splitSessionKey(selectedSessionId).sessionId}
             onSelect={() => onSelect({ ...child, serverId } as ApiSession & { serverId?: string })}
             onRename={newTitle => handleRename(child.id, newTitle)}
             onDelete={() => setDeleteConfirm({ isOpen: true, sessionId: child.id })}

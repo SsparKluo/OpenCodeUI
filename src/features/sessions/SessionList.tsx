@@ -10,8 +10,9 @@ import { notificationStore, useHasUnreadCompletedNotification } from '../../stor
 import { SessionChildrenSlot } from '../chat/sidebar/SessionChildrenSlot'
 import type { ApiSession } from '../../api'
 import { startInternalDrag } from '../../lib/internalDragCore'
-import { splitSessionKey } from '../../utils/sessionKey'
+import { makeSessionKey, splitSessionKey } from '../../utils/sessionKey'
 import { pinnedSessionsStore, type PinnedSessionEntry } from '../../store/pinnedSessionsStore'
+import { serverStore } from '../../store/serverStore'
 
 interface SessionListProps {
   sessions: ApiSession[]
@@ -233,7 +234,7 @@ export function SessionList({
                         <div key={session.id}>
                           <SessionListItem
                             session={session}
-                            isSelected={session.id === selectedId}
+                            isSelected={!!selectedId && session.id === splitSessionKey(selectedId).sessionId}
                             onSelect={() => onSelect(session)}
                             onDelete={() => setDeleteConfirm({ isOpen: true, sessionId: session.id })}
                             onRename={newTitle => onRename(session.id, newTitle)}
@@ -302,7 +303,7 @@ export function SessionList({
                 <div key={session.id}>
                   <SessionListItem
                     session={session}
-                    isSelected={session.id === selectedId}
+                    isSelected={!!selectedId && session.id === splitSessionKey(selectedId).sessionId}
                     onSelect={() => onSelect(session)}
                     onDelete={() => setDeleteConfirm({ isOpen: true, sessionId: session.id })}
                     onRename={newTitle => onRename(session.id, newTitle)}
@@ -418,8 +419,10 @@ export function SessionListItem({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const touchMoved = useRef(false)
 
-  // 活跃状态标记（多服务器模式用复合 key 查询；activeSessionStore 的 key 是 serverId::sessionId）
-  const activeEntry = useSessionActiveEntry(activeSessionKey ?? session.id)
+  // 活跃状态标记（activeSessionStore / notificationStore 的 key 是复合 serverId::sessionId；
+  // 单服务器模式 session.id 是原始 id，需用活动服务器合成复合 key 查询）
+  const activeQueryKey = activeSessionKey ?? makeSessionKey(serverStore.getActiveServerId(), session.id)
+  const activeEntry = useSessionActiveEntry(activeQueryKey)
   const activeStatus = activeEntry
     ? activeEntry.pendingAction?.type === 'permission'
       ? { dot: 'bg-warning-100', label: t('chat:activeSession.awaitingPermission'), pulse: false }
@@ -429,7 +432,7 @@ export function SessionListItem({
           ? { dot: 'bg-warning-100', label: t('chat:activeSession.retrying'), pulse: false }
           : { dot: 'bg-success-100', label: t('chat:activeSession.working'), pulse: true }
     : null
-  const hasUnreadCompletedNotification = useHasUnreadCompletedNotification(activeSessionKey ?? session.id)
+  const hasUnreadCompletedNotification = useHasUnreadCompletedNotification(activeQueryKey)
   const itemRef = useRef<HTMLDivElement>(null)
   const isCompact = density === 'compact'
   const isMinimal = density === 'minimal'
@@ -564,7 +567,7 @@ export function SessionListItem({
       setShowActions(false)
       return
     }
-    notificationStore.markSessionNotificationsRead(activeSessionKey ?? session.id, 'completed')
+    notificationStore.markSessionNotificationsRead(activeQueryKey, 'completed')
     onSelect()
   }
 

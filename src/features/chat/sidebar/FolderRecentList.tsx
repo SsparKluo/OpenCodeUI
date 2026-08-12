@@ -19,6 +19,7 @@ import { useInView } from '../../../hooks/useInView'
 import { getDirectoryName, isSameDirectory, normalizeToForwardSlash } from '../../../utils'
 import { useLayoutStore } from '../../../store'
 import { useBusySessions } from '../../../store/activeSessionStore'
+import { splitSessionKey } from '../../../utils/sessionKey'
 import { useNotifications } from '../../../store/notificationStore'
 import { pinnedSessionsStore, type PinnedSessionEntry } from '../../../store/pinnedSessionsStore'
 import { SessionListItem } from '../../sessions'
@@ -718,7 +719,7 @@ function PinnedFolderSection({
             <div key={session.id}>
               <SessionListItem
                 session={session}
-                isSelected={session.id === selectedSessionId}
+                isSelected={!!selectedSessionId && session.id === splitSessionKey(selectedSessionId).sessionId}
                 onSelect={() => onSelectSession(session)}
                 onRename={newTitle => onRenameSession(session, newTitle)}
                 onDelete={() => onRequestDeleteSession({ session, removeLocal: () => {} })}
@@ -1105,7 +1106,7 @@ function FolderRecentSection({
                       <SessionListItem
                         session={session}
                         activeSessionKey={serverId ? `${serverId}::${session.id}` : undefined}
-                        isSelected={session.id === selectedSessionId}
+                        isSelected={!!selectedSessionId && session.id === splitSessionKey(selectedSessionId).sessionId}
                         onSelect={() => onSelectSession(session)}
                         onRename={newTitle => handleRename(session.id, newTitle)}
                         onDelete={() => handleDelete(session.id)}
