@@ -46,7 +46,7 @@ import { getMessageText, isUserMessage, type AssistantMessageInfo, type Message 
 import { clipboardErrorHandler, copyTextToClipboard, createErrorHandler } from '../utils'
 import { clearSessionRuntimeState } from '../utils/sessionLifecycle'
 import { serverStorage } from '../utils/perServerStorage'
-import { sessionKeyToServerId } from '../utils/sessionKey'
+import { sessionKeyToServerId, splitSessionKey } from '../utils/sessionKey'
 import { serverStore } from '../store/serverStore'
 import { STORAGE_KEY_SELECTED_AGENT } from '../constants'
 import type { ChatAreaHandle } from '../features/chat'
@@ -601,6 +601,10 @@ export function useChatSession({
 
       // Step 2: 获取完整的 session family（主 session + 所有子孙）
       const family = new Set(childSessionStore.getSessionAndDescendants(routeSessionId!))
+      // family 是复合 key；API 返回的 sessionID 是原始 id，兼容两种形式比较
+      const familyRaw = new Set([...family].map(k => splitSessionKey(k).sessionId))
+      const matchesFamily = (rawSessionId: string) =>
+        familyRaw.has(rawSessionId) || familyRaw.has(splitSessionKey(rawSessionId).sessionId)
 
       // Step 3: 获取所有待处理请求，然后用 family 过滤
       // GET /permission 和 GET /question 返回全量数据，不传 sessionId 避免 N 次重复请求
@@ -616,7 +620,7 @@ export function useChatSession({
       // /permission can list it for this routed instance. Refresh 时序下子 session 关系
       // 可能尚未注册（family 不含子 session），因此 SSE 已知请求必须无条件保留，
       // 否则刷新后子任务的权限弹窗会被 family 过滤误删。
-      const nextPerms = allPerms.filter(p => family.has(p.sessionID))
+      const nextPerms = allPerms.filter(p => matchesFamily(p.sessionID))
       setPendingPermissionRequests(prev => {
         const merged = new Map(nextPerms.map(p => [p.id, p]))
         for (const request of prev) {
@@ -625,7 +629,7 @@ export function useChatSession({
         return Array.from(merged.values())
       })
       setPendingQuestionRequests(prev => {
-        const merged = new Map(allQuestions.filter(q => family.has(q.sessionID)).map(q => [q.id, q]))
+        const merged = new Map(allQuestions.filter(q => matchesFamily(q.sessionID)).map(q => [q.id, q]))
         for (const q of prev) {
           if (!merged.has(q.id)) merged.set(q.id, q)
         }
