@@ -6,6 +6,8 @@ import { useDisclosureScrollLock, useResponsiveMaxHeight } from '../../../../hoo
 import { useSessionState, messageStore, childSessionStore } from '../../../../store'
 import { useSessionNavigation } from '../../../../contexts/SessionNavigationContext'
 import { abortSession, getSessionMessages } from '../../../../api'
+import { makeSessionKey, splitSessionKey } from '../../../../utils/sessionKey'
+import { serverStore } from '../../../../store/serverStore'
 import { sessionErrorHandler } from '../../../../utils'
 import { formatToolName } from '../../../../utils/formatUtils'
 import { useUiDisclosureState } from '../../../../utils/uiDisclosureState'
@@ -55,6 +57,9 @@ export const TaskRenderer = memo(function TaskRenderer({ part, onFullscreenChang
   const isCompleted = state.status === 'completed'
   const isError = state.status === 'error'
 
+  // 子 session 属于当前消息所属 session（父 session）的服务器
+  const taskServerId = currentSessionId ? splitSessionKey(currentSessionId).serverId : undefined
+
   const handleContentFullscreenChange = useCallback(
     (isFullscreen: boolean) => {
       setIsContentFullscreen(isFullscreen)
@@ -68,11 +73,17 @@ export const TaskRenderer = memo(function TaskRenderer({ part, onFullscreenChang
     (e: React.MouseEvent) => {
       e.stopPropagation()
       if (!targetSessionId) return
-      const childInfo = childSessionStore.getSessionInfo(targetSessionId)
+      // 子 session 属于当前消息所属 session（父 session）的服务器；
+      // metadata.sessionId 是原始 id，childSessionStore 存复合 key
+      const serverId = currentSessionId ? splitSessionKey(currentSessionId).serverId : undefined
+      const childScoped = targetSessionId.includes('::')
+        ? targetSessionId
+        : makeSessionKey(serverId ?? serverStore.getActiveServerId(), targetSessionId)
+      const childInfo = childSessionStore.getSessionInfo(childScoped)
       const parentSessionId = childInfo?.parentID || currentSessionId || null
       const parentState = parentSessionId ? messageStore.getSessionState(parentSessionId) : null
       const directory = parentState?.directory || currentDirectory || ''
-      abortSession(targetSessionId, directory)
+      abortSession(targetSessionId, directory, serverId)
     },
     [targetSessionId, currentSessionId, currentDirectory],
   )
@@ -122,7 +133,7 @@ export const TaskRenderer = memo(function TaskRenderer({ part, onFullscreenChang
               {targetSessionId && (
                 <>
                   {prompt && <hr className="border-border-200/30" />}
-                  <SubSessionView sessionId={targetSessionId} isParentRunning={isRunning} />
+                  <SubSessionView sessionId={targetSessionId} serverId={taskServerId} isParentRunning={isRunning} />
                 </>
               )}
 
@@ -189,7 +200,11 @@ export const TaskHeader = memo(function TaskHeader({
       e.stopPropagation()
       if (!sessionId) return
 
-      const childInfo = childSessionStore.getSessionInfo(sessionId)
+      const serverId = currentSessionId ? splitSessionKey(currentSessionId).serverId : undefined
+      const scoped = sessionId.includes('::')
+        ? sessionId
+        : makeSessionKey(serverId ?? serverStore.getActiveServerId(), sessionId)
+      const childInfo = childSessionStore.getSessionInfo(scoped)
       const parentSessionId = childInfo?.parentID || currentSessionId || null
       const parentState = parentSessionId ? messageStore.getSessionState(parentSessionId) : null
       const directory = parentState?.directory || currentDirectory || ''
@@ -289,17 +304,23 @@ export const TaskHeader = memo(function TaskHeader({
 
 interface SubSessionViewProps {
   sessionId: string
+  /** 子 session 所属服务器（从父 session 复合 key 解析） */
+  serverId?: string
   isParentRunning: boolean
 }
 
-const SubSessionView = memo(function SubSessionView({ sessionId }: SubSessionViewProps) {
+const SubSessionView = memo(function SubSessionView({ sessionId, serverId }: SubSessionViewProps) {
   const { t } = useTranslation('message')
   const scrollRef = useRef<HTMLDivElement>(null)
   const loadedRef = useRef(false)
   const isAtBottomRef = useRef(true)
   const subSessionMaxHeight = useResponsiveMaxHeight(0.25, 120, 240)
 
-  const sessionState = useSessionState(sessionId)
+  // messageStore 以复合 key 存储：子 session 原始 id → 按服务器复合化
+  const sessionKey = sessionId.includes('::')
+    ? sessionId
+    : makeSessionKey(serverId ?? serverStore.getActiveServerId(), sessionId)
+  const sessionState = useSessionState(sessionKey)
   const messages = sessionState?.messages ?? EMPTY_MESSAGES
   const isStreaming = sessionState?.isStreaming || false
   const isLoading = sessionState?.loadState === 'loading'
@@ -308,32 +329,32 @@ const SubSessionView = memo(function SubSessionView({ sessionId }: SubSessionVie
   useEffect(() => {
     if (loadedRef.current) return
 
-    const state = messageStore.getSessionState(sessionId)
+    const state = messageStore.getSessionState(sessionKey)
     if (state && (state.messages.length > 0 || state.isStreaming)) {
       loadedRef.current = true
       return
     }
 
     loadedRef.current = true
-    messageStore.setLoadState(sessionId, 'loading')
+    messageStore.setLoadState(sessionKey, 'loading')
 
-    getSessionMessages(sessionId, 20)
+    getSessionMessages(sessionId, 20, undefined, serverId)
       .then(apiMessages => {
-        const currentState = messageStore.getSessionState(sessionId)
+        const currentState = messageStore.getSessionState(sessionKey)
         if (currentState && currentState.messages.length > apiMessages.length) {
-          messageStore.setLoadState(sessionId, 'loaded')
+          messageStore.setLoadState(sessionKey, 'loaded')
           return
         }
-        messageStore.setMessages(sessionId, apiMessages, {
+        messageStore.setMessages(sessionKey, apiMessages, {
           directory: '',
           hasMoreHistory: apiMessages.length >= 20,
         })
       })
       .catch(err => {
         sessionErrorHandler('load sub-session', err)
-        messageStore.setLoadState(sessionId, 'error')
+        messageStore.setLoadState(sessionKey, 'error')
       })
-  }, [sessionId])
+  }, [sessionKey, sessionId, serverId])
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
