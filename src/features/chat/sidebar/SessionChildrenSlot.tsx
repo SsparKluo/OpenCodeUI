@@ -14,6 +14,8 @@ import { SessionListItem } from '../../sessions'
 
 interface SessionChildrenSlotProps {
   parentSession: ApiSession
+  /** 父 session 所属服务器（多服务器模式；缺省用活动服务器） */
+  serverId?: string
   selectedSessionId: string | null
   fetchAll?: boolean
   children?: ApiSession[]
@@ -28,6 +30,7 @@ interface SessionChildrenSlotProps {
 
 export function SessionChildrenSlot({
   parentSession,
+  serverId,
   selectedSessionId,
   fetchAll,
   children: givenChildren,
@@ -57,7 +60,7 @@ export function SessionChildrenSlot({
       if (!cancelled) setLoading(true)
     })
 
-    getSessionChildren(parentSession.id, parentSession.directory)
+    getSessionChildren(parentSession.id, parentSession.directory, serverId)
       .then(data => {
         if (!cancelled) setFetched(data)
       })
@@ -73,7 +76,7 @@ export function SessionChildrenSlot({
 
   const handleRename = useCallback(async (childId: string, newTitle: string) => {
     try {
-      await updateSession(childId, { title: newTitle })
+      await updateSession(childId, { title: newTitle }, parentSession.directory, serverId)
       pinnedSessionsStore.update(childId, { title: newTitle })
       setFetched(prev => prev.map(s => (s.id === childId ? { ...s, title: newTitle } : s)))
     } catch (e) {
@@ -86,7 +89,7 @@ export function SessionChildrenSlot({
     if (!id) return
     setDeleteConfirm({ isOpen: false, sessionId: null })
     try {
-      await apiDeleteSession(id)
+      await apiDeleteSession(id, parentSession.directory, serverId)
       pinnedSessionsStore.unpin(id)
       setFetched(prev => prev.filter(s => s.id !== id))
       if (selectedSessionId === id) onDeleteSelected?.()
@@ -119,7 +122,7 @@ export function SessionChildrenSlot({
             key={child.id}
             session={child}
             isSelected={child.id === selectedSessionId}
-            onSelect={() => onSelect(child)}
+            onSelect={() => onSelect({ ...child, serverId } as ApiSession & { serverId?: string })}
             onRename={newTitle => handleRename(child.id, newTitle)}
             onDelete={() => setDeleteConfirm({ isOpen: true, sessionId: child.id })}
             preferTouchUi={preferTouchUi}

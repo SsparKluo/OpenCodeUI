@@ -35,6 +35,8 @@ interface SessionListProps {
   expandedChildSessionIds?: Set<string>
   /** 按父 ID 分组的直接挂出来的子 session */
   inlineChildSessions?: Map<string, ApiSession[]>
+  /** 数据所属服务器（多服务器模式；缺省用活动服务器） */
+  serverId?: string
   onSelectChildSession?: (session: ApiSession) => void
   pinnedDividerAfterIds?: Set<string>
   /** 拉不到的置顶（灰色展示，可取消） */
@@ -72,6 +74,7 @@ export function SessionList({
   showDirectory = false,
   expandedChildSessionIds,
   inlineChildSessions,
+  serverId,
   onSelectChildSession,
   pinnedDividerAfterIds,
   unavailablePinnedEntries = [],
@@ -252,6 +255,7 @@ export function SessionList({
                             (expandedChildSessionIds?.has(session.id) || inlineChildSessions?.has(session.id)) && (
                               <SessionChildrenSlot
                                 parentSession={session}
+                                serverId={serverId}
                                 selectedSessionId={selectedId}
                                 fetchAll={expandedChildSessionIds?.has(session.id)}
                                 children={inlineChildSessions?.get(session.id)}
@@ -317,6 +321,7 @@ export function SessionList({
                   {hasChildren && onSelectChildSession && (
                     <SessionChildrenSlot
                       parentSession={session}
+                      serverId={serverId}
                       selectedSessionId={selectedId}
                       fetchAll={shouldFetchAll}
                       children={inlineChildren}

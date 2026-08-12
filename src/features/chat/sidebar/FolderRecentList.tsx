@@ -1127,6 +1127,7 @@ function FolderRecentSection({
                         (expandedChildSessionIds?.has(session.id) || inlineChildSessions?.has(session.id)) && (
                           <SessionChildrenSlot
                             parentSession={session}
+                            serverId={serverId}
                             selectedSessionId={selectedSessionId}
                             fetchAll={expandedChildSessionIds?.has(session.id)}
                             children={inlineChildSessions?.get(session.id)}

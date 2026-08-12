@@ -47,7 +47,7 @@ import {
   type ConnectionInfo,
 } from '../../../api'
 import { getDirectoryName, isSameDirectory, normalizeToForwardSlash } from '../../../utils'
-import { splitSessionKey } from '../../../utils/sessionKey'
+import { makeSessionKey, splitSessionKey } from '../../../utils/sessionKey'
 import { uiErrorHandler } from '../../../utils'
 
 // 侧边栏设计模式：
@@ -493,9 +493,13 @@ export function SidePanel({
 
   const findParentId = useCallback(
     (id: string) => {
-      const s = sessionLookup.get(id)
+      // 输入可能是复合 key（serverId::sessionId）或原始 id；返回「原始 parentID」
+      // （sessions/sessionLookup 以原始 id 存；childSessionStore 以复合 key 存）
+      const { serverId, sessionId } = splitSessionKey(id)
+      const s = sessionLookup.get(sessionId)
       if (s?.parentID) return s.parentID
-      return childSessionStore.getSessionInfo(id)?.parentID
+      const childInfo = childSessionStore.getSessionInfo(id.includes('::') ? id : makeSessionKey(serverId, id))
+      return childInfo ? splitSessionKey(childInfo.parentID).sessionId : undefined
     },
     [sessionLookup],
   )
@@ -503,7 +507,8 @@ export function SidePanel({
   // 开关开 → 拉 /children 全量：选中的 root 或选中子 session 时保持其父展开
   const expandedChildSessionIds = useMemo(() => {
     if (search || !sidebarShowChildSessions || !selectedSessionId) return undefined
-    if (rootSessionIds.has(selectedSessionId)) return new Set([selectedSessionId])
+    const selectedRaw = splitSessionKey(selectedSessionId).sessionId
+    if (rootSessionIds.has(selectedRaw)) return new Set([selectedRaw])
     const pid = findParentId(selectedSessionId)
     if (pid && rootSessionIds.has(pid)) return new Set([pid])
     return undefined
@@ -525,14 +530,19 @@ export function SidePanel({
     for (const entry of busySessions) {
       const pid = findParentId(entry.sessionId)
       if (pid && rootSessionIds.has(pid)) {
-        const s = sessionLookup.get(entry.sessionId)
+        // entry.sessionId 是复合 key，sessionLookup 以原始 id 存储
+        const s = sessionLookup.get(splitSessionKey(entry.sessionId).sessionId)
         if (s) add(pid, s)
       }
     }
-    if (!sidebarShowChildSessions && selectedSessionId && !rootSessionIds.has(selectedSessionId)) {
+    if (
+      !sidebarShowChildSessions &&
+      selectedSessionId &&
+      !rootSessionIds.has(splitSessionKey(selectedSessionId).sessionId)
+    ) {
       const pid = findParentId(selectedSessionId)
       if (pid && rootSessionIds.has(pid)) {
-        const s = sessionLookup.get(selectedSessionId)
+        const s = sessionLookup.get(splitSessionKey(selectedSessionId).sessionId)
         if (s) add(pid, s)
       }
     }
