@@ -612,17 +612,24 @@ export function useChatSession({
 
       // 只保留属于当前 session family 的请求。
       // OMO background subagents may publish permission.asked over SSE before
-      // /permission can list it for this routed instance, so do not drop
-      // SSE-known requests just because the snapshot is missing them.
+      // /permission can list it for this routed instance. Refresh 时序下子 session 关系
+      // 可能尚未注册（family 不含子 session），因此 SSE 已知请求必须无条件保留，
+      // 否则刷新后子任务的权限弹窗会被 family 过滤误删。
       const nextPerms = allPerms.filter(p => family.has(p.sessionID))
       setPendingPermissionRequests(prev => {
         const merged = new Map(nextPerms.map(p => [p.id, p]))
         for (const request of prev) {
-          if (family.has(request.sessionID) && !merged.has(request.id)) merged.set(request.id, request)
+          if (!merged.has(request.id)) merged.set(request.id, request)
         }
         return Array.from(merged.values())
       })
-      setPendingQuestionRequests(allQuestions.filter(q => family.has(q.sessionID)))
+      setPendingQuestionRequests(prev => {
+        const merged = new Map(allQuestions.filter(q => family.has(q.sessionID)).map(q => [q.id, q]))
+        for (const q of prev) {
+          if (!merged.has(q.id)) merged.set(q.id, q)
+        }
+        return Array.from(merged.values())
+      })
     }
 
     loadChildSessionsAndPermissions()

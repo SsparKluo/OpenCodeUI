@@ -202,22 +202,28 @@ export function usePermissionHandler(serverId: string): UsePermissionHandlerResu
           : allPermissions.filter(p => !replyingIdsRef.current.has(p.id))
 
       // OMO background subagents can emit permission.asked over SSE before /permission
-      // exposes the request for the routed instance. Keep SSE-known requests until a
-      // permission.replied event removes them.
+      // exposes the request for the routed instance. Refresh 时序下子 session 关系可能
+      // 尚未注册，因此 SSE 已知请求无条件保留（family 过滤只作用于新拉取的数据）
       setPendingPermissionRequests(prev => {
         const merged = new Map(nextPermissions.map(p => [p.id, p]))
         for (const request of prev) {
           if (replyingIdsRef.current.has(request.id)) continue
-          if (familySet.size > 0 && !matchesFamily(request.sessionID)) continue
           if (!merged.has(request.id)) merged.set(request.id, request)
         }
         return Array.from(merged.values())
       })
-      setPendingQuestionRequests(
-        familySet.size > 0
-          ? allQuestions.filter(q => matchesFamily(q.sessionID) && !replyingIdsRef.current.has(q.id))
-          : allQuestions.filter(q => !replyingIdsRef.current.has(q.id)),
-      )
+      setPendingQuestionRequests(prev => {
+        const nextQuestions =
+          familySet.size > 0
+            ? allQuestions.filter(q => matchesFamily(q.sessionID) && !replyingIdsRef.current.has(q.id))
+            : allQuestions.filter(q => !replyingIdsRef.current.has(q.id))
+        const merged = new Map(nextQuestions.map(q => [q.id, q]))
+        for (const q of prev) {
+          if (replyingIdsRef.current.has(q.id)) continue
+          if (!merged.has(q.id)) merged.set(q.id, q)
+        }
+        return Array.from(merged.values())
+      })
     } catch (error) {
       permissionErrorHandler('refresh pending requests', error)
     }
