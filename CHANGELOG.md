@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.44] - 2026-08-17
+
+- fix(markdown): robust math parsing and converge renderer rules (5602e384)
+
 ## [v0.6.43] - 2026-08-12
 
 - fix(permissions): refresh can't load pending permissions (composite vs raw family check) (69633740)
