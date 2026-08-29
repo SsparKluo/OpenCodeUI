@@ -9,6 +9,7 @@ import { normalizeTodoItems } from './todo'
 import { formatPathForApi } from '../utils/directoryUtils'
 import { getSessionMessages } from './message'
 import { normalizeFileDiffs } from '../types/api/file'
+import { INITIAL_MESSAGE_LIMIT } from '../constants/pagination'
 import type { ApiSession, SessionListParams, FileDiff, ApiMessageWithParts, ApiUserMessage } from './types'
 import type { SessionStatusMap } from '../types/api/session'
 import type { TodoItem } from '../types/api/event'
@@ -59,11 +60,17 @@ function isUserMessage(message: ApiMessageWithParts): message is ApiMessageWithP
 
 /**
  * 获取当前可见用户消息对应的本轮 diff
+ *
+ * 对齐 opencode 官方行为：官方 turn 模式的变更列表直接取最近一条 user 消息
+ * 的 summary.diffs（见 packages/app/src/pages/session.tsx 的 turnDiffs），
+ * 而不是全量拉取消息。这里只取最近一批消息（INITIAL_MESSAGE_LIMIT，分页语义），
+ * 避免 limit=undefined 时的全量下载——带 directory 参数时，全量消息响应会包含
+ * 整个工作区相关的文件 part，大项目里一次请求可能非常大（issue #157）。
  */
 export async function getLastTurnDiff(sessionId: string, directory?: string, serverId?: string): Promise<FileDiff[]> {
   const [session, messages] = await Promise.all([
     getSession(sessionId, directory, serverId),
-    getSessionMessages(sessionId, undefined, directory, serverId),
+    getSessionMessages(sessionId, INITIAL_MESSAGE_LIMIT, directory, serverId),
   ])
 
   const userMessages = messages.filter(isUserMessage)
