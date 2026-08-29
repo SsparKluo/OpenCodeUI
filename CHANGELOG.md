@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.6.45] - 2026-08-29
+
+- fix(session): bound getLastTurnDiff to latest page instead of full message fetch (7c7a47ef)
+- fix(deploy): forward Authorization header through standalone Caddy proxy (db9ff56f)
+- fix(message): stop entry-grow animation on cleanup to avoid stuck height under StrictMode (cdb7e0f4)
+
 ## [v0.6.44] - 2026-08-17
 
 - fix(markdown): robust math parsing and converge renderer rules (5602e384)
