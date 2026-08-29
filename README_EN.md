@@ -76,6 +76,29 @@ BACKEND_URL=your-server.com:4096 PORT=8080 docker compose -f docker-compose.stan
 | `BACKEND_URL`        | `host.docker.internal:4096` | opencode serve address (without protocol prefix) |
 | `PORT`               | `3000`                      | Frontend listening port                          |
 
+**When the backend enables password auth (`OPENCODE_SERVER_PASSWORD`):**
+
+After you enter the username/password in the frontend's server connection dialog, the frontend automatically attaches an `Authorization: Basic <base64>` header to every request. The built-in Caddy config explicitly forwards this header, so no extra setup is needed.
+
+If you use a custom Caddyfile (or hit 401 auth failures), add this to the `reverse_proxy` block:
+
+```caddyfile
+handle_path /api/* {
+	reverse_proxy your-opencode-serve:4096 {
+		header_up Host {upstream_hostport}
+		header_up Authorization {http.request.header.Authorization}
+		flush_interval -1
+	}
+}
+```
+
+Mount the custom config via `docker-compose.standalone.yml`:
+
+```yaml
+volumes:
+  - ./Caddyfile.standalone:/etc/caddy/Caddyfile.standalone:ro
+```
+
 ## Docker Deployment
 
 ### Architecture & Ports

@@ -76,6 +76,29 @@ BACKEND_URL=your-server.com:4096 PORT=8080 docker compose -f docker-compose.stan
 | `BACKEND_URL` | `host.docker.internal:4096` | opencode serve 地址（不含协议前缀） |
 | `PORT`        | `3000`                      | 前端监听端口                        |
 
+**后端开启密码认证时（`OPENCODE_SERVER_PASSWORD`）：**
+
+前端在服务器连接界面填入 用户名/密码 后会为每个请求自动携带 `Authorization: Basic <base64>` 头。镜像内置的 Caddy 已显式透传该头，无需额外配置。
+
+若你使用自定义 Caddyfile（或遇到 401 认证失败），在 `reverse_proxy` 块中添加：
+
+```caddyfile
+handle_path /api/* {
+	reverse_proxy your-opencode-serve:4096 {
+		header_up Host {upstream_hostport}
+		header_up Authorization {http.request.header.Authorization}
+		flush_interval -1
+	}
+}
+```
+
+通过 `docker-compose.standalone.yml` 挂载自定义配置：
+
+```yaml
+volumes:
+  - ./Caddyfile.standalone:/etc/caddy/Caddyfile.standalone:ro
+```
+
 ## Docker 部署
 
 ### 架构与端口

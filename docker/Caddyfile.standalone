@@ -6,6 +6,10 @@
 	handle_path /api/* {
 		reverse_proxy {$BACKEND_URL:host.docker.internal:4096} {
 			header_up Host {upstream_hostport}
+			# 透传客户端 Authorization 头（后端开启 OPENCODE_SERVER_PASSWORD 认证时必需）
+			# 前端在服务器连接界面填入用户名/密码后会为每个请求携带该头；这里显式转发给后端，
+			# 未携带时 Caddy 会删除空头，不影响无认证场景。
+			header_up Authorization {http.request.header.Authorization}
 			flush_interval -1
 		}
 	}
