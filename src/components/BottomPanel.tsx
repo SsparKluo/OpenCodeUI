@@ -22,6 +22,8 @@ const WorktreePanel = lazy(() => import('./WorktreePanel').then(module => ({ def
 
 interface BottomPanelProps {
   directory?: string
+  /** 数据所属服务器（跟随焦点 session；缺省用活动服务器） */
+  serverId?: string
 }
 
 function PanelFallback() {
@@ -33,7 +35,7 @@ function PanelFallback() {
   )
 }
 
-export const BottomPanel = memo(function BottomPanel({ directory }: BottomPanelProps) {
+export const BottomPanel = memo(function BottomPanel({ directory, serverId }: BottomPanelProps) {
   const { t } = useTranslation(['components', 'common'])
   const { bottomPanelOpen, bottomPanelHeight } = useLayoutStore()
   const sessionId = useCurrentSessionId()
@@ -74,7 +76,7 @@ export const BottomPanel = memo(function BottomPanel({ directory }: BottomPanelP
         setIsRestoring(true)
 
         // 拉取新目录下的 PTY 会话
-        const sessions = await listPtySessions(normalizedDirectory)
+        const sessions = await listPtySessions(normalizedDirectory, serverId)
         if (restoreRequestIdRef.current !== requestId) return
         logger.log('[BottomPanel] PTY sessions for', normalizedDirectory, ':', sessions)
 
@@ -84,6 +86,7 @@ export const BottomPanel = memo(function BottomPanel({ directory }: BottomPanelP
             id: pty.id,
             title: pty.title || 'Terminal',
             status: pty.status === 'running' ? 'connecting' : 'exited',
+            serverId,
           })),
         )
       } catch (error) {
@@ -105,12 +108,13 @@ export const BottomPanel = memo(function BottomPanel({ directory }: BottomPanelP
   const handleNewTerminal = useCallback(async () => {
     try {
       logger.log('[BottomPanel] Creating PTY session, directory:', normalizedDirectory)
-      const pty = await createPtySession({ cwd: normalizedDirectory }, normalizedDirectory)
+      const pty = await createPtySession({ cwd: normalizedDirectory }, normalizedDirectory, serverId)
       logger.log('[BottomPanel] PTY created:', pty)
       const tab: TerminalTab = {
         id: pty.id,
         title: pty.title || 'Terminal',
         status: 'connecting',
+        serverId,
       }
       layoutStore.addTerminalTab(tab)
     } catch (error) {
@@ -122,7 +126,7 @@ export const BottomPanel = memo(function BottomPanel({ directory }: BottomPanelP
   const handleCloseTerminal = useCallback(
     async (ptyId: string) => {
       try {
-        await removePtySession(ptyId, normalizedDirectory)
+        await removePtySession(ptyId, normalizedDirectory, serverId)
       } catch {
         // ignore - may already be closed
       }
@@ -167,6 +171,7 @@ export const BottomPanel = memo(function BottomPanel({ directory }: BottomPanelP
                 directory={directory ?? ''}
                 isPanelResizing={isPanelResizing}
                 sessionId={sessionId}
+                serverId={serverId}
               />
             </Suspense>
           </div>
@@ -179,6 +184,7 @@ export const BottomPanel = memo(function BottomPanel({ directory }: BottomPanelP
                   directory={directory}
                   sessionId={sessionId}
                   isPanelResizing={isPanelResizing}
+                  serverId={serverId}
                 />
               </Suspense>
             </div>
@@ -190,7 +196,7 @@ export const BottomPanel = memo(function BottomPanel({ directory }: BottomPanelP
 
           {activeTab.type === 'terminal' ? (
             <Suspense fallback={<PanelFallback />}>
-              <TerminalContent activeTab={activeTab} directory={directory} />
+              <TerminalContent activeTab={activeTab} directory={directory} serverId={serverId} />
             </Suspense>
           ) : null}
 
@@ -247,9 +253,10 @@ export const BottomPanel = memo(function BottomPanel({ directory }: BottomPanelP
 interface TerminalContentProps {
   activeTab: PanelTab
   directory?: string
+  serverId?: string
 }
 
-const TerminalContent = memo(function TerminalContent({ activeTab, directory }: TerminalContentProps) {
+const TerminalContent = memo(function TerminalContent({ activeTab, directory, serverId }: TerminalContentProps) {
   const { panelTabs } = useLayoutStore()
 
   // 获取所有 bottom 位置的 terminal tabs
@@ -258,7 +265,7 @@ const TerminalContent = memo(function TerminalContent({ activeTab, directory }: 
   return (
     <>
       {terminalTabs.map(tab => (
-        <Terminal key={tab.id} ptyId={tab.id} directory={directory} isActive={tab.id === activeTab.id} />
+        <Terminal key={tab.id} ptyId={tab.id} directory={directory} serverId={tab.serverId ?? serverId} isActive={tab.id === activeTab.id} />
       ))}
     </>
   )
@@ -269,6 +276,7 @@ interface FilesContentProps {
   directory?: string
   isPanelResizing?: boolean
   sessionId?: string | null
+  serverId?: string
 }
 
 const FilesContent = memo(function FilesContent({
@@ -276,6 +284,7 @@ const FilesContent = memo(function FilesContent({
   directory,
   isPanelResizing = false,
   sessionId,
+  serverId,
 }: FilesContentProps) {
   const { panelTabs } = useLayoutStore()
   const fileTabs = panelTabs.filter(t => t.position === 'bottom' && t.type === 'files')
@@ -287,6 +296,7 @@ const FilesContent = memo(function FilesContent({
           <FileExplorer
             panelTabId={tab.id}
             directory={directory}
+            serverId={serverId}
             previewFile={tab.previewFile ?? null}
             previewFiles={tab.previewFiles ?? []}
             position="bottom"
@@ -304,6 +314,7 @@ interface ChangesContentProps {
   directory?: string
   sessionId: string
   isPanelResizing?: boolean
+  serverId?: string
 }
 
 const ChangesContent = memo(function ChangesContent({
@@ -311,6 +322,7 @@ const ChangesContent = memo(function ChangesContent({
   directory,
   sessionId,
   isPanelResizing = false,
+  serverId,
 }: ChangesContentProps) {
   const { panelTabs } = useLayoutStore()
   const changeTabs = panelTabs.filter(t => t.position === 'bottom' && t.type === 'changes')
@@ -322,6 +334,7 @@ const ChangesContent = memo(function ChangesContent({
           <SessionChangesPanel
             sessionId={sessionId}
             directory={directory}
+            serverId={serverId}
             position="bottom"
             isResizing={isPanelResizing}
           />

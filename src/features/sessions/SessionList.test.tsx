@@ -65,7 +65,7 @@ describe('SessionListItem', () => {
     fireEvent.click(screen.getByRole('button', { name: /Session One/i }))
 
     expect(onSelect).toHaveBeenCalledTimes(1)
-    expect(markSessionNotificationsReadMock).toHaveBeenCalledWith('session-1', 'completed')
+    expect(markSessionNotificationsReadMock).toHaveBeenCalledWith('local::session-1', 'completed')
   })
 
   it('keeps the full session row clickable outside the inner content button', () => {

@@ -19,6 +19,7 @@ import { useInView } from '../../../hooks/useInView'
 import { getDirectoryName, isSameDirectory, normalizeToForwardSlash } from '../../../utils'
 import { useLayoutStore } from '../../../store'
 import { useBusySessions } from '../../../store/activeSessionStore'
+import { splitSessionKey } from '../../../utils/sessionKey'
 import { useNotifications } from '../../../store/notificationStore'
 import { pinnedSessionsStore, type PinnedSessionEntry } from '../../../store/pinnedSessionsStore'
 import { SessionListItem } from '../../sessions'
@@ -39,6 +40,10 @@ export interface FolderRecentProject {
 
 interface FolderRecentListProps {
   projects: FolderRecentProject[]
+  /** 数据服务器（多服务器模式；缺省用活动服务器） */
+  serverId?: string
+  /** 嵌套模式（多服务器服务器节点下）：外层负责滚动，本组件不设滚动容器/内边距 */
+  embedded?: boolean
   currentDirectory?: string
   selectedSessionId: string | null
   expandedProjectIds: string[]
@@ -187,7 +192,7 @@ function toggleProjectId(prev: string[], projectId: string) {
   return prev.includes(projectId) ? prev.filter(id => id !== projectId) : [...prev, projectId]
 }
 
-function createDirectoryProject(directory: string, sectionKind: FolderRecentProject['sectionKind'] = 'project') {
+export function createDirectoryProject(directory: string, sectionKind: FolderRecentProject['sectionKind'] = 'project') {
   return {
     id: directory,
     worktree: directory,
@@ -196,7 +201,7 @@ function createDirectoryProject(directory: string, sectionKind: FolderRecentProj
   } satisfies FolderRecentProject
 }
 
-function useCollapseExpandedIdsOnDrag(
+export function useCollapseExpandedIdsOnDrag(
   expandedIds: string[],
   setExpandedIds: React.Dispatch<React.SetStateAction<string[]>>,
 ) {
@@ -229,8 +234,12 @@ interface UseReorderableListOptions {
   onDragFinished?: () => void
 }
 
-function useReorderableList({ ids, canDrag, onCommit, onDragActivated, onDragFinished }: UseReorderableListOptions) {
+export function useReorderableList({ ids, canDrag, onCommit, onDragActivated, onDragFinished }: UseReorderableListOptions) {
   const refs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const registerRef = useCallback((id: string, element: HTMLDivElement | null) => {
+    if (element) refs.current.set(id, element)
+    else refs.current.delete(id)
+  }, [])
   const [dragState, setDragState] = useState<ReorderState | null>(null)
   const dragStartY = useRef(0)
   const dragActive = useRef(false)
@@ -405,15 +414,14 @@ function useReorderableList({ ids, canDrag, onCommit, onDragActivated, onDragFin
     handleTouchStart,
     handleTouchMove,
     handleTouchEnd,
-    registerRef: (id: string, element: HTMLDivElement | null) => {
-      if (element) refs.current.set(id, element)
-      else refs.current.delete(id)
-    },
+    registerRef,
   }
 }
 
 export function FolderRecentList({
   projects,
+  serverId,
+  embedded = false,
   currentDirectory,
   selectedSessionId,
   expandedProjectIds,
@@ -522,7 +530,9 @@ export function FolderRecentList({
 
   return (
     <>
-      <div className="h-full overflow-y-auto custom-scrollbar px-1.5 py-1 select-none">
+      <div
+        className={`custom-scrollbar select-none ${embedded ? '' : 'h-full overflow-y-auto px-1.5 py-1'}`}
+      >
         {projects.length === 0 && pinnedSessions.length === 0 && unavailablePinnedEntries.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center text-text-400 opacity-70">
             <p className="text-[length:var(--fs-sm)] font-medium text-text-300">{t('sidebar.noProjectFoldersYet')}</p>
@@ -575,6 +585,7 @@ export function FolderRecentList({
                 <FolderRecentSection
                   key={project.id}
                   project={project}
+                  serverId={serverId}
                   isExpanded={isExpanded}
                   folderStatus={folderStatusByProjectId.get(project.id) ?? null}
                   preferTouchUi={preferTouchUi}
@@ -709,7 +720,7 @@ function PinnedFolderSection({
             <div key={session.id}>
               <SessionListItem
                 session={session}
-                isSelected={session.id === selectedSessionId}
+                isSelected={!!selectedSessionId && session.id === splitSessionKey(selectedSessionId).sessionId}
                 onSelect={() => onSelectSession(session)}
                 onRename={newTitle => onRenameSession(session, newTitle)}
                 onDelete={() => onRequestDeleteSession({ session, removeLocal: () => {} })}
@@ -792,6 +803,8 @@ function shouldShowDraftNewChatInFolder(options: {
 
 interface FolderRecentSectionProps {
   project: FolderRecentProject
+  /** 数据服务器（多服务器模式；缺省用活动服务器） */
+  serverId?: string
   isExpanded: boolean
   folderStatus: FolderStatus | null
   preferTouchUi: boolean
@@ -834,6 +847,7 @@ interface FolderRecentSectionProps {
 
 function FolderRecentSection({
   project,
+  serverId,
   isExpanded,
   folderStatus,
   preferTouchUi,
@@ -874,7 +888,10 @@ function FolderRecentSection({
   const shouldRenderBody = useDelayedRender(isExpanded)
   const hasWorkspaceTree = workspaceDirectories.length > 0
   const workspaceFallbackName = getDirectoryName(project.worktree) || project.worktree
-  const { vcsInfo, isLoading: isBranchLoading } = useVcsInfo(sectionKind === 'workspace' ? project.worktree : undefined)
+  const isRemoteServer = !!serverId && serverId !== 'local'
+  const { vcsInfo, isLoading: isBranchLoading } = useVcsInfo(
+    isRemoteServer ? undefined : sectionKind === 'workspace' ? project.worktree : undefined,
+  )
 
   useEffect(() => {
     if (isExpanded && inView) {
@@ -887,6 +904,7 @@ function FolderRecentSection({
     directory: project.worktree,
     pageSize: DIRECTORY_PAGE_SIZE,
     enabled: hasActivated && !hasWorkspaceTree,
+    serverId,
   })
   const pinnedEntries = useSyncExternalStore(
     pinnedSessionsStore.subscribe,
@@ -1113,7 +1131,8 @@ function FolderRecentSection({
                     <div key={session.id}>
                       <SessionListItem
                         session={session}
-                        isSelected={isDraft ? !selectedSessionId : session.id === selectedSessionId}
+                        activeSessionKey={isDraft ? undefined : serverId ? `${serverId}::${session.id}` : undefined}
+                        isSelected={isDraft ? !selectedSessionId : !!selectedSessionId && session.id === splitSessionKey(selectedSessionId).sessionId}
                         onSelect={() => {
                           if (!isDraft) onSelectSession(session)
                         }}
@@ -1141,6 +1160,7 @@ function FolderRecentSection({
                         (expandedChildSessionIds?.has(session.id) || inlineChildSessions?.has(session.id)) && (
                           <SessionChildrenSlot
                             parentSession={session}
+                            serverId={serverId}
                             selectedSessionId={selectedSessionId}
                             fetchAll={expandedChildSessionIds?.has(session.id)}
                             children={inlineChildSessions?.get(session.id)}

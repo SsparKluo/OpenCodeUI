@@ -168,7 +168,16 @@
     "batchDeleteSessionsConfirm": "确定要删除 {{count}} 个会话？此操作无法撤销。",
     "batchDeleteIncludesCurrent": "包含当前打开的会话，删除后将切换到新会话。",
     "batchRemoveProjects": "移除 {{count}} 个项目",
-    "batchRemoveProjectsConfirm": "确定从列表中移除 {{count}} 个项目？这只会从侧边栏中移除，不会删除任何会话，也不会删除磁盘上的文件。"
+    "batchRemoveProjectsConfirm": "确定从列表中移除 {{count}} 个项目？这只会从侧边栏中移除，不会删除任何会话，也不会删除磁盘上的文件。",
+    "noSubscribedServers": "No servers subscribed yet",
+    "openServerSettings": "Open Server Settings",
+    "focusServerHint": "Focused server · click a server node in the list to switch",
+    "searchResults": "搜索结果",
+    "searchHint": "按服务器、文件夹或会话名称搜索",
+    "searchFolderUnit": " 文件夹",
+    "searchSessionUnit": " 会话",
+    "searchServerMatchHint": "服务器匹配 · 点击组头切换焦点",
+    "searchingSessions": "搜索会话中…"
   },
   "activeSession": {
     "awaitingPermission": "等待权限",

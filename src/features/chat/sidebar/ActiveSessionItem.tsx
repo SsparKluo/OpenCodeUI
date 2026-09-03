@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import type { ActiveSessionEntry } from '../../../store/activeSessionStore'
 import type { ApiSession } from '../../../api'
 import { startInternalDrag } from '../../../lib/internalDragCore'
+import { splitSessionKey } from '../../../utils/sessionKey'
 
 interface ActiveSessionItemProps {
   entry: ActiveSessionEntry
@@ -51,7 +52,8 @@ export function ActiveSessionItem({ entry, resolvedSession, isSelected, onSelect
       e,
       {
         kind: 'session',
-        sessionId: entry.sessionId,
+        sessionId: splitSessionKey(entry.sessionId).sessionId,
+        serverId: splitSessionKey(entry.sessionId).serverId,
         directory,
       },
     )

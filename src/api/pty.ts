@@ -35,9 +35,9 @@ function normalizePty(pty: LegacyPty): Pty {
 /**
  * 获取所有 PTY 会话列表
  */
-export async function listPtySessions(directory?: string): Promise<Pty[]> {
-  const sdk = getSDKClient()
-  return unwrap(await sdk.pty.list({ directory: formatPathForApi(directory) })).map(pty =>
+export async function listPtySessions(directory?: string, serverId?: string): Promise<Pty[]> {
+  const sdk = getSDKClient(serverId)
+  return unwrap(await sdk.pty.list({ directory: formatPathForApi(directory, serverId) })).map(pty =>
     normalizePty(pty as LegacyPty),
   )
 }
@@ -45,43 +45,48 @@ export async function listPtySessions(directory?: string): Promise<Pty[]> {
 /**
  * 获取当前机器可用 shell 列表，用于 opencode config.shell 的候选项。
  */
-export async function listAvailableShells(directory?: string): Promise<ShellInfo[]> {
-  const sdk = getSDKClient()
-  return unwrap(await sdk.pty.shells({ directory: formatPathForApi(directory) }))
+export async function listAvailableShells(directory?: string, serverId?: string): Promise<ShellInfo[]> {
+  const sdk = getSDKClient(serverId)
+  return unwrap(await sdk.pty.shells({ directory: formatPathForApi(directory, serverId) }))
 }
 
 /**
  * 创建新的 PTY 会话
  */
-export async function createPtySession(params: PtyCreateParams, directory?: string): Promise<Pty> {
-  const sdk = getSDKClient()
-  return normalizePty(unwrap(await sdk.pty.create({ directory: formatPathForApi(directory), ...params })) as LegacyPty)
+export async function createPtySession(params: PtyCreateParams, directory?: string, serverId?: string): Promise<Pty> {
+  const sdk = getSDKClient(serverId)
+  return normalizePty(unwrap(await sdk.pty.create({ directory: formatPathForApi(directory, serverId), ...params })) as LegacyPty)
 }
 
 /**
  * 获取单个 PTY 会话信息
  */
-export async function getPtySession(ptyId: string, directory?: string): Promise<Pty> {
-  const sdk = getSDKClient()
-  return normalizePty(unwrap(await sdk.pty.get({ ptyID: ptyId, directory: formatPathForApi(directory) })) as LegacyPty)
+export async function getPtySession(ptyId: string, directory?: string, serverId?: string): Promise<Pty> {
+  const sdk = getSDKClient(serverId)
+  return normalizePty(unwrap(await sdk.pty.get({ ptyID: ptyId, directory: formatPathForApi(directory, serverId) })) as LegacyPty)
 }
 
 /**
  * 更新 PTY 会话
  */
-export async function updatePtySession(ptyId: string, params: PtyUpdateParams, directory?: string): Promise<Pty> {
-  const sdk = getSDKClient()
+export async function updatePtySession(
+  ptyId: string,
+  params: PtyUpdateParams,
+  directory?: string,
+  serverId?: string,
+): Promise<Pty> {
+  const sdk = getSDKClient(serverId)
   return normalizePty(
-    unwrap(await sdk.pty.update({ ptyID: ptyId, directory: formatPathForApi(directory), ...params })) as LegacyPty,
+    unwrap(await sdk.pty.update({ ptyID: ptyId, directory: formatPathForApi(directory, serverId), ...params })) as LegacyPty,
   )
 }
 
 /**
  * 删除 PTY 会话
  */
-export async function removePtySession(ptyId: string, directory?: string): Promise<boolean> {
-  const sdk = getSDKClient()
-  unwrap(await sdk.pty.remove({ ptyID: ptyId, directory: formatPathForApi(directory) }))
+export async function removePtySession(ptyId: string, directory?: string, serverId?: string): Promise<boolean> {
+  const sdk = getSDKClient(serverId)
+  unwrap(await sdk.pty.remove({ ptyID: ptyId, directory: formatPathForApi(directory, serverId) }))
   return true
 }
 
@@ -93,8 +98,13 @@ export async function removePtySession(ptyId: string, directory?: string): Promi
  * - 同源：浏览器会复用页面的 Basic auth 凭据
  * - Tauri bridge：不走这里，通过 Rust 的 HTTP header 传认证
  */
-export function getPtyConnectUrl(ptyId: string, directory?: string, options?: PtyConnectUrlOptions): string {
-  const httpBase = getApiBaseUrl()
+export function getPtyConnectUrl(
+  ptyId: string,
+  directory?: string,
+  options?: PtyConnectUrlOptions,
+  serverId?: string,
+): string {
+  const httpBase = getApiBaseUrl(serverId)
   const wsBase = httpBase.replace(/^http/, 'ws')
   const includeAuthInUrl = options?.includeAuthInUrl ?? true
   const cursor =
@@ -102,8 +112,8 @@ export function getPtyConnectUrl(ptyId: string, directory?: string, options?: Pt
       ? options.cursor
       : undefined
 
-  const auth = serverStore.getActiveAuth()
-  const formatted = formatPathForApi(directory)
+  const auth = serverId ? serverStore.getServerAuth(serverId) : serverStore.getActiveAuth()
+  const formatted = formatPathForApi(directory, serverId)
 
   // Tauri bridge 不需要在 URL 里放认证
   if (!includeAuthInUrl) {

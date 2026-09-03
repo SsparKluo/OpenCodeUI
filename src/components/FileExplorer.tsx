@@ -116,6 +116,8 @@ function getSearchMatchRanges(match: TextSearchMatch): TargetLineRange[] {
 interface FileExplorerProps {
   panelTabId: string
   directory?: string
+  /** 数据所属服务器（右侧面板跟随焦点 session 时传入；缺省用活动服务器） */
+  serverId?: string
   previewFile: PreviewFile | null
   previewFiles: PreviewFile[]
   position?: 'bottom' | 'right'
@@ -126,6 +128,7 @@ interface FileExplorerProps {
 export const FileExplorer = memo(function FileExplorer({
   panelTabId,
   directory,
+  serverId,
   previewFile,
   previewFiles,
   position = 'right',
@@ -175,7 +178,7 @@ export const FileExplorer = memo(function FileExplorer({
     clearPreview,
     fileStatus,
     refresh,
-  } = useFileExplorer({ directory, autoLoad: true, sessionId: sessionId || undefined, consumerId: `file-explorer-${panelTabId}` })
+  } = useFileExplorer({ directory, autoLoad: true, sessionId: sessionId || undefined, serverId, consumerId: `file-explorer-${panelTabId}` })
 
   // 当 previewFile 改变时加载预览
   useEffect(() => {
@@ -307,7 +310,7 @@ export const FileExplorer = memo(function FileExplorer({
       }
 
       // 文件名搜索（失败静默，不阻断内容搜索）
-      searchFiles(trimmedSearchQuery, { directory, limit: 50 })
+      searchFiles(trimmedSearchQuery, { directory, limit: 50, serverId })
         .then(paths => {
           if (requestId !== searchRequestIdRef.current) return
           setFileResults(paths)
@@ -321,7 +324,7 @@ export const FileExplorer = memo(function FileExplorer({
         })
 
       // 内容搜索
-      searchText(trimmedSearchQuery, directory)
+      searchText(trimmedSearchQuery, directory, serverId)
         .then(results => {
           if (requestId !== searchRequestIdRef.current) return
           setSearchResults(results)
@@ -340,7 +343,7 @@ export const FileExplorer = memo(function FileExplorer({
     return () => {
       window.clearTimeout(timer)
     }
-  }, [directory, trimmedSearchQuery, t])
+  }, [directory, trimmedSearchQuery, serverId, t])
 
   const handleSearchResultClick = useCallback(
     (match: TextSearchMatch) => {

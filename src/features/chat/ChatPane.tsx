@@ -6,7 +6,7 @@
  * compact viewport wrapper.
  */
 
-import { memo, useRef, useEffect, useState, useCallback, useMemo, useDeferredValue } from 'react'
+import { memo, useRef, useEffect, useState, useCallback, useMemo, useDeferredValue, useSyncExternalStore } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 
 import { ChatArea, Header, InputBox, PermissionDialog, QuestionDialog, type ChatAreaHandle } from '.'
@@ -21,6 +21,8 @@ import { useServerStore } from '../../hooks/useServerStore'
 import { followupQueueStore } from '../../store/followupQueueStore'
 import type { RevertHistoryItem } from '../../store/messageStoreTypes'
 import { useCancelHint } from '../../hooks/useCancelHint'
+import { makeSessionKey, sessionKeyToServerId } from '../../utils/sessionKey'
+import { serverStore } from '../../store/serverStore'
 import { InlineToolRequestContext, type InlineToolRequestContextValue } from './InlineToolRequestContext'
 import { ChatViewportProvider, canUseSplitPane, useChatViewportMaybe, type ChatViewportValue } from './chatViewport'
 import { useChatPageViewModel } from './useChatPageViewModel'
@@ -157,10 +159,21 @@ export const ChatPane = memo(function ChatPane({
   const modelSelectorRef = useRef<ModelSelectorHandle>(null)
   const { addDirectory } = useDirectory()
 
+  // 当前 pane 绑定的服务器（sessionId 为复合 key，split 出 serverId；home 状态跟随 active server 实时变化）
+  const activeServerId = useSyncExternalStore(
+    cb => serverStore.subscribe(cb),
+    () => serverStore.getActiveServerId(),
+    () => serverStore.getActiveServerId(),
+  )
+  const paneServerId = useMemo(
+    () => (sessionId ? sessionKeyToServerId(sessionId) : activeServerId),
+    [sessionId, activeServerId],
+  )
+
   // ============================================
-  // Models
+  // Models（per-server：模型列表跟随当前 pane 绑定的服务器）
   // ============================================
-  const { models, isLoading: modelsLoading, refetch: refetchModels } = useModels()
+  const { models, isLoading: modelsLoading, refetch: refetchModels } = useModels(paneServerId)
   const { activeServer, getHealth } = useServerStore()
   const activeServerHealth = activeServer ? getHealth(activeServer.id) : null
   const hiddenModelKeys = useHiddenModelKeys()
@@ -202,11 +215,19 @@ export const ChatPane = memo(function ChatPane({
   // ============================================
   // Pane-local navigation
   // ============================================
+  /** 规范化 session 标识为复合 key：已是复合 key 则原样，原始 id 用 pane 的服务器合成 */
+  const normalizeSessionKey = useCallback(
+    (sid: string): string => {
+      return sid.includes('::') ? sid : makeSessionKey(paneServerId, sid)
+    },
+    [paneServerId],
+  )
+
   const navigateToSession = useCallback(
     (sid: string, directory?: string) => {
-      navigatePaneToSession(paneId, sid, directory)
+      navigatePaneToSession(paneId, normalizeSessionKey(sid), directory)
     },
-    [paneId, navigatePaneToSession],
+    [paneId, navigatePaneToSession, normalizeSessionKey],
   )
 
   const navigateHome = useCallback(() => {
@@ -361,10 +382,12 @@ export const ChatPane = memo(function ChatPane({
     [routeSessionId],
   )
 
-  const messageView = useMemo(() => ({ sessionId: routeSessionId, messages }), [routeSessionId, messages])
-  const deferredMessageView = useDeferredValue(messageView)
   const shouldDeferMessages = displayMode === 'split' && !isStreaming && messages.length > 20
-  const renderedMessagesView = shouldDeferMessages ? deferredMessageView : messageView
+  const messageView = useMemo(() => ({ sessionId: routeSessionId, messages }), [routeSessionId, messages])
+  // Streaming never consumes the deferred value, so do not feed every token into a
+  // second low-priority render lane.
+  const deferredMessageView = useDeferredValue(shouldDeferMessages ? messageView : null)
+  const renderedMessagesView = shouldDeferMessages && deferredMessageView ? deferredMessageView : messageView
   const renderedMessages = renderedMessagesView.sessionId === routeSessionId ? renderedMessagesView.messages : []
   const isRenderingDeferredMessages = renderedMessages !== messages
   const renderedLoadState = loadState === 'loaded' && isRenderingDeferredMessages ? 'loading' : loadState
@@ -406,7 +429,10 @@ export const ChatPane = memo(function ChatPane({
         : '',
     ].filter(Boolean)
 
-    const responseBody = [lines.join('\n'), activeServerHealth.details ? `Raw diagnostics:\n${activeServerHealth.details}` : '']
+    const responseBody = [
+      lines.join('\n'),
+      activeServerHealth.details ? `Raw diagnostics:\n${activeServerHealth.details}` : '',
+    ]
       .filter(Boolean)
       .join('\n\n')
 
@@ -552,14 +578,22 @@ export const ChatPane = memo(function ChatPane({
   useEffect(() => {
     if (inputRestoreContent?.agent) {
       restoreAgentFromMessage(inputRestoreContent.agent)
-      return
     }
+  }, [inputRestoreContent, restoreAgentFromMessage])
+
+  const restoredAgentSessionRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!routeSessionId || restoredAgentSessionRef.current === routeSessionId) return
     if (messages.length === 0) return
+
+    restoredAgentSessionRef.current = routeSessionId
     const lastUserMsg = [...messages].reverse().find(m => m.info.role === 'user')
     if (lastUserMsg && 'agent' in lastUserMsg.info) {
       restoreAgentFromMessage((lastUserMsg.info as { agent?: string }).agent)
     }
-  }, [inputRestoreContent, messages, restoreAgentFromMessage])
+    // Streaming only changes message content; agent restoration follows session/load boundaries.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeSessionId, messages.length, restoreAgentFromMessage])
 
   // ============================================
   // Focus handling
@@ -655,14 +689,18 @@ export const ChatPane = memo(function ChatPane({
   )
 
   const handleSessionDrop = useCallback(
-    (payload: { sessionId: string; directory?: string }, zone: DropZone) => {
+    (payload: { sessionId: string; serverId?: string; directory?: string }, zone: DropZone) => {
       resetDropState()
       cancelPendingSplitSessionNavigation()
 
-      if (payload.sessionId === routeSessionId && zone === 'center') return
+      // 拖拽 payload 带源服务器：用它合成复合 key（否则会用目标 pane 的服务器，拖错服务器）
+      const sessionKey = payload.serverId
+        ? makeSessionKey(payload.serverId, payload.sessionId)
+        : normalizeSessionKey(payload.sessionId)
+      if (sessionKey === routeSessionId && zone === 'center') return
 
       if (zone === 'center') {
-        navigatePaneToSession(paneId, payload.sessionId, payload.directory)
+        navigatePaneToSession(paneId, sessionKey, payload.directory)
         return
       }
 
@@ -675,11 +713,11 @@ export const ChatPane = memo(function ChatPane({
 
         scheduleSplitSessionNavigation(() => {
           if (!paneLayoutStore.findLeaf(newPaneId)) return
-          navigatePaneToSession(newPaneId, payload.sessionId, payload.directory)
+          navigatePaneToSession(newPaneId, sessionKey, payload.directory)
         })
       }
     },
-    [paneId, routeSessionId, navigatePaneToSession, resetDropState],
+    [paneId, routeSessionId, navigatePaneToSession, resetDropState, normalizeSessionKey],
   )
 
   useEffect(() => {
@@ -707,6 +745,7 @@ export const ChatPane = memo(function ChatPane({
       handleSessionDrop(
         {
           sessionId: event.payload.sessionId,
+          serverId: event.payload.serverId,
           directory: event.payload.directory,
         },
         zone,
@@ -846,6 +885,21 @@ export const ChatPane = memo(function ChatPane({
         attachments: inputRestoreContent.attachments as Attachment[],
       }
     : undefined
+  const fileCapabilities = useMemo(
+    () =>
+      currentModel
+        ? {
+            image: currentModel.supportsImages,
+            pdf: currentModel.supportsPdf,
+            audio: currentModel.supportsAudio,
+            video: currentModel.supportsVideo,
+          }
+        : undefined,
+    [currentModel],
+  )
+  const handleScrollToBottom = useCallback(() => {
+    chatAreaRef.current?.scrollToBottom()
+  }, [])
 
   // ============================================
   // Render
@@ -880,7 +934,7 @@ export const ChatPane = memo(function ChatPane({
                 key={chatAreaMountKey}
                 ref={chatAreaRef}
                 messages={renderedMessages}
-                pageRecords={chatPageViewModel.pageRecords}
+                visibleMessageEntries={chatPageViewModel.visibleMessageEntries}
                 visibleMessages={chatPageViewModel.visibleMessages}
                 forkTargetIdMap={chatPageViewModel.forkTargetIdMap}
                 turnDurationMap={chatPageViewModel.turnDurationMap}
@@ -949,16 +1003,7 @@ export const ChatPane = memo(function ChatPane({
           variants={currentModel?.variants ?? []}
           selectedVariant={selectedVariant}
           onVariantChange={handleVariantChange}
-          fileCapabilities={
-            currentModel
-              ? {
-                  image: currentModel.supportsImages,
-                  pdf: currentModel.supportsPdf,
-                  audio: currentModel.supportsAudio,
-                  video: currentModel.supportsVideo,
-                }
-              : undefined
-          }
+          fileCapabilities={fileCapabilities}
           models={visibleModels}
           selectedModelKey={selectedModelKey}
           onModelChange={handleModelChange}
@@ -976,7 +1021,7 @@ export const ChatPane = memo(function ChatPane({
           registerInputBox={registerInputBox}
           isAtBottom={isFollowing}
           showScrollToBottom={!isFollowing}
-          onScrollToBottom={() => chatAreaRef.current?.scrollToBottom()}
+          onScrollToBottom={handleScrollToBottom}
           collapsedPermission={
             !inlineToolRequests && pendingPermissionRequests.length > 0 && permissionCollapsed
               ? {

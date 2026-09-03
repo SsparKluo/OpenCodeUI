@@ -4,6 +4,7 @@
 // ============================================
 
 import { getSDKClient, unwrap } from './sdk'
+import { resolveSessionTarget } from '../utils/sessionKey'
 import { formatPathForApi } from '../utils/directoryUtils'
 import type {
   ApiMessageWithParts,
@@ -54,23 +55,17 @@ export async function getSessionMessages(
   sessionId: string,
   limit?: number,
   directory?: string,
+  serverId?: string,
 ): Promise<ApiMessageWithParts[]> {
-  const sdk = getSDKClient()
+  const target = resolveSessionTarget(sessionId, serverId)
+  const sdk = getSDKClient(target.serverId)
   return unwrap<ApiMessageWithParts[]>(
     await sdk.session.messages({
-      sessionID: sessionId,
-      directory: formatPathForApi(directory),
+      sessionID: target.sessionId,
+      directory: formatPathForApi(directory, target.serverId),
       limit,
     }),
   )
-}
-
-/**
- * 获取 session 的消息数量
- */
-export async function getSessionMessageCount(sessionId: string): Promise<number> {
-  const messages = await getSessionMessages(sessionId)
-  return messages.length
 }
 
 // ============================================
@@ -163,7 +158,7 @@ function toFileUrl(path: string): string {
 /**
  * 构建 SDK 发送消息所需的参数
  */
-function buildPromptParams(params: SendMessageParams): PromptParams {
+function buildPromptParams(params: SendMessageParams, serverId?: string): PromptParams {
   const { sessionId, text, attachments, model, agent, variant, directory } = params
 
   const parts: NonNullable<PromptParams['parts']> = []
@@ -220,7 +215,7 @@ function buildPromptParams(params: SendMessageParams): PromptParams {
 
   return {
     sessionID: sessionId,
-    directory: formatPathForApi(directory),
+    directory: formatPathForApi(directory, serverId),
     parts,
     model,
     agent,
@@ -231,15 +226,17 @@ function buildPromptParams(params: SendMessageParams): PromptParams {
 /**
  * 同步发送消息（等待完成）
  */
-export async function sendMessage(params: SendMessageParams): Promise<SendMessageResponse> {
-  const sdk = getSDKClient()
-  return unwrap<SendMessageResponse>(await sdk.session.prompt(buildPromptParams(params)))
+export async function sendMessage(params: SendMessageParams, serverId?: string): Promise<SendMessageResponse> {
+  const target = resolveSessionTarget(params.sessionId, serverId)
+  const sdk = getSDKClient(target.serverId)
+  return unwrap<SendMessageResponse>(await sdk.session.prompt(buildPromptParams({ ...params, sessionId: target.sessionId }, target.serverId)))
 }
 
 /**
  * 异步发送消息 — 立即返回，AI 响应通过 SSE 推送
  */
-export async function sendMessageAsync(params: SendMessageParams): Promise<void> {
-  const sdk = getSDKClient()
-  unwrap(await sdk.session.promptAsync(buildPromptParams(params)))
+export async function sendMessageAsync(params: SendMessageParams, serverId?: string): Promise<void> {
+  const target = resolveSessionTarget(params.sessionId, serverId)
+  const sdk = getSDKClient(target.serverId)
+  unwrap(await sdk.session.promptAsync(buildPromptParams({ ...params, sessionId: target.sessionId }, target.serverId)))
 }

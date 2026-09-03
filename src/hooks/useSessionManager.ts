@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { logger } from '../utils/logger'
 import { isUserUIMessage, toApiMessageWithParts } from '../utils/messageConversion'
 import { messageStore, type RevertState, type SessionState } from '../store'
+import { sessionKeyToServerId } from '../utils/sessionKey'
 import {
   getSessionMessages,
   getSession,
@@ -145,9 +146,10 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
       if (hasExistingMessages && existingState.isStreaming && hasLoadedBaseline) {
         // 异步加载 session 元数据（不阻塞）
         const dir = directoryRef.current
+        const serverId = sessionKeyToServerId(sid)
         Promise.all([
-          getSession(sid, dir).catch(() => null),
-          getSessionMessages(sid, INITIAL_MESSAGE_LIMIT, dir)
+          getSession(sid, dir, serverId).catch(() => null),
+          getSessionMessages(sid, INITIAL_MESSAGE_LIMIT, dir, serverId)
             .then(messages => ({ ok: true as const, messages }))
             .catch(() => ({ ok: false as const, messages: [] as ApiMessageWithParts[] })),
         ])
@@ -178,9 +180,10 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
 
       try {
         // 并行加载 session 信息和消息（传递 directory）
+        const serverId = sessionKeyToServerId(sid)
         const [sessionInfo, apiMessages] = await Promise.all([
-          getSession(sid, dir).catch(() => null),
-          getSessionMessages(sid, INITIAL_MESSAGE_LIMIT, dir),
+          getSession(sid, dir, serverId).catch(() => null),
+          getSessionMessages(sid, INITIAL_MESSAGE_LIMIT, dir, serverId),
         ])
 
         if (isStale()) return
@@ -260,7 +263,7 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
     const targetCursor = currentCursor + HISTORY_LOAD_BATCH_SIZE
 
     try {
-      const apiMessages = await getSessionMessages(sessionId, targetCursor, dir)
+      const apiMessages = await getSessionMessages(sessionId, targetCursor, dir, sessionKeyToServerId(sessionId))
       cursorRef.current.set(sessionId, targetCursor)
 
       const latestState = messageStore.getSessionState(sessionId)
@@ -295,7 +298,7 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
 
       try {
         // 调用 API 设置 revert 点（传递 directory）
-        await revertMessage(sessionId, userMessageId, undefined, dir)
+        await revertMessage(sessionId, userMessageId, undefined, dir, sessionKeyToServerId(sessionId))
 
         // 找到 revert 点的索引
         const revertIndex = state.messages.findIndex(m => m.info.id === userMessageId)
@@ -352,7 +355,7 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
       if (newHistory.length > 0) {
         // 还有更多历史，设置新的 revert 点
         const newRevertMessageId = newHistory[0].messageId
-        await revertMessage(sessionId, newRevertMessageId, undefined, dir)
+        await revertMessage(sessionId, newRevertMessageId, undefined, dir, sessionKeyToServerId(sessionId))
 
         messageStore.setRevertState(sessionId, {
           messageId: newRevertMessageId,
@@ -360,7 +363,7 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
         })
       } else {
         // 没有更多历史，完全清除 revert 状态
-        await unrevertSession(sessionId, dir)
+        await unrevertSession(sessionId, dir, sessionKeyToServerId(sessionId))
         messageStore.setRevertState(sessionId, null)
       }
     } catch (error) {
@@ -379,7 +382,7 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
     const dir = state?.directory || directoryRef.current
 
     try {
-      await unrevertSession(sessionId, dir)
+      await unrevertSession(sessionId, dir, sessionKeyToServerId(sessionId))
       messageStore.setRevertState(sessionId, null)
     } catch (error) {
       sessionErrorHandler('redo all', error)

@@ -8,6 +8,8 @@
 // 3. 存储子 session 的基本信息（用于显示来源）
 
 import type { ApiSession } from '../api/types'
+import { makeSessionKey } from '../utils/sessionKey'
+import { serverStore } from './serverStore'
 import i18n from '../i18n'
 
 // ============================================
@@ -57,23 +59,28 @@ class ChildSessionStore {
 
   /**
    * 注册一个新的子 session（从 session.created 事件调用）
+   * @param serverId 子 session 所属服务器（用于把原始 sessionId 复合化）
    */
-  registerChildSession(session: ApiSession) {
+  registerChildSession(session: ApiSession, serverId?: string) {
     if (!session.parentID) return // 不是子 session
 
+    const childKey = makeSessionKey(serverId ?? serverStore.getActiveServerId(), session.id)
+    const parentKey = makeSessionKey(serverId ?? serverStore.getActiveServerId(), session.parentID)
+
     // 添加到 parent -> children 映射
-    let children = this.childrenByParent.get(session.parentID)
+    let children = this.childrenByParent.get(parentKey)
     if (!children) {
       children = new Set()
-      this.childrenByParent.set(session.parentID, children)
+      this.childrenByParent.set(parentKey, children)
     }
-    children.add(session.id)
+    children.add(childKey)
 
     // 存储 session 信息
-    this.sessionInfo.set(session.id, {
-      id: session.id,
-      parentID: session.parentID,
+    this.sessionInfo.set(childKey, {
+      id: childKey,
+      parentID: parentKey,
       title: session.title || i18n.t('chat:permissionDialog.subtaskFallback'),
+      agent: session.agent,
       status: 'running',
       createdAt: session.time.created,
     })

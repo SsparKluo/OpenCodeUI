@@ -340,10 +340,12 @@ function MobileExtraKeys({ onSend, stickyModifiers, onToggleSticky, onFocusTermi
 interface TerminalProps {
   ptyId: string
   directory?: string
+  /** 数据所属服务器（缺省用活动服务器） */
+  serverId?: string
   isActive: boolean
 }
 
-export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: TerminalProps) {
+export const Terminal = memo(function Terminal({ ptyId, directory, serverId, isActive }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalDirectoryRef = useRef(directory)
   const [isTouchScrolling, setIsTouchScrolling] = useState(false)
@@ -623,7 +625,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
       layoutStore.updateTerminalTab(ptyId, { status: 'connected' })
       const { cols, rows } = terminal
       logger.log('[Terminal] Sending size:', cols, 'x', rows)
-      updatePtySession(ptyId, { size: { cols, rows } }, terminalDirectory).catch(() => {})
+      updatePtySession(ptyId, { size: { cols, rows } }, terminalDirectory, serverId).catch(() => {})
     }
 
     const handleDisconnected = ({ code, reason }: { code?: number; reason?: string }) => {
@@ -671,6 +673,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
               ptyId,
               directory: terminalDirectory,
               cursor,
+              serverId,
               onConnected: handleConnected,
               onMessage: chunk => {
                 if (!mountedRef.current) return
@@ -704,7 +707,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
             handleDisconnected({ reason: message })
           })
       } else {
-        const wsUrl = getPtyConnectUrl(ptyId, terminalDirectory, { cursor })
+        const wsUrl = getPtyConnectUrl(ptyId, terminalDirectory, { cursor }, serverId)
         logger.log('[Terminal] Connecting to:', wsUrl, reconnectAttempt > 0 ? `(reconnect #${reconnectAttempt})` : '')
         ws = new WebSocket(wsUrl)
         ws.binaryType = 'arraybuffer'

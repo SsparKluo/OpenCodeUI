@@ -17,9 +17,32 @@ import { serverStore } from '../store/serverStore'
  * 生成带 serverId 前缀的 localStorage key
  * 格式: `srv:{serverId}:{key}`
  */
-function makeKey(key: string): string {
-  const serverId = serverStore.getActiveServerId()
-  return `srv:${serverId}:${key}`
+function makeKey(key: string, serverId?: string): string {
+  const sid = serverId ?? serverStore.getActiveServerId()
+  return `srv:${sid}:${key}`
+}
+
+// 存储版本（写入时递增，供订阅者通过 getStorageVersion 感知变化触发刷新）
+let storageVersion = 0
+const versionListeners = new Set<() => void>()
+
+function bumpVersion(): void {
+  storageVersion += 1
+  versionListeners.forEach(fn => fn())
+}
+
+/**
+ * 当前存储版本（作为 useSyncExternalStore 的 getSnapshot，
+ * 写入时版本递增 → 订阅组件重渲染并重新读取数据）
+ */
+export function getStorageVersion(): number {
+  return storageVersion
+}
+
+/** 订阅 per-server storage 的写入事件（返回取消订阅函数） */
+export function subscribePerServerStorageVersion(fn: () => void): () => void {
+  versionListeners.add(fn)
+  return () => versionListeners.delete(fn)
 }
 
 export const serverStorage = {
@@ -40,6 +63,7 @@ export const serverStorage = {
   set(key: string, value: string): void {
     try {
       localStorage.setItem(makeKey(key), value)
+      bumpVersion()
     } catch {
       // ignore
     }
@@ -51,6 +75,7 @@ export const serverStorage = {
   remove(key: string): void {
     try {
       localStorage.removeItem(makeKey(key))
+      bumpVersion()
     } catch {
       // ignore
     }
@@ -74,6 +99,49 @@ export const serverStorage = {
    */
   setJSON(key: string, value: unknown): void {
     serverStorage.set(key, JSON.stringify(value))
+  },
+
+  /**
+   * 读取指定服务器的存储值
+   */
+  getFor(key: string, serverId: string): string | null {
+    try {
+      return localStorage.getItem(makeKey(key, serverId))
+    } catch {
+      return null
+    }
+  },
+
+  /**
+   * 写入指定服务器的存储值（递增版本通知订阅者）
+   */
+  setFor(key: string, value: string, serverId: string): void {
+    try {
+      localStorage.setItem(makeKey(key, serverId), value)
+      bumpVersion()
+    } catch {
+      // ignore
+    }
+  },
+
+  /**
+   * 读取指定服务器的 JSON 值（自动解析）
+   */
+  getJSONFor<T>(key: string, serverId: string): T | null {
+    const raw = serverStorage.getFor(key, serverId)
+    if (!raw) return null
+    try {
+      return JSON.parse(raw) as T
+    } catch {
+      return null
+    }
+  },
+
+  /**
+   * 写入指定服务器的 JSON 值（自动序列化）
+   */
+  setJSONFor(key: string, value: unknown, serverId: string): void {
+    serverStorage.setFor(key, JSON.stringify(value), serverId)
   },
 }
 

@@ -168,7 +168,16 @@
     "batchDeleteSessionsConfirm": "Are you sure you want to delete {{count}} session(s)? This action cannot be undone.",
     "batchDeleteIncludesCurrent": "The currently open session is included. It will switch to a new session after deletion.",
     "batchRemoveProjects": "Remove {{count}} Project(s)",
-    "batchRemoveProjectsConfirm": "Remove {{count}} project(s) from the list? This only removes them from the sidebar — no sessions will be deleted and no files on disk will be affected."
+    "batchRemoveProjectsConfirm": "Remove {{count}} project(s) from the list? This only removes them from the sidebar — no sessions will be deleted and no files on disk will be affected.",
+    "noSubscribedServers": "No servers subscribed yet",
+    "openServerSettings": "Open Server Settings",
+    "focusServerHint": "Focused server · click a server node in the list to switch",
+    "searchResults": "Search results",
+    "searchHint": "Search by server, folder, or chat name",
+    "searchFolderUnit": " folders",
+    "searchSessionUnit": " chats",
+    "searchServerMatchHint": "Server match · click the header to switch focus",
+    "searchingSessions": "Searching chats…"
   },
   "activeSession": {
     "awaitingPermission": "Awaiting Permission",
