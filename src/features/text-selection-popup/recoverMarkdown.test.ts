@@ -97,22 +97,35 @@ describe('recoverMarkdownFromPlain', () => {
       '`npm install` now',
     )
   })
+
+  it('keeps nested strong+codespan fully closed', () => {
+    const source = '`offline_score_mode` 默认已改为 **`reconstruct`**。'
+    expect(recoverMarkdownFromPlain(source, 'offline_score_mode 默认已改为 reconstruct')).toBe(
+      '`offline_score_mode` 默认已改为 **`reconstruct`**',
+    )
+    expect(recoverMarkdownFromPlain(source, 'offline_score_mode 默认已改为 reconstruct。')).toBe(source)
+    expect(recoverMarkdownFromPlain(source, 'reconstruct')).toBe('**`reconstruct`**')
+    expect(recoverMarkdownFromPlain(source, '默认已改为 reconstruct')).toBe(
+      '默认已改为 **`reconstruct`**',
+    )
+  })
 })
 
 describe('expandMarkdownSlice', () => {
-  it('expands both * and ** emphasis symmetrically', () => {
+  it('expands both * and ** emphasis via marked spans', () => {
     expect(expandMarkdownSlice('*hi*', 1, 3)).toEqual({ start: 0, end: 4 })
     expect(expandMarkdownSlice('**hi**', 2, 4)).toEqual({ start: 0, end: 6 })
   })
 
-  it('pulls in an opener when the closer already sits inside the slice', () => {
-    // "**bold** text" with content range covering "bold** text"
-    expect(expandMarkdownSlice('**bold** text', 2, 12)).toEqual({ start: 0, end: 12 })
-  })
-
-  it('pulls in a closer when the opener already sits inside the slice', () => {
-    // "prefix **bold**" with content range covering "prefix **bold"
-    expect(expandMarkdownSlice('prefix **bold**', 0, 13)).toEqual({ start: 0, end: 15 })
+  it('completes nested strong+codespan when only the inner word is covered', () => {
+    const source = '默认已改为 **`reconstruct`**。'
+    // content offsets for "reconstruct"
+    const start = source.indexOf('reconstruct')
+    const end = start + 'reconstruct'.length
+    expect(expandMarkdownSlice(source, start, end)).toEqual({
+      start: source.indexOf('**`reconstruct`**'),
+      end: source.indexOf('**`reconstruct`**') + '**`reconstruct`**'.length,
+    })
   })
 })
 

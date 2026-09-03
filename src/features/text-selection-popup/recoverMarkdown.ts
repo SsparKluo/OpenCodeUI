@@ -3,15 +3,17 @@
  *
  * Strategy:
  *  1. If the selection sits entirely inside a KaTeX node, return the TeX
- *     source from `annotation[encoding=application/x-tex]`, re-wrapped with
- *     the delimiter found in `sourceMarkdown` (or a sensible default).
- *  2. Otherwise normalize away Markdown punctuation + collapse whitespace on
- *     both the selection and the source, find a unique match, map back to
- *     raw offsets, then expand to include adjacent markup (`**`, `` ` ``,
- *     `[…](…)`, heading `#`, fenced code).
+ *     source from `data-latex` / MathML annotation, re-wrapped with the
+ *     delimiter found in `sourceMarkdown`.
+ *  2. Otherwise normalize away Markdown punctuation + collapse whitespace,
+ *     uniquely locate the selection in the source, then expand the raw
+ *     slice via the marked AST: any token only partially covered is grown
+ *     to its full `token.raw` (so nested strong+codespan never loses a closer).
  *  3. Return null when recovery is ambiguous or impossible — caller falls
  *     back to the rendered plain text.
  */
+
+import { marked, type Token, type Tokens } from 'marked'
 
 const MARKUP_CHAR = /[`*_~$[\]()#>|!\\]/
 const WHITESPACE = /\s/
@@ -122,286 +124,94 @@ export function findUniqueIndex(haystack: string, needle: string): number {
   return first
 }
 
+type AstSpan = { start: number; end: number; type: string }
+
 /**
- * Expand a raw [start, end) slice so adjacent Markdown markers travel with
- * the content (emphasis, inline code, links, headings, fenced blocks).
+ * Token types whose `raw` adds markers outside the visible text. Transparent
+ * containers like `paragraph` / `list` are excluded so a partial selection
+ * does not swallow the whole block.
  */
-export function expandMarkdownSlice(source: string, start: number, end: number): { start: number; end: number } {
-  let lo = Math.max(0, start)
-  let hi = Math.min(source.length, end)
+const EXPAND_TOKEN_TYPES = new Set([
+  'strong',
+  'em',
+  'del',
+  'codespan',
+  'link',
+  'image',
+  'heading',
+  'blockquote',
+  'list_item',
+  'code',
+])
 
-  // Inline code: one or more backticks on both sides
-  const code = expandInlineCode(source, lo, hi)
-  if (code) return code
-
-  // Links: [label](url) or ![alt](url) when the slice sits on the label
-  const link = expandLink(source, lo, hi)
-  if (link) {
-    lo = link.start
-    hi = link.end
-  }
-
-  // Emphasis / strong: include openers before the slice and/or closers after
-  // it, even when the selection only covers part of the emphasized span plus
-  // surrounding text (e.g. selecting "bold text" from "**bold** text").
-  ;({ start: lo, end: hi } = expandEmphasis(source, lo, hi))
-
-  // ATX heading: include leading #'s on the same line
-  ;({ start: lo, end: hi } = expandHeading(source, lo, hi))
-
-  // Blockquote / list: include leading line markers the content match omitted
-  ;({ start: lo, end: hi } = expandBlockquote(source, lo, hi))
-  ;({ start: lo, end: hi } = expandListMarker(source, lo, hi))
-
-  // Fenced code block: if inside ```…```, take the whole fence
-  const fence = expandFence(source, lo, hi)
-  if (fence) return fence
-
-  return { start: lo, end: hi }
-}
-
-function expandInlineCode(
-  source: string,
-  lo: number,
-  hi: number,
-): { start: number; end: number } | null {
-  // Symmetric: backticks tight on both sides
-  let left = lo
-  while (left > 0 && source[left - 1] === '`') left--
-  const leftTicks = lo - left
-  if (leftTicks > 0) {
-    let right = hi
-    while (right < source.length && source[right] === '`') right++
-    if (right - hi >= leftTicks) return { start: left, end: hi + leftTicks }
-
-    // Opener before lo, closer inside the slice (partial span + trailing text)
-    const closer = findCloserRun(source, lo, hi, '`', leftTicks)
-    if (closer !== -1) return { start: left, end: hi }
-  }
-
-  // Closer after hi, opener inside the slice (leading text + partial span)
-  let right = hi
-  while (right < source.length && source[right] === '`') right++
-  const rightTicks = right - hi
-  if (rightTicks > 0) {
-    const opener = findOpenerRun(source, lo, hi, '`', rightTicks)
-    if (opener !== -1) return { start: lo, end: hi + rightTicks }
-  }
-
+function childTokens(token: Token): Token[] | null {
+  if ('tokens' in token && Array.isArray(token.tokens)) return token.tokens as Token[]
+  if (token.type === 'list' && 'items' in token) return (token as Tokens.List).items as Token[]
   return null
 }
 
-function expandLink(
-  source: string,
-  lo: number,
-  hi: number,
-): { start: number; end: number } | null {
-  // Walk left for an unescaped '[' (optional leading '!')
-  let bracket = -1
-  for (let i = lo - 1; i >= 0; i--) {
-    const ch = source[i]
-    if (ch === ']') return null // crossed another link end
-    if (ch === '[') {
-      bracket = i
-      break
+/**
+ * Walk marked's lexer output and record absolute [start, end) spans for every
+ * token that owns a `raw` string. Children are placed by searching for their
+ * `raw` inside the parent's raw (unique within that parent).
+ */
+export function collectMarkdownSpans(source: string): AstSpan[] {
+  const spans: AstSpan[] = []
+
+  const visit = (tokens: Token[], parentStart: number, parentRaw: string) => {
+    let cursor = 0
+    for (const token of tokens) {
+      const raw = typeof token.raw === 'string' ? token.raw : ''
+      if (!raw) continue
+
+      let rel = parentRaw.indexOf(raw, cursor)
+      if (rel === -1) rel = parentRaw.indexOf(raw)
+      if (rel === -1) continue
+
+      const start = parentStart + rel
+      const end = start + raw.length
+      spans.push({ start, end, type: token.type })
+      cursor = rel + raw.length
+
+      const children = childTokens(token)
+      if (children && children.length > 0) visit(children, start, raw)
     }
-    if (ch === '\n') return null
   }
-  if (bracket === -1) return null
 
-  const start = bracket > 0 && source[bracket - 1] === '!' ? bracket - 1 : bracket
-  if (source[hi] !== ']') return null
-
-  // Expect ](url) immediately after the label
-  if (source[hi + 1] !== '(') return null
-  const closeParen = source.indexOf(')', hi + 2)
-  if (closeParen === -1) return null
-
-  return { start, end: closeParen + 1 }
+  visit(marked.lexer(source) as Token[], 0, source)
+  return spans
 }
 
-function measureRun(source: string, index: number, direction: -1 | 1, char: string): number {
-  let count = 0
-  let i = index
-  while (i >= 0 && i < source.length && source[i] === char) {
-    count++
-    i += direction
-  }
-  return count
-}
+/**
+ * Expand a raw [start, end) content match so every marked wrapper token it
+ * partially covers is included in full via `token.raw`. This is what keeps
+ * nested strong+codespan closed when the selection only saw the inner word.
+ */
+export function expandMarkdownSlice(source: string, start: number, end: number): { start: number; end: number } {
+  let lo = Math.max(0, Math.min(start, source.length))
+  let hi = Math.max(lo, Math.min(end, source.length))
+  if (lo === hi) return { start: lo, end: hi }
 
-function findCloserRun(
-  source: string,
-  from: number,
-  to: number,
-  char: string,
-  runLen: number,
-): number {
-  // First run of `char` repeated >= runLen times in [from, to).
-  let i = from
-  while (i < to) {
-    if (source[i] !== char) {
-      i++
-      continue
-    }
-    const run = measureRun(source, i, 1, char)
-    if (run >= runLen) return i
-    i += run
-  }
-  return -1
-}
-
-function findOpenerRun(
-  source: string,
-  from: number,
-  to: number,
-  char: string,
-  runLen: number,
-): number {
-  // Last run of `char` repeated >= runLen times in [from, to), returning its start.
-  let i = to - 1
-  while (i >= from) {
-    if (source[i] !== char) {
-      i--
-      continue
-    }
-    const run = measureRun(source, i, -1, char)
-    const start = i - run + 1
-    if (run >= runLen) return start
-    i = start - 1
-  }
-  return -1
-}
-
-function expandEmphasis(
-  source: string,
-  lo: number,
-  hi: number,
-): { start: number; end: number } {
+  const spans = collectMarkdownSpans(source)
   let changed = true
   while (changed) {
     changed = false
-
-    // Symmetric: markers tight on both sides of the current slice
-    if (lo > 0 && hi < source.length) {
-      const leftChar = source[lo - 1]
-      if (leftChar === '*' || leftChar === '_') {
-        const leftRun = measureRun(source, lo - 1, -1, leftChar)
-        const rightRun = measureRun(source, hi, 1, leftChar)
-        const take = Math.min(leftRun, rightRun)
-        if (take > 0) {
-          lo -= take
-          hi += take
-          changed = true
-          continue
-        }
+    for (const span of spans) {
+      if (!EXPAND_TOKEN_TYPES.has(span.type)) continue
+      if (span.end <= lo || span.start >= hi) continue
+      if (span.start >= lo && span.end <= hi) continue
+      if (span.start < lo) {
+        lo = span.start
+        changed = true
       }
-    }
-
-    // Opener immediately before lo, closer somewhere inside [lo, hi]
-    // (selection covers emphasized content + trailing text).
-    if (lo > 0) {
-      const leftChar = source[lo - 1]
-      if (leftChar === '*' || leftChar === '_') {
-        const leftRun = measureRun(source, lo - 1, -1, leftChar)
-        const closer = findCloserRun(source, lo, hi, leftChar, leftRun)
-        if (closer !== -1) {
-          lo -= leftRun
-          changed = true
-          continue
-        }
-      }
-    }
-
-    // Closer immediately after hi, opener somewhere inside [lo, hi]
-    // (selection covers leading text + emphasized content).
-    if (hi < source.length) {
-      const rightChar = source[hi]
-      if (rightChar === '*' || rightChar === '_') {
-        const rightRun = measureRun(source, hi, 1, rightChar)
-        const opener = findOpenerRun(source, lo, hi, rightChar, rightRun)
-        if (opener !== -1) {
-          hi += rightRun
-          changed = true
-          continue
-        }
+      if (span.end > hi) {
+        hi = span.end
+        changed = true
       }
     }
   }
+
   return { start: lo, end: hi }
-}
-
-function expandBlockquote(
-  source: string,
-  lo: number,
-  hi: number,
-): { start: number; end: number } {
-  // Pull in a leading `>` on the first line of the slice, and leave interior
-  // `>` markers alone — they already sit inside [lo, hi) once the first line
-  // is anchored and the content match spans subsequent lines.
-  let lineStart = lo
-  while (lineStart > 0 && source[lineStart - 1] !== '\n') lineStart--
-  if (source.startsWith('>', lineStart) && lineStart < lo) {
-    lo = lineStart
-  }
-  return { start: lo, end: hi }
-}
-
-function expandListMarker(
-  source: string,
-  lo: number,
-  hi: number,
-): { start: number; end: number } {
-  let lineStart = lo
-  while (lineStart > 0 && source[lineStart - 1] !== '\n') lineStart--
-  const markerLen = listMarkerLength(source, lineStart)
-  if (markerLen > 0 && lineStart < lo) {
-    lo = lineStart
-  }
-  return { start: lo, end: hi }
-}
-
-function expandHeading(
-  source: string,
-  lo: number,
-  hi: number,
-): { start: number; end: number } {
-  // Find start of line
-  let lineStart = lo
-  while (lineStart > 0 && source[lineStart - 1] !== '\n') lineStart--
-
-  const heading = /^#{1,6}[ \t]+/.exec(source.slice(lineStart, lo + 1))
-  if (!heading) return { start: lo, end: hi }
-  // Only expand when the slice begins at/after the heading marker's content
-  if (lo > lineStart + heading[0].length) return { start: lo, end: hi }
-  return { start: lineStart, end: hi }
-}
-
-function expandFence(
-  source: string,
-  lo: number,
-  hi: number,
-): { start: number; end: number } | null {
-  // Find the nearest opening fence line before `lo`.
-  const before = source.slice(0, lo)
-  const openMatch = before.match(/(?:^|\n)(```[^\n]*\n)(?:(?!```)[\s\S])*$/)
-  if (!openMatch || openMatch.index === undefined) return null
-
-  const openLineStart = openMatch[0].startsWith('\n') ? openMatch.index + 1 : openMatch.index
-  if (!source.startsWith('```', openLineStart)) return null
-
-  const closeIdx = source.indexOf('\n```', hi)
-  if (closeIdx === -1) return null
-
-  let closeEnd = closeIdx + 1 // points at first `
-  while (closeEnd < source.length && source[closeEnd] === '`') closeEnd++
-  // Consume optional language-less trailing spaces / final newline
-  while (closeEnd < source.length && source[closeEnd] !== '\n' && /\s/.test(source[closeEnd]!)) {
-    closeEnd++
-  }
-  if (closeEnd < source.length && source[closeEnd] === '\n') closeEnd++
-
-  return { start: openLineStart, end: closeEnd }
 }
 
 /**
