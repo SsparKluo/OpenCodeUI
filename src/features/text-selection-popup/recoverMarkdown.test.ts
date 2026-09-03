@@ -61,12 +61,58 @@ describe('recoverMarkdownFromPlain', () => {
   it('returns null when rendered text cannot be located', () => {
     expect(recoverMarkdownFromPlain('hello **world**', 'missing')).toBeNull()
   })
+
+  it('includes opening emphasis markers when the selection continues past the span', () => {
+    expect(recoverMarkdownFromPlain('say **bold** please', 'bold please')).toBe('**bold** please')
+    expect(recoverMarkdownFromPlain('**bold** text', 'bold text')).toBe('**bold** text')
+  })
+
+  it('includes closing emphasis markers when the selection starts before the span', () => {
+    expect(recoverMarkdownFromPlain('prefix **bold**', 'prefix bold')).toBe('prefix **bold**')
+    expect(recoverMarkdownFromPlain('say *hi* there', 'say hi')).toBe('say *hi*')
+  })
+
+  it('recovers cross-line selections and keeps markers on both sides', () => {
+    expect(recoverMarkdownFromPlain('hello **bold**\nand more', 'bold\nand more')).toBe('**bold**\nand more')
+    expect(recoverMarkdownFromPlain('# Title\n\npara one\npara two', 'Title\n\npara one')).toBe(
+      '# Title\n\npara one',
+    )
+  })
+
+  it('includes leading blockquote markers for multi-line quotes', () => {
+    expect(recoverMarkdownFromPlain('> quote line\n> second', 'quote line\nsecond')).toBe(
+      '> quote line\n> second',
+    )
+  })
+
+  it('includes ordered and unordered list markers across lines', () => {
+    expect(recoverMarkdownFromPlain('1. first\n2. second', 'first\nsecond')).toBe(
+      '1. first\n2. second',
+    )
+    expect(recoverMarkdownFromPlain('- alpha\n- beta', 'alpha\nbeta')).toBe('- alpha\n- beta')
+  })
+
+  it('includes opening inline-code ticks when selection continues past the code span', () => {
+    expect(recoverMarkdownFromPlain('use `npm install` now', 'npm install now')).toBe(
+      '`npm install` now',
+    )
+  })
 })
 
 describe('expandMarkdownSlice', () => {
   it('expands both * and ** emphasis symmetrically', () => {
     expect(expandMarkdownSlice('*hi*', 1, 3)).toEqual({ start: 0, end: 4 })
     expect(expandMarkdownSlice('**hi**', 2, 4)).toEqual({ start: 0, end: 6 })
+  })
+
+  it('pulls in an opener when the closer already sits inside the slice', () => {
+    // "**bold** text" with content range covering "bold** text"
+    expect(expandMarkdownSlice('**bold** text', 2, 12)).toEqual({ start: 0, end: 12 })
+  })
+
+  it('pulls in a closer when the opener already sits inside the slice', () => {
+    // "prefix **bold**" with content range covering "prefix **bold"
+    expect(expandMarkdownSlice('prefix **bold**', 0, 13)).toEqual({ start: 0, end: 15 })
   })
 })
 

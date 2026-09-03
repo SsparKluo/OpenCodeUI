@@ -15,12 +15,28 @@
 
 const MARKUP_CHAR = /[`*_~[\]()#>|!\\]/
 const WHITESPACE = /\s/
+const ORDERED_LIST_MARKER = /^\d+\.\s+/
+const UNORDERED_LIST_MARKER = /^[*+-]\s+/
 
 export type NormalizedIndex = {
   /** Markup-stripped, whitespace-collapsed text. */
   text: string
   /** `map[i]` = index in the original string of `text[i]`. */
   map: number[]
+}
+
+function isLineStart(value: string, index: number): boolean {
+  return index === 0 || value[index - 1] === '\n'
+}
+
+/** Length of a list marker at `index`, or 0 when none. */
+function listMarkerLength(value: string, index: number): number {
+  if (!isLineStart(value, index)) return 0
+  const slice = value.slice(index)
+  const ordered = ORDERED_LIST_MARKER.exec(slice)
+  if (ordered) return ordered[0].length
+  const unordered = UNORDERED_LIST_MARKER.exec(slice)
+  return unordered ? unordered[0].length : 0
 }
 
 /**
@@ -31,17 +47,31 @@ export function normalizeForMatch(value: string): NormalizedIndex {
   const map: number[] = []
   let text = ''
 
-  for (let i = 0; i < value.length; i++) {
+  for (let i = 0; i < value.length; ) {
+    const markerLen = listMarkerLength(value, i)
+    if (markerLen > 0) {
+      i += markerLen
+      continue
+    }
+
     const ch = value[i]!
-    if (MARKUP_CHAR.test(ch)) continue
+    if (MARKUP_CHAR.test(ch)) {
+      i++
+      continue
+    }
     if (WHITESPACE.test(ch)) {
-      if (text.length === 0 || text.endsWith(' ')) continue
+      if (text.length === 0 || text.endsWith(' ')) {
+        i++
+        continue
+      }
       text += ' '
       map.push(i)
+      i++
       continue
     }
     text += ch
     map.push(i)
+    i++
   }
 
   // Trim trailing collapsed space
@@ -85,11 +115,17 @@ export function expandMarkdownSlice(source: string, start: number, end: number):
     hi = link.end
   }
 
-  // Emphasis / strong: wrap with matching * or _ runs
+  // Emphasis / strong: include openers before the slice and/or closers after
+  // it, even when the selection only covers part of the emphasized span plus
+  // surrounding text (e.g. selecting "bold text" from "**bold** text").
   ;({ start: lo, end: hi } = expandEmphasis(source, lo, hi))
 
   // ATX heading: include leading #'s on the same line
   ;({ start: lo, end: hi } = expandHeading(source, lo, hi))
+
+  // Blockquote / list: include leading line markers the content match omitted
+  ;({ start: lo, end: hi } = expandBlockquote(source, lo, hi))
+  ;({ start: lo, end: hi } = expandListMarker(source, lo, hi))
 
   // Fenced code block: if inside ```…```, take the whole fence
   const fence = expandFence(source, lo, hi)
@@ -103,19 +139,30 @@ function expandInlineCode(
   lo: number,
   hi: number,
 ): { start: number; end: number } | null {
-  // Count backticks immediately before lo
+  // Symmetric: backticks tight on both sides
   let left = lo
   while (left > 0 && source[left - 1] === '`') left--
   const leftTicks = lo - left
-  if (leftTicks === 0) return null
+  if (leftTicks > 0) {
+    let right = hi
+    while (right < source.length && source[right] === '`') right++
+    if (right - hi >= leftTicks) return { start: left, end: hi + leftTicks }
 
-  // Matching run after hi
+    // Opener before lo, closer inside the slice (partial span + trailing text)
+    const closer = findCloserRun(source, lo, hi, '`', leftTicks)
+    if (closer !== -1) return { start: left, end: hi }
+  }
+
+  // Closer after hi, opener inside the slice (leading text + partial span)
   let right = hi
   while (right < source.length && source[right] === '`') right++
   const rightTicks = right - hi
-  if (rightTicks < leftTicks) return null
+  if (rightTicks > 0) {
+    const opener = findOpenerRun(source, lo, hi, '`', rightTicks)
+    if (opener !== -1) return { start: lo, end: hi + rightTicks }
+  }
 
-  return { start: left, end: hi + leftTicks }
+  return null
 }
 
 function expandLink(
@@ -147,30 +194,143 @@ function expandLink(
   return { start, end: closeParen + 1 }
 }
 
+function measureRun(source: string, index: number, direction: -1 | 1, char: string): number {
+  let count = 0
+  let i = index
+  while (i >= 0 && i < source.length && source[i] === char) {
+    count++
+    i += direction
+  }
+  return count
+}
+
+function findCloserRun(
+  source: string,
+  from: number,
+  to: number,
+  char: string,
+  runLen: number,
+): number {
+  // First run of `char` repeated >= runLen times in [from, to).
+  let i = from
+  while (i < to) {
+    if (source[i] !== char) {
+      i++
+      continue
+    }
+    const run = measureRun(source, i, 1, char)
+    if (run >= runLen) return i
+    i += run
+  }
+  return -1
+}
+
+function findOpenerRun(
+  source: string,
+  from: number,
+  to: number,
+  char: string,
+  runLen: number,
+): number {
+  // Last run of `char` repeated >= runLen times in [from, to), returning its start.
+  let i = to - 1
+  while (i >= from) {
+    if (source[i] !== char) {
+      i--
+      continue
+    }
+    const run = measureRun(source, i, -1, char)
+    const start = i - run + 1
+    if (run >= runLen) return start
+    i = start - 1
+  }
+  return -1
+}
+
 function expandEmphasis(
   source: string,
   lo: number,
   hi: number,
 ): { start: number; end: number } {
-  // Pull in matching runs of * or _ on both sides (handles * and **)
-  while (lo > 0 && hi < source.length) {
-    const leftChar = source[lo - 1]
-    if (leftChar !== '*' && leftChar !== '_') break
+  let changed = true
+  while (changed) {
+    changed = false
 
-    // Measure left run
-    let leftStart = lo - 1
-    while (leftStart > 0 && source[leftStart - 1] === leftChar) leftStart--
-    const leftRun = lo - leftStart
+    // Symmetric: markers tight on both sides of the current slice
+    if (lo > 0 && hi < source.length) {
+      const leftChar = source[lo - 1]
+      if (leftChar === '*' || leftChar === '_') {
+        const leftRun = measureRun(source, lo - 1, -1, leftChar)
+        const rightRun = measureRun(source, hi, 1, leftChar)
+        const take = Math.min(leftRun, rightRun)
+        if (take > 0) {
+          lo -= take
+          hi += take
+          changed = true
+          continue
+        }
+      }
+    }
 
-    // Measure right run
-    let rightEnd = hi
-    while (rightEnd < source.length && source[rightEnd] === leftChar) rightEnd++
-    const rightRun = rightEnd - hi
-    if (rightRun === 0) break
+    // Opener immediately before lo, closer somewhere inside [lo, hi]
+    // (selection covers emphasized content + trailing text).
+    if (lo > 0) {
+      const leftChar = source[lo - 1]
+      if (leftChar === '*' || leftChar === '_') {
+        const leftRun = measureRun(source, lo - 1, -1, leftChar)
+        const closer = findCloserRun(source, lo, hi, leftChar, leftRun)
+        if (closer !== -1) {
+          lo -= leftRun
+          changed = true
+          continue
+        }
+      }
+    }
 
-    const take = Math.min(leftRun, rightRun)
-    lo -= take
-    hi += take
+    // Closer immediately after hi, opener somewhere inside [lo, hi]
+    // (selection covers leading text + emphasized content).
+    if (hi < source.length) {
+      const rightChar = source[hi]
+      if (rightChar === '*' || rightChar === '_') {
+        const rightRun = measureRun(source, hi, 1, rightChar)
+        const opener = findOpenerRun(source, lo, hi, rightChar, rightRun)
+        if (opener !== -1) {
+          hi += rightRun
+          changed = true
+          continue
+        }
+      }
+    }
+  }
+  return { start: lo, end: hi }
+}
+
+function expandBlockquote(
+  source: string,
+  lo: number,
+  hi: number,
+): { start: number; end: number } {
+  // Pull in a leading `>` on the first line of the slice, and leave interior
+  // `>` markers alone — they already sit inside [lo, hi) once the first line
+  // is anchored and the content match spans subsequent lines.
+  let lineStart = lo
+  while (lineStart > 0 && source[lineStart - 1] !== '\n') lineStart--
+  if (source.startsWith('>', lineStart) && lineStart < lo) {
+    lo = lineStart
+  }
+  return { start: lo, end: hi }
+}
+
+function expandListMarker(
+  source: string,
+  lo: number,
+  hi: number,
+): { start: number; end: number } {
+  let lineStart = lo
+  while (lineStart > 0 && source[lineStart - 1] !== '\n') lineStart--
+  const markerLen = listMarkerLength(source, lineStart)
+  if (markerLen > 0 && lineStart < lo) {
+    lo = lineStart
   }
   return { start: lo, end: hi }
 }
