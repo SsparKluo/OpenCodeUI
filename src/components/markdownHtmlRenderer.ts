@@ -80,14 +80,22 @@ function normalizeAlignedMath(source: string): string {
   })
 }
 
+function stampKatexSource(html: string, source: string): string {
+  // Belt-and-suspenders: DOMPurify historically strips MathML <annotation>, so
+  // also stamp the TeX source onto the visible .katex root for selection recovery.
+  const escaped = escapeAttribute(source)
+  return html.replace(/class="katex([^"]*)"/, `class="katex$1" data-latex="${escaped}"`)
+}
+
 function renderKatexHtml(source: string, displayMode: boolean, fallback?: string): string {
   try {
-    return katex.renderToString(displayMode ? normalizeAlignedMath(source) : source, {
+    const html = katex.renderToString(displayMode ? normalizeAlignedMath(source) : source, {
       displayMode,
       throwOnError: false,
       strict: false,
       trust: false,
     })
+    return stampKatexSource(html, source)
   } catch {
     return escapeHtml(fallback ?? (displayMode ? `$$${source}$$` : `$${source}$`))
   }
@@ -557,6 +565,11 @@ function sanitizeHtml(html: string): string {
   if (!DOMPurify.isSupported) return ''
   const clean = DOMPurify.sanitize(stripUnsafeHtmlLinks(rewriteRawHtmlLocalLinks(html)), {
     USE_PROFILES: { html: true, mathMl: true, svg: true },
+    // KaTeX stores the original TeX in MathML <annotation encoding="application/x-tex">.
+    // Without these allowlists DOMPurify drops the tag and selection recovery can only
+    // see rendered glyphs / HTML.
+    ADD_TAGS: ['annotation'],
+    ADD_ATTR: ['encoding', 'data-latex'],
     FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed'],
     FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
   }) as unknown as string

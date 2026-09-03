@@ -470,6 +470,7 @@ const CollapsibleUserText = memo(function CollapsibleUserText({
             contentRef.current = node
             headerRef(node)
           }}
+          data-md-source={text}
           className={`m-0 break-words text-[length:var(--fs-base)] text-text-100 leading-relaxed${
             renderMarkdown ? '' : ' whitespace-pre-wrap'
           }${
