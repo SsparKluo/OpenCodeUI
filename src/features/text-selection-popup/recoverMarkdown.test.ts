@@ -161,6 +161,20 @@ describe('recoverKatexFromRange', () => {
     expect(recoverKatexFromRange(range, 'use $$E=mc^2$$ please')).toBe('$$E=mc^2$$')
   })
 
+  it('falls back to data-latex when MathML annotation is missing', () => {
+    container.innerHTML = `
+      <div data-md-source="inline $x+y$ here">
+        <span class="katex" data-latex="x+y">
+          <span class="katex-html">x+y</span>
+        </span>
+      </div>
+    `
+    const html = container.querySelector('.katex-html')!
+    const range = document.createRange()
+    range.selectNodeContents(html)
+    expect(recoverKatexFromRange(range, 'inline $x+y$ here')).toBe('$x+y$')
+  })
+
   it('returns null when the range spans outside a single katex node', () => {
     container.innerHTML = `
       <div>

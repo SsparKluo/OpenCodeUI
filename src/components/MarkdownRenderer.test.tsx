@@ -168,6 +168,17 @@ describe('MarkdownRenderer', () => {
     expect(container.querySelector('.katex')).not.toHaveTextContent('\\(')
   })
 
+  it('preserves TeX source on rendered katex nodes for selection recovery', () => {
+    const { container } = render(<MarkdownRenderer content={String.raw`Inline $E = mc^2$ math`} />)
+
+    const katexNode = container.querySelector('.katex')
+    expect(katexNode).toBeInTheDocument()
+    expect(katexNode).toHaveAttribute('data-latex', 'E = mc^2')
+    expect(
+      katexNode?.querySelector('annotation[encoding="application/x-tex"]')?.textContent,
+    ).toBe('E = mc^2')
+  })
+
   it('renders backslash-bracket LaTeX display math delimiters', () => {
     const { container } = render(<MarkdownRenderer content={String.raw`\[E = mc^2\]`} />)
 

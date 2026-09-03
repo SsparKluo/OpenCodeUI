@@ -475,8 +475,10 @@ export function recoverKatexFromRange(
   const endKatex = endEl.closest('.katex')
   if (!startKatex || startKatex !== endKatex) return null
 
-  const annotation = startKatex.querySelector('annotation[encoding="application/x-tex"]')
-  const latex = annotation?.textContent
+  const latex =
+    startKatex.getAttribute('data-latex') ??
+    startKatex.querySelector('annotation[encoding="application/x-tex"]')?.textContent ??
+    null
   if (!latex) return null
 
   return wrapLatexSource(sourceMarkdown, latex)
