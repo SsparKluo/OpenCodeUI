@@ -169,6 +169,49 @@ describe('TextSelectionPopup', () => {
     expect(textarea.value).toBe('')
   })
 
+  it('Copy recovers markdown wrappers from data-md-source for rendered selections', async () => {
+    container.innerHTML = `
+      <div data-pane-id="pane-test" data-chat-pane-root="true">
+        <div data-md-source="hello **world** today">
+          <p>hello <strong id="anchor-text">world</strong> today</p>
+        </div>
+        <textarea data-testid="textarea"></textarea>
+      </div>
+    `
+    const anchor = container.querySelector('#anchor-text')!.firstChild!
+    const range = document.createRange()
+    range.setStart(anchor, 0)
+    range.setEnd(anchor, anchor.textContent!.length)
+    range.getBoundingClientRect = () =>
+      ({
+        top: 100,
+        left: 200,
+        right: 300,
+        bottom: 120,
+        width: 100,
+        height: 20,
+        x: 200,
+        y: 100,
+        toJSON: () => ({}),
+      }) as DOMRect
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+
+    render(<TextSelectionPopup />)
+    await flush()
+    await act(async () => {
+      releasePointer()
+    })
+
+    const copyButton = document.body.querySelector('button[aria-label="Copy"]') as HTMLButtonElement
+    await act(async () => {
+      fireEvent.click(copyButton)
+    })
+
+    expect(COPY_MOCK).toHaveBeenCalledWith('**world**')
+  })
+
   it('hides on Escape after a mouseup-committed selection', async () => {
     setupSelectionPane('escape me')
     render(<TextSelectionPopup />)

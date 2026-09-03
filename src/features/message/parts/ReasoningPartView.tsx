@@ -246,7 +246,7 @@ export const ReasoningPartView = memo(function ReasoningPartView({ part, isStrea
     )
 
     return (
-      <div ref={rootRef}>
+      <div ref={rootRef} data-md-source={displayText}>
         {ITALIC_SHOW_LEADING_GLYPH ? (
           <div className="grid grid-cols-[14px_minmax(0,1fr)] gap-x-1.5 items-start">
             <span className="inline-flex h-5 w-[14px] items-start justify-center pt-[6px] text-text-500">
@@ -268,6 +268,7 @@ export const ReasoningPartView = memo(function ReasoningPartView({ part, isStrea
   return (
     <div
       ref={rootRef}
+      data-md-source={displayText}
       className={`ring-1 ring-inset ring-border-300/20 rounded-lg overflow-hidden transition-all duration-300 ease-out ${
         expanded ? 'w-full' : 'w-[260px]'
       }`}

@@ -23,6 +23,7 @@ import {
   findTargetTextarea,
   shouldShowPopupForSelection,
 } from './popupUtils'
+import { recoverSelectionMarkdown } from './recoverMarkdown'
 
 const POPUP_WIDTH_ESTIMATE = 180
 const POPUP_HEIGHT_ESTIMATE = 30
@@ -71,7 +72,7 @@ export function TextSelectionPopup() {
         pendingRef.current = null
         return
       }
-      pendingRef.current = { text: selection.toString(), rect, textarea }
+      pendingRef.current = { text: recoverSelectionMarkdown(selection), rect, textarea }
     }
     document.addEventListener('selectionchange', handler)
     return () => document.removeEventListener('selectionchange', handler)
