@@ -11,10 +11,10 @@ import { normalizeFileDiffs } from '../types/api/file'
 /**
  * 获取 VCS 信息
  */
-export async function getVcsInfo(directory?: string): Promise<VcsInfo | null> {
+export async function getVcsInfo(directory?: string, serverId?: string): Promise<VcsInfo | null> {
   try {
-    const sdk = getSDKClient()
-    return unwrap(await sdk.vcs.get({ directory: formatPathForApi(directory) }))
+    const sdk = getSDKClient(serverId)
+    return unwrap(await sdk.vcs.get({ directory: formatPathForApi(directory, serverId) }))
   } catch {
     // VCS 不可用时返回 null
     return null
@@ -24,7 +24,7 @@ export async function getVcsInfo(directory?: string): Promise<VcsInfo | null> {
 /**
  * 获取 Git 或分支维度的 diff
  */
-export async function getVcsDiff(mode: VcsDiffMode, directory?: string): Promise<FileDiff[]> {
-  const sdk = getSDKClient()
-  return normalizeFileDiffs(unwrap(await sdk.vcs.diff({ mode, directory: formatPathForApi(directory) })))
+export async function getVcsDiff(mode: VcsDiffMode, directory?: string, serverId?: string): Promise<FileDiff[]> {
+  const sdk = getSDKClient(serverId)
+  return normalizeFileDiffs(unwrap(await sdk.vcs.diff({ mode, directory: formatPathForApi(directory, serverId) })))
 }

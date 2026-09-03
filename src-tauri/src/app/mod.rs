@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::Manager;
 
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(target_os = "macos")]
 use tauri_plugin_decorum::WebviewWindowExt;
 
 // Desktop-only imports for service management
@@ -241,7 +241,7 @@ fn fullscreen_state() -> &'static std::sync::Mutex<std::collections::HashMap<Str
 #[cfg(not(target_os = "android"))]
 fn finish_desktop_window_setup(window: &tauri::WebviewWindow) {
     #[cfg(windows)]
-    let _ = window.create_overlay_titlebar();
+    let _ = window.set_decorations(false);
 
     // macOS：初始定位红绿灯，使其与自定义标题栏对齐
     #[cfg(target_os = "macos")]

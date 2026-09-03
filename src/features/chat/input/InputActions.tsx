@@ -139,11 +139,11 @@ export const CollapsedCapsule = memo(function CollapsedCapsule({
 }: CollapsedCapsuleProps) {
   const { t } = useTranslation(['chat', 'common'])
   return (
-    <div className="flex items-center justify-center gap-2 pointer-events-none">
+    <div className="flex items-center justify-center gap-4 pointer-events-none">
       <button
         type="button"
         onClick={onExpand}
-        className="flex items-center gap-1.5 px-3 h-[32px] rounded-full glass border border-border-200/50 shadow-lg text-text-300 hover:text-text-200 hover:bg-bg-000 active:scale-95 transition-all pointer-events-auto"
+        className="flex items-center gap-1.5 px-3 h-[32px] rounded-full glass border border-border-200/50 shadow-lg text-text-300 hover:text-text-200 hover:bg-bg-000 active:scale-95 transition-all pointer-events-auto -m-2 p-2"
       >
         <ArrowUpIcon size={14} />
         <span className="text-[length:var(--fs-xs)]">{t('inputActions.reply')}</span>

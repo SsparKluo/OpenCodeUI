@@ -298,6 +298,22 @@ class ServerStore {
     return this.getLocalServer()?.url ?? API_BASE_URL
   }
 
+  /**
+   * 获取指定服务器（含 runtime URL override）的 base URL
+   */
+  getServerBaseUrl(serverId: string): string {
+    const server = this.servers.find(s => s.id === serverId)
+    return server ? this.withRuntimeServerUrl(server).url : API_BASE_URL
+  }
+
+  /**
+   * 获取指定服务器（含 runtime URL override）
+   */
+  getServer(serverId: string): ServerConfig | null {
+    const server = this.servers.find(s => s.id === serverId)
+    return server ? this.withRuntimeServerUrl(server) : null
+  }
+
   isActiveLocalServer(): boolean {
     return this.getActiveServerId() === this.DEFAULT_SERVER_ID
   }

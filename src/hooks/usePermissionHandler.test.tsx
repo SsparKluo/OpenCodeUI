@@ -36,7 +36,7 @@ describe('usePermissionHandler', () => {
   })
 
   it('clears pending permission locally after a successful reply', async () => {
-    const { result } = renderHook(() => usePermissionHandler())
+    const { result } = renderHook(() => usePermissionHandler('local'))
 
     act(() => {
       result.current.setPendingPermissionRequests([
@@ -57,7 +57,7 @@ describe('usePermissionHandler', () => {
     })
 
     expect(success).toBe(true)
-    expect(replyPermissionMock).toHaveBeenCalledWith('perm-1', 'once', undefined, '/workspace', 'session-1')
+    expect(replyPermissionMock).toHaveBeenCalledWith('perm-1', 'once', undefined, '/workspace', 'session-1', 'local')
     expect(result.current.pendingPermissionRequests).toEqual([])
     expect(activeSessionStoreMock.resolvePendingRequest).toHaveBeenCalledWith('perm-1')
   })
@@ -65,7 +65,7 @@ describe('usePermissionHandler', () => {
   it('clears stale permission when reply fails but server no longer lists it as pending', async () => {
     replyPermissionMock.mockRejectedValue(new Error('permission already handled'))
     getPendingPermissionsMock.mockResolvedValue([])
-    const { result } = renderHook(() => usePermissionHandler())
+    const { result } = renderHook(() => usePermissionHandler('local'))
 
     act(() => {
       result.current.setPendingPermissionRequests([
@@ -86,7 +86,7 @@ describe('usePermissionHandler', () => {
     })
 
     expect(success).toBe(true)
-    expect(getPendingPermissionsMock).toHaveBeenCalledWith('session-1', '/workspace')
+    expect(getPendingPermissionsMock).toHaveBeenCalledWith('session-1', '/workspace', 'local')
     expect(result.current.pendingPermissionRequests).toEqual([])
     expect(activeSessionStoreMock.resolvePendingRequest).toHaveBeenCalledWith('perm-stale')
   })

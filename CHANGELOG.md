@@ -1,5 +1,72 @@
 # Changelog
 
+## [v0.6.45] - 2026-08-29
+
+- fix(session): bound getLastTurnDiff to latest page instead of full message fetch (7c7a47ef)
+- fix(deploy): forward Authorization header through standalone Caddy proxy (db9ff56f)
+- fix(message): stop entry-grow animation on cleanup to avoid stuck height under StrictMode (cdb7e0f4)
+
+## [v0.6.44] - 2026-08-17
+
+- fix(markdown): robust math parsing and converge renderer rules (5602e384)
+
+## [v0.6.43] - 2026-08-12
+
+- fix(permissions): refresh can't load pending permissions (composite vs raw family check) (69633740)
+- fix(permissions): clear stale pending requests when switching sessions (e04c8e6d)
+- fix(permissions): refresh must not drop SSE-known permission dialogs (15702579)
+- fix(active-tab): busy session tree now nests children under parents again (70e100d5)
+- fix(sessions): task-child permission matching, sub-session view, child abort use composite keys (6b30fec0)
+- fix(permissions): pending permission/question requests filtered out by key mismatch (14b36811)
+
+## [v0.6.42] - 2026-08-12
+
+- fix(sessions): remaining composite-key mismatches in selection, busy & unread markers (8de12315)
+- fix(sessions): child sessions under parent no longer broken (composite-key mismatch) (f245160f)
+
+## [v0.6.41] - 2026-08-11
+
+- fix(multi-server): force auto path style while multi-server mode is enabled (247f12ed)
+- fix(tauri): terminal bridge connects the pty's own server, not the active one (7dd92778)
+
+## [v0.6.40] - 2026-08-11
+
+- fix(multi-server): terminal tabs keep their own server; connections no longer break after focus switch (3bd25276)
+
+## [v0.6.39] - 2026-08-11
+
+- fix(multi-server): per-server path style detection (Windows/Linux coexistence) (15491eb7)
+
+## [v0.6.38] - 2026-08-11
+
+- fix(right-panel): remount file/diff content when the server changes (77dee66e)
+- fix(multi-server): right panel (files/diff/terminal) follows focused session's server (327d8f47)
+
+## [v0.6.37] - 2026-08-11
+
+- fix(mobile): restore gap between collapsed reply capsule and scroll-to-bottom button (e202887a)
+- perf(multi-server): memoize server folder groups with stable callbacks (38c2f5aa)
+- fix(search): react to whitelist changes in result server set (30a2d24d)
+- fix(search): highlight only the exact server::session match (b61ab0cd)
+- feat(multi-server): global sidebar search matches servers, folders, and chats (4a704236)
+- fix(sse): subscribeToEvents follows active server (restore single-server parity) (9d98e6b2)
+- fix(multi-server): non-focused server folders no longer force-expand on global cwd (d45d955e)
+- fix(multi-server): git/vcs/path info follows focused server (fa0bfa25)
+- fix(multi-server): cross-server same-path folder click switches server context (d7b2c851)
+- fix(multi-server): folder click in current directory toggles collapse again (d9df63e8)
+- fix(multi-server): per-server model list, clean whitelist on server delete (4abda442)
+- chore(api): drop unused getSessionMessageCount, verify serverId param convention is uniform (d31cec04)
+- chore(multi-server): reactive subscribed count, drop stale server-switch flag entries (17d6eb36)
+- refactor(multi-server): fix ineffective storage version subscription, clean up dead code (6c1705ed)
+- feat(multi-server): unified workspace storage, per-server active list, project selector & routing polish (9b1a2db3)
+- feat(multi-server): subscribe to multiple OpenCode servers simultaneously (75a00b64)
+- fix(mobile): keep the input box usable after select-all-delete with an IME (d71ff404)
+
+## [v0.6.36] - 2026-08-10
+
+- perf(ui): reduce streaming work and sync window controls (871a9726)
+- fix(markdown): keep single-tilde ranges literal and render \(...\)/\[...\] math (43a0b7e4)
+
 ## [v0.6.35] - 2026-07-24
 
 - fix(pwa): manifest 使用相对路径，修复子路径部署下 start_url 指向根域 (be8fa62b)

@@ -4,16 +4,19 @@ import { STORAGE_KEY_LAST_DIRECTORY } from '../constants/storage'
 import { useIsMobile } from './useIsMobile'
 
 /**
- * Hash 路由，支持 directory 参数
- * 格式: #/session/{sessionId}?dir={path} 或 #/?dir={path}
+ * Hash 路由。sessionId 使用「服务器作用域复合 key」（serverId::sessionId），
+ * 直接在 URL 中携带服务器身份，不再需要独立 server 参数，避免参数与
+ * pane 实际状态不一致导致的 URL 振荡。
  *
- * 这里使用模块级 route store，而不是每个 useRouter() 各自 useState。
- * 原因：App、DirectoryProvider、Settings 都会消费路由；如果各自持有本地 state，
- * replaceState 只会更新当前实例，其他实例看不到，导致侧边栏目录/项目高亮错乱。
+ * 格式: #/session/{serverId}::{sessionId}?dir={path} 或 #/?dir={path}
+ * 旧格式（无 :: 前缀的原始 sessionId）自动兼容：视为活动服务器。
  */
 
 interface RouteState {
+  /** 服务器作用域复合 key（serverId::sessionId）或 null */
   sessionId: string | null
+  /** home（无 session）时的服务器（?server= 参数） */
+  serverId: string | null
   directory: string | undefined
 }
 
@@ -36,10 +39,19 @@ function parseHash(): RouteState {
   const [path, queryString] = hash.split('?')
 
   let directory: string | undefined
+  let serverId: string | null = null
   if (queryString) {
     const dirMatch = queryString.match(/(?:^|&)dir=([^&]*)/)
     if (dirMatch && dirMatch[1]) {
       directory = normalizeToForwardSlash(decodeDirectoryParam(dirMatch[1])) || undefined
+    }
+    const serverMatch = queryString.match(/(?:^|&)server=([^&]*)/)
+    if (serverMatch && serverMatch[1]) {
+      try {
+        serverId = decodeURIComponent(serverMatch[1]) || null
+      } catch {
+        serverId = serverMatch[1] || null
+      }
     }
   }
 
@@ -50,27 +62,38 @@ function parseHash(): RouteState {
 
   const sessionMatch = path.match(/^#\/session\/(.+)$/)
   if (sessionMatch) {
-    return { sessionId: sessionMatch[1], directory }
+    let sessionKey = sessionMatch[1]
+    try {
+      sessionKey = decodeURIComponent(sessionKey)
+    } catch {
+      // 保持原样（非法编码时）
+    }
+    return { sessionId: sessionKey, serverId, directory }
   }
 
-  return { sessionId: null, directory }
+  return { sessionId: null, serverId, directory }
 }
 
-function buildHash(sessionId: string | null, directory: string | undefined): string {
-  const path = sessionId ? `#/session/${sessionId}` : '#/'
-  if (directory) {
-    return `${path}?dir=${encodeURIComponent(directory)}`
+function buildHash(sessionId: string | null, serverId: string | null | undefined, directory: string | undefined): string {
+  const path = sessionId ? `#/session/${encodeURIComponent(sessionId)}` : '#/'
+  const params: string[] = []
+  // 仅 home（无 session）写 server 参数；session URL 的复合 key 已携带服务器
+  if (!sessionId && serverId) {
+    params.push(`server=${encodeURIComponent(serverId)}`)
   }
-  return path
+  if (directory) {
+    params.push(`dir=${encodeURIComponent(directory)}`)
+  }
+  return params.length > 0 ? `${path}?${params.join('&')}` : path
 }
 
 function isSameRoute(a: RouteState, b: RouteState): boolean {
-  return a.sessionId === b.sessionId && a.directory === b.directory
+  return a.sessionId === b.sessionId && a.serverId === b.serverId && a.directory === b.directory
 }
 
 function ensureSnapshot(): RouteState {
   if (typeof window === 'undefined') {
-    return { sessionId: null, directory: undefined }
+    return { sessionId: null, serverId: null, directory: undefined }
   }
   if (routeSnapshot === null) {
     routeSnapshot = parseHash()
@@ -121,11 +144,11 @@ export function useRouter() {
     isMobileRef.current = isMobile
   }, [isMobile])
 
-  const navigateToSession = useCallback((sessionId: string, directory?: string) => {
+  const navigateToSession = useCallback((sessionKey: string, directory?: string) => {
     const currentRoute = getSnapshot()
     const dir = directory !== undefined ? normalizeToForwardSlash(directory) || undefined : currentRoute.directory
-    const next = { sessionId, directory: dir }
-    const newHash = buildHash(sessionId, dir)
+    const next = { sessionId: sessionKey, serverId: currentRoute.serverId, directory: dir }
+    const newHash = buildHash(sessionKey, currentRoute.serverId, dir)
     if (isMobileRef.current) {
       window.history.replaceState(null, '', newHash)
     } else {
@@ -134,10 +157,11 @@ export function useRouter() {
     emitRoute(next)
   }, [])
 
-  const navigateHome = useCallback(() => {
+  const navigateHome = useCallback((serverId?: string) => {
     const currentRoute = getSnapshot()
-    const next = { sessionId: null, directory: currentRoute.directory }
-    const newHash = buildHash(null, currentRoute.directory)
+    const sid = serverId ?? currentRoute.serverId
+    const next = { sessionId: null, serverId: sid, directory: currentRoute.directory }
+    const newHash = buildHash(null, sid, currentRoute.directory)
     if (isMobileRef.current) {
       window.history.replaceState(null, '', newHash)
     } else {
@@ -146,18 +170,19 @@ export function useRouter() {
     emitRoute(next)
   }, [])
 
-  const replaceSession = useCallback((sessionId: string | null, directory?: string) => {
+  const replaceSession = useCallback((sessionKey: string | null, directory?: string) => {
     const currentRoute = getSnapshot()
     const dir = directory !== undefined ? normalizeToForwardSlash(directory) || undefined : currentRoute.directory
-    const newHash = buildHash(sessionId, dir)
+    const newHash = buildHash(sessionKey, currentRoute.serverId, dir)
     window.history.replaceState(null, '', newHash)
-    emitRoute({ sessionId, directory: dir })
+    emitRoute({ sessionId: sessionKey, serverId: currentRoute.serverId, directory: dir })
   }, [])
 
   const setDirectory = useCallback((directory: string | undefined) => {
+    const currentRoute = getSnapshot()
     const normalized = directory ? normalizeToForwardSlash(directory) : undefined
-    const newHash = buildHash(null, normalized || undefined)
-    const next = { sessionId: null, directory: normalized || undefined }
+    const newHash = buildHash(null, currentRoute.serverId, normalized || undefined)
+    const next = { sessionId: null, serverId: currentRoute.serverId, directory: normalized || undefined }
     if (normalized) {
       serverStorage.set(STORAGE_KEY_LAST_DIRECTORY, normalized)
     } else {
@@ -170,18 +195,23 @@ export function useRouter() {
   const replaceDirectory = useCallback((directory: string | undefined) => {
     const currentRoute = getSnapshot()
     const normalized = directory ? normalizeToForwardSlash(directory) : undefined
-    const newHash = buildHash(currentRoute.sessionId, normalized || undefined)
+    const newHash = buildHash(currentRoute.sessionId, currentRoute.serverId, normalized || undefined)
     if (normalized) {
       serverStorage.set(STORAGE_KEY_LAST_DIRECTORY, normalized)
     } else {
       serverStorage.remove(STORAGE_KEY_LAST_DIRECTORY)
     }
     window.history.replaceState(null, '', newHash)
-    emitRoute({ sessionId: currentRoute.sessionId, directory: normalized || undefined })
+    emitRoute({
+      sessionId: currentRoute.sessionId,
+      serverId: currentRoute.serverId,
+      directory: normalized || undefined,
+    })
   }, [])
 
   return {
     sessionId: route.sessionId,
+    serverId: route.serverId,
     directory: route.directory,
     navigateToSession,
     navigateHome,

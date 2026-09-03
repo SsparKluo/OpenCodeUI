@@ -4,6 +4,7 @@ import { PermissionListIcon, UsersIcon, ReturnIcon, ChevronDownIcon } from '../.
 import { DiffView } from '../../components/DiffView'
 import { ContentBlock } from '../../components'
 import { childSessionStore, autoApproveStore } from '../../store'
+import { makeSessionKey, splitSessionKey } from '../../utils/sessionKey'
 import { usePresence } from '../../hooks'
 import { useChatViewport } from './chatViewport'
 
@@ -53,9 +54,16 @@ export function PermissionDialog({
   // 判断是否是文件编辑类权限
   const isFileEdit = request.permission === 'edit' || request.permission === 'write'
 
-  // 判断是否来自子 session
-  const isFromChildSession = currentSessionId && request.sessionID !== currentSessionId
-  const childSessionInfo = isFromChildSession ? childSessionStore.getSessionInfo(request.sessionID) : null
+  // 判断是否来自子 session（request.sessionID 可能是复合 key（SSE）或原始 id（轮询），统一按原始 id 比较）
+  const requestServerId = splitSessionKey(request.sessionID).serverId
+  const requestRawId = splitSessionKey(request.sessionID).sessionId
+  const currentRawId = currentSessionId ? splitSessionKey(currentSessionId).sessionId : null
+  const isFromChildSession = !!currentRawId && requestRawId !== currentRawId
+  const childSessionInfo = isFromChildSession
+    ? childSessionStore.getSessionInfo(
+        request.sessionID.includes('::') ? request.sessionID : makeSessionKey(requestServerId, request.sessionID),
+      )
+    : null
 
   // 弹出/收起动画
   const { shouldRender, ref: animRef } = usePresence<HTMLDivElement>(!collapsed, {

@@ -1,11 +1,18 @@
 // ============================================
-// Global Event Subscription (SSE) - Singleton Pattern
+// Server-scoped Event Subscription (SSE) - Connection Manager
+//
+// 每个服务器一条独立 SSE 连接，各自维护心跳 / 重连 / 连接状态 / 事件代次。
+// 缺省 serverId 的 API 均作用于"活动服务器"，保持向后兼容：
+//   subscribeToEvents(cb)           == subscribeToServerEvents(activeServerId, cb)
+//   reconnectSSE()                  == reconnectServerSSE(activeServerId)
+//   getConnectionInfo()             == getServerConnectionInfo(activeServerId)
 // ============================================
 
 import { getApiBaseUrl, getAuthHeader } from './http'
 import { createSseTextParser } from './sse'
 import { normalizeTodoItems } from './todo'
 import { isTauri } from '../utils/tauri'
+import { serverStore } from '../store/serverStore'
 import type {
   ApiMessage,
   EventCallbacks,
@@ -29,35 +36,72 @@ export interface ConnectionInfo {
   error?: string
 }
 
-// 全局连接状态（可以被外部订阅）
-let connectionInfo: ConnectionInfo = {
-  state: 'disconnected',
-  lastEventTime: 0,
-  reconnectAttempt: 0,
+interface ServerConnection {
+  serverId: string
+  info: ConnectionInfo
+  subscribers: Set<EventCallbacks>
+  controller: AbortController | null
+  heartbeatTimer: ReturnType<typeof setTimeout> | null
+  reconnectTimer: ReturnType<typeof setTimeout> | null
+  isConnecting: boolean
+  /** 连接代次，每次 reconnect 递增，旧代次的事件会被丢弃 */
+  generation: number
+  /** 上一次 onReconnected 广播的时间戳（cooldown） */
+  lastReconnectedBroadcast: number
 }
 
-const connectionListeners = new Set<(info: ConnectionInfo) => void>()
+/** serverId -> connection */
+const connections = new Map<string, ServerConnection>()
+/** serverId -> connection 状态监听者 */
+const connectionListeners = new Map<string, Set<(info: ConnectionInfo) => void>>()
 
-function updateConnectionState(update: Partial<ConnectionInfo>) {
-  connectionInfo = { ...connectionInfo, ...update }
-  connectionListeners.forEach(fn => {
-    fn(connectionInfo)
+/** 是否因为切换服务器而触发的重连（按 serverId） */
+const serverSwitchFlags = new Map<string, boolean>()
+
+let lifecycleListenersRegistered = false
+/** 当前是否在后台 */
+let isInBackground = false
+let keepaliveTimer: ReturnType<typeof setInterval> | null = null
+
+// ============================================
+// Connection helpers
+// ============================================
+
+function bridgeIdFor(serverId: string): string {
+  return `sse:${serverId}`
+}
+
+function getOrCreateConnection(serverId: string): ServerConnection {
+  let conn = connections.get(serverId)
+  if (!conn) {
+    conn = {
+      serverId,
+      info: { state: 'disconnected', lastEventTime: 0, reconnectAttempt: 0 },
+      subscribers: new Set(),
+      controller: null,
+      heartbeatTimer: null,
+      reconnectTimer: null,
+      isConnecting: false,
+      generation: 0,
+      lastReconnectedBroadcast: 0,
+    }
+    connections.set(serverId, conn)
+  }
+  return conn
+}
+
+function updateConnectionState(serverId: string, update: Partial<ConnectionInfo>) {
+  // 不隐式创建连接：无连接时直接返回（避免断开后残留空壳连接）
+  const conn = connections.get(serverId)
+  if (!conn) return
+  conn.info = { ...conn.info, ...update }
+  connectionListeners.get(serverId)?.forEach(fn => {
+    fn(conn.info)
   })
 }
 
-export function getConnectionInfo(): ConnectionInfo {
-  return connectionInfo
-}
-
-export function subscribeToConnectionState(fn: (info: ConnectionInfo) => void): () => void {
-  connectionListeners.add(fn)
-  // 立即发送当前状态
-  fn(connectionInfo)
-  return () => connectionListeners.delete(fn)
-}
-
 // ============================================
-// Singleton SSE Connection
+// 常量
 // ============================================
 
 const RECONNECT_DELAYS = [1000, 2000, 3000, 5000, 10000, 30000]
@@ -68,28 +112,15 @@ const HEARTBEAT_TIMEOUT = 60000
 const BACKGROUND_HEARTBEAT_TIMEOUT = 120000
 /** 后台 keepalive 间隔：定期检查连接是否还活着 */
 const BACKGROUND_KEEPALIVE_INTERVAL = 30000
-
-// 所有订阅者的 callbacks
-const allSubscribers = new Set<EventCallbacks>()
-
-// 单例连接状态
-let singletonController: AbortController | null = null
-let heartbeatTimer: ReturnType<typeof setTimeout> | null = null
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-let keepaliveTimer: ReturnType<typeof setInterval> | null = null
-let isConnecting = false
-let lifecycleListenersRegistered = false
-/** 连接代次，每次 reconnectSSE() 递增，旧代次的事件会被丢弃 */
-let connectionGeneration = 0
-/** 当前是否在后台 */
-let isInBackground = false
-/** 是否因为切换服务器而触发的重连 */
-let isServerSwitch = false
-/** 上一次 bridge_disconnect 的 Promise，用于串行化 Tauri 侧的 disconnect → connect */
-let pendingDisconnect: Promise<void> = Promise.resolve()
-/** Cooldown: 上一次 onReconnected 广播的时间戳 */
-let lastReconnectedBroadcast = 0
+/** onReconnected 广播 cooldown */
 const RECONNECTED_COOLDOWN = 2000
+
+/** 稳定引用：未连接的服务器默认状态（避免 getSnapshot 每次新建对象导致无限循环） */
+const DEFAULT_CONNECTION_INFO: ConnectionInfo = {
+  state: 'disconnected',
+  lastEventTime: 0,
+  reconnectAttempt: 0,
+}
 
 // ============================================
 // Delta coalescing — 参照官方 coalesceServerEvents
@@ -163,129 +194,137 @@ function parseAndCoalesce(rawEvents: string[]): GlobalEvent[] {
   return coalesceEvents(parsed)
 }
 
-function finalizeConnectionAttempt(generation: number): boolean {
-  if (generation !== connectionGeneration) {
+function finalizeConnectionAttempt(conn: ServerConnection, generation: number): boolean {
+  if (generation !== conn.generation) {
     return false
   }
-  isConnecting = false
+  conn.isConnecting = false
   return true
 }
 
 /**
  * 广播 onReconnected，带 cooldown 防止 SSE 快速重连时密集触发数据拉取
  */
-function broadcastReconnected(reason: 'network' | 'server-switch') {
+function broadcastReconnected(conn: ServerConnection, reason: 'network' | 'server-switch') {
   const now = Date.now()
-  if (reason !== 'server-switch' && now - lastReconnectedBroadcast < RECONNECTED_COOLDOWN) {
+  if (reason !== 'server-switch' && now - conn.lastReconnectedBroadcast < RECONNECTED_COOLDOWN) {
     if (import.meta.env.DEV) {
       console.log('[SSE] onReconnected skipped (cooldown)')
     }
     return
   }
-  lastReconnectedBroadcast = now
-  allSubscribers.forEach(cb => {
+  conn.lastReconnectedBroadcast = now
+  conn.subscribers.forEach(cb => {
     cb.onReconnected?.(reason)
   })
 }
 
-/**
- * 请求 Tauri 侧断开 SSE 连接
- * 返回 Promise，调用方可以 await 确保断开完成后再发起新连接
- * 多次并发调用会自动串行化
- */
-function disconnectTauri(): Promise<void> {
+// ============================================
+// Tauri SSE Bridge (via Rust reqwest + Channel)
+// 每个服务器一个独立 bridgeId（Rust 侧 BridgeKey=(window, bridgeId) 天然支持多连接）
+// ============================================
+
+/** 上一次 bridge_disconnect 的 Promise，用于串行化 Tauri 侧 disconnect → connect */
+const pendingDisconnects = new Map<string, Promise<void>>()
+
+function disconnectTauri(bridgeId: string): Promise<void> {
   if (!isTauri()) return Promise.resolve()
 
-  const p = pendingDisconnect.then(() =>
+  const p = (pendingDisconnects.get(bridgeId) ?? Promise.resolve()).then(() =>
     import('@tauri-apps/api/core')
-      .then(({ invoke }) => invoke('bridge_disconnect', { args: { bridgeId: 'sse' } }).then(() => undefined))
+      .then(({ invoke }) => invoke('bridge_disconnect', { args: { bridgeId } }).then(() => undefined))
       .catch(() => {}),
   )
-  pendingDisconnect = p
+  pendingDisconnects.set(bridgeId, p)
   return p
 }
 
-function resetHeartbeat() {
-  if (heartbeatTimer) clearTimeout(heartbeatTimer)
+/** 断开并清理连接的传输层（Tauri bridge / browser fetch），不更新状态 */
+function teardownConnectionTransport(conn: ServerConnection): void {
+  void disconnectTauri(bridgeIdFor(conn.serverId))
+  if (conn.controller) {
+    conn.controller.abort()
+    conn.controller = null
+  }
+  conn.isConnecting = false
+}
 
-  updateConnectionState({ lastEventTime: Date.now() })
+function resetHeartbeat(conn: ServerConnection) {
+  if (conn.heartbeatTimer) clearTimeout(conn.heartbeatTimer)
+
+  updateConnectionState(conn.serverId, { lastEventTime: Date.now() })
 
   // 后台时使用更宽松的超时，因为移动端后台 timer 可能被冻结/延迟
   const timeout = isInBackground ? BACKGROUND_HEARTBEAT_TIMEOUT : HEARTBEAT_TIMEOUT
 
-  heartbeatTimer = setTimeout(() => {
+  conn.heartbeatTimer = setTimeout(() => {
     console.warn(`[SSE] No events received for ${timeout / 1000}s, reconnecting...`)
-    updateConnectionState({ state: 'disconnected', error: 'Heartbeat timeout' })
-    scheduleReconnect()
+    updateConnectionState(conn.serverId, { state: 'disconnected', error: 'Heartbeat timeout' })
+    scheduleReconnect(conn)
   }, timeout)
 }
 
-function scheduleReconnect() {
-  if (reconnectTimer) clearTimeout(reconnectTimer)
-  if (allSubscribers.size === 0) return // 没有订阅者就不重连
+function scheduleReconnect(conn: ServerConnection) {
+  if (conn.reconnectTimer) clearTimeout(conn.reconnectTimer)
+  if (conn.subscribers.size === 0) return // 没有订阅者就不重连
 
-  const attempt = connectionInfo.reconnectAttempt
+  const attempt = conn.info.reconnectAttempt
   // 后台时使用更激进的重连策略
   const delays = isInBackground ? BACKGROUND_RECONNECT_DELAYS : RECONNECT_DELAYS
   const delay = delays[Math.min(attempt, delays.length - 1)]
 
   if (import.meta.env.DEV) {
-    console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${attempt + 1}, background: ${isInBackground})...`)
+    console.log(
+      `[SSE] Reconnecting ${conn.serverId} in ${delay}ms (attempt ${attempt + 1}, background: ${isInBackground})...`,
+    )
   }
 
-  reconnectTimer = setTimeout(() => {
-    updateConnectionState({ reconnectAttempt: attempt + 1 })
-    connectSingleton()
+  conn.reconnectTimer = setTimeout(() => {
+    updateConnectionState(conn.serverId, { reconnectAttempt: attempt + 1 })
+    connectServer(conn.serverId)
   }, delay)
 }
 
-function connectSingleton() {
-  if (isConnecting || allSubscribers.size === 0) return
+function connectServer(serverId: string) {
+  const conn = getOrCreateConnection(serverId)
+  if (conn.isConnecting || conn.subscribers.size === 0) return
 
   // 如果状态声称 connected，验证连接是否真的活着
-  if (connectionInfo.state === 'connected') {
-    const timeSinceLastEvent = Date.now() - connectionInfo.lastEventTime
+  if (conn.info.state === 'connected') {
+    const timeSinceLastEvent = Date.now() - conn.info.lastEventTime
     // 后台时使用更宽松的超时判断
     const staleTimeout = isInBackground ? BACKGROUND_HEARTBEAT_TIMEOUT : HEARTBEAT_TIMEOUT
     if (timeSinceLastEvent > staleTimeout) {
       // 太久没收到事件，连接可能已死，强制断开再重连
       if (import.meta.env.DEV) {
         console.log(
-          `[SSE] connectSingleton: state=connected but stale (${Math.round(timeSinceLastEvent / 1000)}s), forcing disconnect`,
+          `[SSE] connectServer: ${serverId} state=connected but stale (${Math.round(timeSinceLastEvent / 1000)}s), forcing disconnect`,
         )
       }
-      connectionGeneration++
-      disconnectTauri()
-      if (singletonController) {
-        singletonController.abort()
-        singletonController = null
-      }
-      updateConnectionState({ state: 'disconnected' })
+      conn.generation++
+      teardownConnectionTransport(conn)
+      updateConnectionState(serverId, { state: 'disconnected' })
     } else {
       return // 连接确实还活着
     }
   }
 
-  isConnecting = true
+  conn.isConnecting = true
 
-  updateConnectionState({ state: 'connecting' })
+  updateConnectionState(serverId, { state: 'connecting' })
   if (import.meta.env.DEV) {
-    console.log('[SSE] Connecting singleton...')
+    console.log(`[SSE] Connecting ${serverId}...`)
   }
 
   // 注册生命周期监听器（首次连接时）
   registerLifecycleListeners()
 
   if (isTauri()) {
-    connectViaTauri()
+    connectViaTauri(conn)
   } else {
-    connectViaBrowser()
+    connectViaBrowser(conn)
   }
 }
-
-// ============================================
-// Tauri SSE Bridge (via Rust reqwest + Channel)
-// ============================================
 
 /** Unified bridge event from Rust (transparent proxy) */
 interface BridgeEvent {
@@ -298,18 +337,18 @@ interface BridgeEvent {
   }
 }
 
-async function connectViaTauri() {
-  const myGeneration = connectionGeneration
+async function connectViaTauri(conn: ServerConnection) {
+  const myGeneration = conn.generation
+  const serverId = conn.serverId
 
   try {
     // 等待上一次 disconnect 完成，避免 Rust 侧 connect/disconnect 竞争
-    await pendingDisconnect
+    await (pendingDisconnects.get(bridgeIdFor(serverId)) ?? Promise.resolve())
 
     const { invoke, Channel } = await import('@tauri-apps/api/core')
 
-    const url = `${getApiBaseUrl()}/global/event`
-    const authHeaders = getAuthHeader()
-    const authHeader = authHeaders['Authorization'] || null
+    const url = `${getApiBaseUrl(serverId)}/global/event`
+    const authHeader = getAuthHeader(serverId)['Authorization'] || null
 
     const sseParser = createSseTextParser()
 
@@ -317,60 +356,60 @@ async function connectViaTauri() {
 
     onEvent.onmessage = (msg: BridgeEvent) => {
       // 代次不匹配，说明已经 reconnect 过了，忽略旧连接的事件
-      if (myGeneration !== connectionGeneration) return
+      if (myGeneration !== conn.generation) return
 
       switch (msg.event) {
         case 'connected': {
-          isConnecting = false
+          conn.isConnecting = false
 
-          updateConnectionState({
+          updateConnectionState(serverId, {
             state: 'connected',
             reconnectAttempt: 0,
             error: undefined,
           })
-          resetHeartbeat()
+          resetHeartbeat(conn)
           if (import.meta.env.DEV) {
-            console.log('[SSE/Tauri] Connected')
+            console.log(`[SSE/Tauri] ${serverId} Connected`)
           }
           // 每次连接成功都通知订阅者刷新数据
           // 覆盖场景：首次连接（先开 UI 后开 server）、网络重连、服务器切换
-          const reason = isServerSwitch ? ('server-switch' as const) : ('network' as const)
-          isServerSwitch = false
-          broadcastReconnected(reason)
+          const reason = serverSwitchFlags.get(serverId) ? ('server-switch' as const) : ('network' as const)
+          serverSwitchFlags.delete(serverId)
+          broadcastReconnected(conn, reason)
           break
         }
         case 'data': {
-          resetHeartbeat()
+          resetHeartbeat(conn)
           if (!msg.data?.data) break
 
           for (const globalEvent of parseAndCoalesce(sseParser.push(msg.data.data))) {
-            broadcastEvent(globalEvent)
+            broadcastEvent(conn, globalEvent)
           }
           break
         }
         case 'disconnected': {
-          isConnecting = false
+          conn.isConnecting = false
           if (import.meta.env.DEV) {
-            console.log('[SSE/Tauri] Disconnected:', msg.data?.reason)
+            console.log(`[SSE/Tauri] ${serverId} Disconnected:`, msg.data?.reason)
           }
-          updateConnectionState({ state: 'disconnected' })
-          scheduleReconnect()
+          updateConnectionState(serverId, { state: 'disconnected' })
+          scheduleReconnect(conn)
           break
         }
         case 'error': {
-          isConnecting = false
+          conn.isConnecting = false
           const errorMsg = msg.data?.message || 'Unknown error'
           if (import.meta.env.DEV) {
-            console.warn('[SSE/Tauri] Error:', errorMsg)
+            console.warn(`[SSE/Tauri] ${serverId} Error:`, errorMsg)
           }
-          updateConnectionState({
+          updateConnectionState(serverId, {
             state: 'error',
             error: errorMsg,
           })
-          allSubscribers.forEach(cb => {
+          conn.subscribers.forEach(cb => {
             cb.onError?.(new Error(errorMsg))
           })
-          scheduleReconnect()
+          scheduleReconnect(conn)
           break
         }
       }
@@ -378,29 +417,29 @@ async function connectViaTauri() {
 
     // 调用统一桥接命令
     invoke('bridge_connect', {
-      args: { bridgeId: 'sse', url, authHeader },
+      args: { bridgeId: bridgeIdFor(serverId), url, authHeader },
       onEvent,
     }).catch((error: unknown) => {
-      if (!finalizeConnectionAttempt(myGeneration)) return
+      if (!finalizeConnectionAttempt(conn, myGeneration)) return
       const errorMsg = error instanceof Error ? error.message : String(error)
       if (import.meta.env.DEV) {
-        console.warn('[SSE/Tauri] invoke error:', errorMsg)
+        console.warn(`[SSE/Tauri] ${serverId} invoke error:`, errorMsg)
       }
-      updateConnectionState({
+      updateConnectionState(serverId, {
         state: 'error',
         error: errorMsg,
       })
-      allSubscribers.forEach(cb => {
+      conn.subscribers.forEach(cb => {
         cb.onError?.(new Error(errorMsg))
       })
-      scheduleReconnect()
+      scheduleReconnect(conn)
     })
   } catch (error) {
-    if (!finalizeConnectionAttempt(myGeneration)) return
+    if (!finalizeConnectionAttempt(conn, myGeneration)) return
     const errorMsg = error instanceof Error ? error.message : String(error)
-    console.warn('[SSE/Tauri] Failed to initialize:', errorMsg)
-    updateConnectionState({ state: 'error', error: errorMsg })
-    scheduleReconnect()
+    console.warn(`[SSE/Tauri] ${serverId} Failed to initialize:`, errorMsg)
+    updateConnectionState(serverId, { state: 'error', error: errorMsg })
+    scheduleReconnect(conn)
   }
 }
 
@@ -408,46 +447,47 @@ async function connectViaTauri() {
 // Browser SSE (via fetch + ReadableStream)
 // ============================================
 
-function connectViaBrowser() {
-  singletonController = new AbortController()
+function connectViaBrowser(conn: ServerConnection) {
+  conn.controller = new AbortController()
 
   // 捕获当前连接代次
-  const myGeneration = connectionGeneration
+  const myGeneration = conn.generation
+  const serverId = conn.serverId
 
-  fetch(`${getApiBaseUrl()}/global/event`, {
-    signal: singletonController.signal,
+  fetch(`${getApiBaseUrl(serverId)}/global/event`, {
+    signal: conn.controller.signal,
     headers: {
       Accept: 'text/event-stream',
-      ...getAuthHeader(),
+      ...getAuthHeader(serverId),
     },
   })
     .then(async response => {
-      if (myGeneration !== connectionGeneration) {
+      if (myGeneration !== conn.generation) {
         await response.body?.cancel?.().catch(() => {})
         return
       }
 
-      finalizeConnectionAttempt(myGeneration)
+      finalizeConnectionAttempt(conn, myGeneration)
 
       if (!response.ok) {
         throw new Error(`Failed to subscribe: ${response.status}`)
       }
 
-      updateConnectionState({
+      updateConnectionState(serverId, {
         state: 'connected',
         reconnectAttempt: 0,
         error: undefined,
       })
-      resetHeartbeat()
+      resetHeartbeat(conn)
       if (import.meta.env.DEV) {
-        console.log('[SSE] Singleton connected')
+        console.log(`[SSE] ${serverId} connected`)
       }
 
       // 每次连接成功都通知订阅者刷新数据
       // 覆盖场景：首次连接（先开 UI 后开 server）、网络重连、服务器切换
-      const reason = isServerSwitch ? ('server-switch' as const) : ('network' as const)
-      isServerSwitch = false
-      broadcastReconnected(reason)
+      const reason = serverSwitchFlags.get(serverId) ? ('server-switch' as const) : ('network' as const)
+      serverSwitchFlags.delete(serverId)
+      broadcastReconnected(conn, reason)
 
       const reader = response.body?.getReader()
       if (!reader) {
@@ -459,36 +499,36 @@ function connectViaBrowser() {
 
       while (true) {
         // 代次不匹配，说明已经 reconnect 过了，停止读取旧流
-        if (myGeneration !== connectionGeneration) {
+        if (myGeneration !== conn.generation) {
           reader.cancel().catch(() => {})
           break
         }
 
         const { done, value } = await reader.read()
-        if (myGeneration !== connectionGeneration) {
+        if (myGeneration !== conn.generation) {
           reader.cancel().catch(() => {})
           break
         }
 
         if (done) {
           if (import.meta.env.DEV) {
-            console.log('[SSE] Stream ended, reconnecting...')
+            console.log(`[SSE] ${serverId} Stream ended, reconnecting...`)
           }
-          updateConnectionState({ state: 'disconnected' })
-          scheduleReconnect()
+          updateConnectionState(serverId, { state: 'disconnected' })
+          scheduleReconnect(conn)
           break
         }
 
-        resetHeartbeat()
+        resetHeartbeat(conn)
 
         const coalesced = parseAndCoalesce(sseParser.push(decoder.decode(value, { stream: true })))
         for (const globalEvent of coalesced) {
-          broadcastEvent(globalEvent)
+          broadcastEvent(conn, globalEvent)
         }
       }
     })
     .catch(error => {
-      if (!finalizeConnectionAttempt(myGeneration)) {
+      if (!finalizeConnectionAttempt(conn, myGeneration)) {
         return
       }
 
@@ -497,17 +537,17 @@ function connectViaBrowser() {
       }
       // SSE stream error - logged for debugging
       if (import.meta.env.DEV) {
-        console.warn('[SSE] Event stream error:', error)
+        console.warn(`[SSE] ${serverId} Event stream error:`, error)
       }
-      updateConnectionState({
+      updateConnectionState(serverId, {
         state: 'error',
         error: error.message || 'Connection failed',
       })
       // 通知所有订阅者出错
-      allSubscribers.forEach(cb => {
+      conn.subscribers.forEach(cb => {
         cb.onError?.(error)
       })
-      scheduleReconnect()
+      scheduleReconnect(conn)
     })
 }
 
@@ -546,7 +586,7 @@ function getMessageInfo(properties: unknown): ApiMessage | undefined {
 // ============================================
 
 /**
- * 后台 keepalive：定期检查连接是否还活着
+ * 后台 keepalive：定期检查所有连接是否还活着
  * 移动端后台时 SSE 连接可能静默断开，timer 也可能被冻结
  * 这个轮询机制可以在 timer 恢复执行时及时发现连接已死
  */
@@ -555,36 +595,34 @@ function startBackgroundKeepalive() {
 
   keepaliveTimer = setInterval(() => {
     const now = Date.now()
-    const timeSinceLastEvent = now - connectionInfo.lastEventTime
-    const timeout = BACKGROUND_HEARTBEAT_TIMEOUT
 
-    if (import.meta.env.DEV) {
-      console.log(
-        `[SSE] Background keepalive check: last event ${Math.round(timeSinceLastEvent / 1000)}s ago, state=${connectionInfo.state}`,
-      )
-    }
+    for (const conn of connections.values()) {
+      const timeSinceLastEvent = now - conn.info.lastEventTime
+      const serverId = conn.serverId
 
-    if (connectionInfo.state === 'connected' && timeSinceLastEvent > timeout) {
-      // 连接声称是 connected，但已经太久没收到事件了 — 连接可能已经静默断开
-      console.warn('[SSE] Background keepalive: connection appears dead, forcing reconnect')
-
-      // 断开旧连接
-      disconnectTauri()
-      if (singletonController) {
-        singletonController.abort()
-        singletonController = null
+      if (import.meta.env.DEV) {
+        console.log(
+          `[SSE] Background keepalive check ${serverId}: last event ${Math.round(timeSinceLastEvent / 1000)}s ago, state=${conn.info.state}`,
+        )
       }
-      isConnecting = false
-      connectionGeneration++
 
-      updateConnectionState({ state: 'disconnected', error: 'Background keepalive timeout' })
-      scheduleReconnect()
-    } else if (connectionInfo.state === 'disconnected' || connectionInfo.state === 'error') {
-      // 已知断连状态，但可能 reconnectTimer 被后台冻结了 — 主动触发重连
-      if (!reconnectTimer && !isConnecting) {
-        console.warn('[SSE] Background keepalive: detected stale disconnect, forcing reconnect')
-        updateConnectionState({ reconnectAttempt: 0 })
-        connectSingleton()
+      if (conn.info.state === 'connected' && timeSinceLastEvent > BACKGROUND_HEARTBEAT_TIMEOUT) {
+        // 连接声称是 connected，但已经太久没收到事件了 — 连接可能已经静默断开
+        console.warn(`[SSE] Background keepalive: ${serverId} appears dead, forcing reconnect`)
+
+        // 断开旧连接
+        conn.generation++
+        teardownConnectionTransport(conn)
+
+        updateConnectionState(serverId, { state: 'disconnected', error: 'Background keepalive timeout' })
+        scheduleReconnect(conn)
+      } else if ((conn.info.state === 'disconnected' || conn.info.state === 'error') && conn.subscribers.size > 0) {
+        // 已知断连状态，但可能 reconnectTimer 被后台冻结了 — 主动触发重连
+        if (!conn.reconnectTimer && !conn.isConnecting) {
+          console.warn(`[SSE] Background keepalive: ${serverId} stale disconnect, forcing reconnect`)
+          updateConnectionState(serverId, { reconnectAttempt: 0 })
+          connectServer(serverId)
+        }
       }
     }
   }, BACKGROUND_KEEPALIVE_INTERVAL)
@@ -597,22 +635,24 @@ function stopBackgroundKeepalive() {
   }
 }
 
-function disconnectSingleton() {
-  if (heartbeatTimer) clearTimeout(heartbeatTimer)
-  if (reconnectTimer) clearTimeout(reconnectTimer)
+/**
+ * 断开并移除一个服务器连接（无订阅者时调用）
+ */
+function disconnectServerConnection(conn: ServerConnection) {
+  const serverId = conn.serverId
+  if (conn.heartbeatTimer) clearTimeout(conn.heartbeatTimer)
+  if (conn.reconnectTimer) clearTimeout(conn.reconnectTimer)
   stopBackgroundKeepalive()
 
-  // Tauri: 调用 Rust 侧断开命令
-  disconnectTauri()
+  // 断开传输层（Tauri bridge / browser fetch）
+  conn.generation++
+  teardownConnectionTransport(conn)
+  connections.delete(serverId)
+  connectionListeners.delete(serverId)
 
-  // Browser: abort fetch
-  if (singletonController) {
-    singletonController.abort()
-    singletonController = null
+  if (connections.size === 0) {
+    unregisterLifecycleListeners()
   }
-
-  isConnecting = false
-  updateConnectionState({ state: 'disconnected' })
 }
 
 // ============================================
@@ -625,33 +665,29 @@ function handleVisibilityChange() {
     isInBackground = false
     stopBackgroundKeepalive()
 
-    if (import.meta.env.DEV) {
-      console.log(
-        `[SSE] Page became visible, state=${connectionInfo.state}, lastEvent=${Math.round((Date.now() - connectionInfo.lastEventTime) / 1000)}s ago`,
-      )
-    }
+    for (const conn of connections.values()) {
+      if (conn.subscribers.size === 0) continue
 
-    if (allSubscribers.size === 0) return
-
-    if (connectionInfo.state !== 'connected') {
-      // 明确断连，立即重连
-      if (import.meta.env.DEV) {
-        console.log('[SSE] Page visible: not connected, forcing reconnect...')
-      }
-      forceReconnectNow()
-    } else {
-      // 状态是 connected，但连接可能已经在后台静默断开
-      // 检查最后一次收到事件的时间
-      const timeSinceLastEvent = Date.now() - connectionInfo.lastEventTime
-      if (timeSinceLastEvent > HEARTBEAT_TIMEOUT) {
-        // 太久没收到事件了，连接大概率已死
-        console.warn(
-          `[SSE] Page visible: connection may be stale (last event ${Math.round(timeSinceLastEvent / 1000)}s ago), forcing reconnect`,
-        )
-        forceReconnectNow()
+      if (conn.info.state !== 'connected') {
+        // 明确断连，立即重连
+        if (import.meta.env.DEV) {
+          console.log(`[SSE] Page visible: ${conn.serverId} not connected, forcing reconnect...`)
+        }
+        forceReconnectNow(conn)
       } else {
-        // 连接看起来还活着，重置心跳为前台模式
-        resetHeartbeat()
+        // 状态是 connected，但连接可能已经在后台静默断开
+        // 检查最后一次收到事件的时间
+        const timeSinceLastEvent = Date.now() - conn.info.lastEventTime
+        if (timeSinceLastEvent > HEARTBEAT_TIMEOUT) {
+          // 太久没收到事件了，连接大概率已死
+          console.warn(
+            `[SSE] Page visible: ${conn.serverId} may be stale (last event ${Math.round(timeSinceLastEvent / 1000)}s ago), forcing reconnect`,
+          )
+          forceReconnectNow(conn)
+        } else {
+          // 连接看起来还活着，重置心跳为前台模式
+          resetHeartbeat(conn)
+        }
       }
     }
   } else {
@@ -662,12 +698,13 @@ function handleVisibilityChange() {
       console.log('[SSE] Page entering background, switching to background mode')
     }
 
-    // 不再清除心跳！保持心跳运行，但切换为后台模式（更长超时）
-    // 心跳 timer 可能在后台被冻结，但 keepalive 轮询会在 timer 恢复时补上
-    resetHeartbeat()
+    // 保持心跳运行，但切换为后台模式（更长超时）
+    for (const conn of connections.values()) {
+      resetHeartbeat(conn)
+    }
 
     // 启动后台 keepalive 轮询
-    if (allSubscribers.size > 0) {
+    if (connections.size > 0) {
       startBackgroundKeepalive()
     }
   }
@@ -676,29 +713,26 @@ function handleVisibilityChange() {
 /**
  * 强制立即重连：断开旧连接、重置计数器、立即发起新连接
  */
-function forceReconnectNow() {
-  if (reconnectTimer) clearTimeout(reconnectTimer)
-  reconnectTimer = null
-  updateConnectionState({ reconnectAttempt: 0 })
+function forceReconnectNow(conn: ServerConnection) {
+  if (conn.reconnectTimer) clearTimeout(conn.reconnectTimer)
+  conn.reconnectTimer = null
+  updateConnectionState(conn.serverId, { reconnectAttempt: 0 })
 
   // 断开旧连接
-  connectionGeneration++
-  disconnectTauri()
-  if (singletonController) {
-    singletonController.abort()
-    singletonController = null
-  }
-  isConnecting = false
+  conn.generation++
+  teardownConnectionTransport(conn)
 
-  connectSingleton()
+  connectServer(conn.serverId)
 }
 
 function handleOnline() {
   if (import.meta.env.DEV) {
     console.log('[SSE] Network online, forcing reconnect...')
   }
-  if (connectionInfo.state !== 'connected' && allSubscribers.size > 0) {
-    forceReconnectNow()
+  for (const conn of connections.values()) {
+    if (conn.info.state !== 'connected' && conn.subscribers.size > 0) {
+      forceReconnectNow(conn)
+    }
   }
 }
 
@@ -707,18 +741,15 @@ function handleOffline() {
     console.log('[SSE] Network offline')
   }
   // 标记为断连，但不尝试重连（没网重连也没用）
-  if (connectionInfo.state === 'connected' || connectionInfo.state === 'connecting') {
-    connectionGeneration++
-    disconnectTauri()
-    if (singletonController) {
-      singletonController.abort()
-      singletonController = null
+  for (const conn of connections.values()) {
+    if (conn.info.state === 'connected' || conn.info.state === 'connecting') {
+      conn.generation++
+      teardownConnectionTransport(conn)
+      if (conn.heartbeatTimer) clearTimeout(conn.heartbeatTimer)
+      if (conn.reconnectTimer) clearTimeout(conn.reconnectTimer)
+      stopBackgroundKeepalive()
+      updateConnectionState(conn.serverId, { state: 'disconnected', error: 'Network offline' })
     }
-    isConnecting = false
-    if (heartbeatTimer) clearTimeout(heartbeatTimer)
-    if (reconnectTimer) clearTimeout(reconnectTimer)
-    stopBackgroundKeepalive()
-    updateConnectionState({ state: 'disconnected', error: 'Network offline' })
   }
 }
 
@@ -740,10 +771,12 @@ function unregisterLifecycleListeners() {
   window.removeEventListener('offline', handleOffline)
 }
 
-// 广播事件给所有订阅者
-function broadcastEvent(globalEvent: GlobalEvent) {
-  // 广播给所有订阅者
-  allSubscribers.forEach(callbacks => {
+// ============================================
+// Event broadcast（只发给对应服务器的订阅者）
+// ============================================
+
+function broadcastEvent(conn: ServerConnection, globalEvent: GlobalEvent) {
+  conn.subscribers.forEach(callbacks => {
     handleEventForSubscriber(globalEvent.payload, callbacks)
   })
 }
@@ -874,70 +907,144 @@ function normalizeSessionError(properties: unknown): SessionErrorPayload {
 // ============================================
 
 /**
- * 强制重连 SSE（用于切换服务器等场景）
- * 断开当前连接 → 重置状态 → 立即重连（新 URL 由 getApiBaseUrl() 动态解析）
+ * 强制重连指定服务器 SSE（用于切换服务器等场景）
+ * 断开当前连接 → 重置状态 → 立即重连（新 URL 由 getApiBaseUrl(serverId) 动态解析）
  */
-export function reconnectSSE() {
-  if (allSubscribers.size === 0) return // 没有订阅者不需要重连
+export function reconnectServerSSE(serverId: string) {
+  const conn = connections.get(serverId)
+  if (!conn || conn.subscribers.size === 0) return // 没有订阅者不需要重连
 
   if (import.meta.env.DEV) {
-    console.log('[SSE] reconnectSSE() called, forcing reconnect to new server...')
+    console.log(`[SSE] reconnectServerSSE(${serverId}) called, forcing reconnect...`)
   }
 
   // 断开现有连接
-  if (heartbeatTimer) clearTimeout(heartbeatTimer)
-  if (reconnectTimer) clearTimeout(reconnectTimer)
-  reconnectTimer = null
+  if (conn.heartbeatTimer) clearTimeout(conn.heartbeatTimer)
+  if (conn.reconnectTimer) clearTimeout(conn.reconnectTimer)
+  conn.reconnectTimer = null
   stopBackgroundKeepalive()
 
   // 标记为服务器切换，重连成功时 onReconnected 会携带 'server-switch' reason
-  isServerSwitch = true
+  serverSwitchFlags.set(serverId, true)
 
   // 递增连接代次，使旧连接的事件回调自动失效
-  connectionGeneration++
-
-  disconnectTauri()
-  if (singletonController) {
-    singletonController.abort()
-    singletonController = null
-  }
-  isConnecting = false
+  conn.generation++
+  teardownConnectionTransport(conn)
 
   // 重置重连计数
-  updateConnectionState({
+  updateConnectionState(serverId, {
     state: 'disconnected',
     reconnectAttempt: 0,
     error: undefined,
   })
 
-  // 立即重连（getApiBaseUrl() 会读取新的 activeServer）
-  connectSingleton()
-}
-
-export function disconnectSSE(error?: string) {
-  disconnectSingleton()
-  updateConnectionState({ state: error ? 'error' : 'disconnected', error, reconnectAttempt: 0 })
+  // 立即重连
+  connectServer(serverId)
 }
 
 /**
- * 订阅 SSE 事件（单例模式，多个订阅者共享一个连接）
+ * 强制重连活动服务器 SSE（兼容旧 API）
  */
-export function subscribeToEvents(callbacks: EventCallbacks): () => void {
-  allSubscribers.add(callbacks)
+export function reconnectSSE() {
+  reconnectServerSSE(serverStore.getActiveServerId())
+}
+
+/**
+ * 断开指定服务器 SSE
+ */
+export function disconnectServerSSE(serverId: string, error?: string) {
+  const conn = connections.get(serverId)
+  if (!conn) return
+  // 先广播状态再断开并移除连接，避免 updateConnectionState 隐式重建空壳连接
+  updateConnectionState(serverId, { state: error ? 'error' : 'disconnected', error, reconnectAttempt: 0 })
+  disconnectServerConnection(conn)
+}
+
+/**
+ * 断开活动服务器 SSE（兼容旧 API）
+ */
+export function disconnectSSE(error?: string) {
+  disconnectServerSSE(serverStore.getActiveServerId(), error)
+}
+
+/**
+ * 获取指定服务器连接状态（返回稳定引用，供 useSyncExternalStore 使用）
+ */
+export function getServerConnectionInfo(serverId: string): ConnectionInfo {
+  return connections.get(serverId)?.info ?? DEFAULT_CONNECTION_INFO
+}
+
+/**
+ * 获取活动服务器连接状态（兼容旧 API）
+ */
+export function getConnectionInfo(): ConnectionInfo {
+  return getServerConnectionInfo(serverStore.getActiveServerId())
+}
+
+/**
+ * 订阅指定服务器连接状态
+ */
+export function subscribeToServerConnectionState(serverId: string, fn: (info: ConnectionInfo) => void): () => void {
+  let listeners = connectionListeners.get(serverId)
+  if (!listeners) {
+    listeners = new Set()
+    connectionListeners.set(serverId, listeners)
+  }
+  listeners.add(fn)
+  // 立即发送当前状态
+  fn(getServerConnectionInfo(serverId))
+  return () => {
+    listeners?.delete(fn)
+  }
+}
+
+/**
+ * 订阅活动服务器连接状态（兼容旧 API）
+ */
+export function subscribeToConnectionState(fn: (info: ConnectionInfo) => void): () => void {
+  return subscribeToServerConnectionState(serverStore.getActiveServerId(), fn)
+}
+
+/**
+ * 订阅指定服务器的 SSE 事件（每服务器独立连接）
+ */
+export function subscribeToServerEvents(serverId: string, callbacks: EventCallbacks): () => void {
+  const conn = getOrCreateConnection(serverId)
+  conn.subscribers.add(callbacks)
 
   // 如果是第一个订阅者，启动连接
-  if (allSubscribers.size === 1) {
-    connectSingleton()
+  if (conn.subscribers.size === 1) {
+    connectServer(serverId)
   }
 
   // 返回取消订阅函数
   return () => {
-    allSubscribers.delete(callbacks)
+    conn.subscribers.delete(callbacks)
 
-    // 如果没有订阅者了，断开连接并清理监听器
-    if (allSubscribers.size === 0) {
-      disconnectSingleton()
-      unregisterLifecycleListeners()
+    // 如果没有订阅者了，断开连接
+    if (conn.subscribers.size === 0) {
+      disconnectServerConnection(conn)
     }
+  }
+}
+
+/**
+ * 订阅活动服务器 SSE 事件（兼容旧 API）。
+ * 订阅跟随 active server：切换服务器时自动迁移订阅（恢复改动前的单例语义）。
+ */
+export function subscribeToEvents(callbacks: EventCallbacks): () => void {
+  let currentServerId = serverStore.getActiveServerId()
+  let unsubscribe = subscribeToServerEvents(currentServerId, callbacks)
+
+  const offServerChange = serverStore.onServerChange(newServerId => {
+    if (newServerId === currentServerId) return
+    unsubscribe()
+    currentServerId = newServerId
+    unsubscribe = subscribeToServerEvents(currentServerId, callbacks)
+  })
+
+  return () => {
+    offServerChange()
+    unsubscribe()
   }
 }

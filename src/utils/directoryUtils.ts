@@ -10,6 +10,8 @@
 //
 
 import { serverStorage } from './perServerStorage'
+import { serverStore } from '../store/serverStore'
+import { multiServerStore } from '../store/multiServerStore'
 
 // ============================================
 // Path Mode Configuration
@@ -32,7 +34,8 @@ const STORAGE_KEY_PATH_MODE = 'opencode-path-mode'
 const STORAGE_KEY_DETECTED_STYLE = 'opencode-detected-path-style'
 
 let _pathMode: PathMode | null = null
-let _detectedStyle: DetectedPathStyle | null = null
+// 检测结果按服务器缓存（多服务器连不同操作系统时互不干扰）
+const _detectedStyleByServer = new Map<string, DetectedPathStyle>()
 
 /**
  * 重置路径模式缓存（服务器切换时调用）
@@ -40,7 +43,7 @@ let _detectedStyle: DetectedPathStyle | null = null
  */
 export function resetPathModeCache(): void {
   _pathMode = null
-  _detectedStyle = null
+  _detectedStyleByServer.clear()
 }
 
 // Path mode change listeners
@@ -97,63 +100,71 @@ export function setPathMode(mode: PathMode): void {
 }
 
 /**
- * 获取检测到的路径风格
+ * 获取检测到的路径风格（按服务器）
+ * @param serverId 指定服务器（缺省用活动服务器）
  */
-export function getDetectedPathStyle(): DetectedPathStyle {
-  if (_detectedStyle === null) {
-    try {
-      const saved = serverStorage.get(STORAGE_KEY_DETECTED_STYLE)
-      _detectedStyle = saved === 'windows' ? 'windows' : 'unix'
-    } catch {
-      _detectedStyle = 'unix'
-    }
+export function getDetectedPathStyle(serverId?: string): DetectedPathStyle {
+  const sid = serverId ?? serverStore.getActiveServerId()
+  const cached = _detectedStyleByServer.get(sid)
+  if (cached) return cached
+  try {
+    // serverStorage 按服务器隔离（srv:{serverId}:{key}）
+    const saved = serverStorage.getFor(STORAGE_KEY_DETECTED_STYLE, sid)
+    const style = saved === 'windows' ? ('windows' as const) : ('unix' as const)
+    _detectedStyleByServer.set(sid, style)
+    return style
+  } catch {
+    _detectedStyleByServer.set(sid, 'unix')
+    return 'unix'
   }
-  return _detectedStyle
 }
 
 /**
- * 设置检测到的路径风格（由自动检测逻辑调用）
+ * 设置检测到的路径风格（由自动检测逻辑调用，按服务器记录）
  */
-export function setDetectedPathStyle(style: DetectedPathStyle): void {
-  const previousStyle = _detectedStyle
-  _detectedStyle = style
+export function setDetectedPathStyle(style: DetectedPathStyle, serverId?: string): void {
+  const sid = serverId ?? serverStore.getActiveServerId()
+  const previousStyle = _detectedStyleByServer.get(sid)
+  _detectedStyleByServer.set(sid, style)
   try {
-    serverStorage.set(STORAGE_KEY_DETECTED_STYLE, style)
+    serverStorage.setFor(STORAGE_KEY_DETECTED_STYLE, style, sid)
   } catch {
     // ignore
   }
-  // 只在 auto 模式且风格变化时通知
+  // 只在 auto 模式且风格变化时通知（活动服务器视角）
   if (getPathMode() === 'auto' && previousStyle !== style) {
     notifyListeners()
   }
 }
 
 /**
- * 获取实际生效的路径风格
- * - 如果是 auto 模式，返回检测到的风格
- * - 否则返回用户设置的模式
+ * 获取实际生效的路径风格（按服务器）
+ * - 多服务器模式：强制 auto（每服务器按各自检测结果，避免本地 Windows + 远程 Linux 冲突）
+ * - 单服务器模式：auto 返回检测结果；否则返回用户设置的模式
  */
-export function getEffectivePathStyle(): DetectedPathStyle {
+export function getEffectivePathStyle(serverId?: string): DetectedPathStyle {
   const mode = getPathMode()
-  if (mode === 'auto') {
-    return getDetectedPathStyle()
+  if (mode === 'auto' || multiServerStore.isEnabled()) {
+    return getDetectedPathStyle(serverId)
   }
   return mode
 }
 
 /**
- * 是否为 Windows 路径模式（实际生效的）
+ * 是否为 Windows 路径模式（实际生效的，按服务器）
  */
-export function isWindowsPathMode(): boolean {
-  return getEffectivePathStyle() === 'windows'
+export function isWindowsPathMode(serverId?: string): boolean {
+  return getEffectivePathStyle(serverId) === 'windows'
 }
 
 /**
- * 根据当前模式格式化路径用于 API 请求
+ * 根据当前模式格式化路径用于 API 请求（按服务器）
  * - unix 模式: 转正斜杠
  * - windows 模式: 转反斜杠
+ * @param serverId 目标服务器（缺省用活动服务器）；多服务器连不同操作系统时必须传，
+ *                否则按本地探测的全局风格转换导致远端服务器收到错误斜杠的路径
  */
-export function formatPathForApi(dir: string | undefined | null): string | undefined {
+export function formatPathForApi(dir: string | undefined | null, serverId?: string): string | undefined {
   if (!dir) return undefined
 
   let trimmed = dir.replace(/[/\\]+$/, '') // 移除末尾斜杠
@@ -165,7 +176,7 @@ export function formatPathForApi(dir: string | undefined | null): string | undef
     trimmed = trimmed + '/'
   }
 
-  if (isWindowsPathMode()) {
+  if (isWindowsPathMode(serverId)) {
     return trimmed.replace(/\//g, '\\')
   } else {
     return trimmed.replace(/\\/g, '/')
@@ -195,13 +206,13 @@ export function detectPathStyleFromResponse(path: string | undefined | null): De
 }
 
 /**
- * 自动检测并更新路径风格
+ * 自动检测并更新路径风格（按服务器记录检测结果）
  * 调用此函数时传入后端返回的路径，会自动更新检测结果
  */
-export function autoDetectPathStyle(path: string | undefined | null): void {
+export function autoDetectPathStyle(path: string | undefined | null, serverId?: string): void {
   const detected = detectPathStyleFromResponse(path)
   if (detected) {
-    setDetectedPathStyle(detected)
+    setDetectedPathStyle(detected, serverId)
   }
 }
 

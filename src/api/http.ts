@@ -6,19 +6,21 @@
 import { serverStore, makeBasicAuthHeader } from '../store/serverStore'
 
 /**
- * 获取当前 API Base URL
+ * 获取 API Base URL
  * 优先使用 serverStore 中的活动服务器，回退到常量
+ * @param serverId 指定服务器（缺省用活动服务器）
  */
-export function getApiBaseUrl(): string {
-  return serverStore.getActiveBaseUrl()
+export function getApiBaseUrl(serverId?: string): string {
+  return serverId ? serverStore.getServerBaseUrl(serverId) : serverStore.getActiveBaseUrl()
 }
 
 /**
- * 获取当前活动服务器的 Authorization header
+ * 获取指定服务器的 Authorization header
  * 如果服务器配置了密码则返回 Basic Auth header，否则返回 undefined
+ * @param serverId 指定服务器（缺省用活动服务器）
  */
-export function getAuthHeader(): Record<string, string> {
-  const auth = serverStore.getActiveAuth()
+export function getAuthHeader(serverId?: string): Record<string, string> {
+  const auth = serverId ? serverStore.getServerAuth(serverId) : serverStore.getActiveAuth()
   if (auth?.password) {
     return { Authorization: makeBasicAuthHeader(auth) }
   }

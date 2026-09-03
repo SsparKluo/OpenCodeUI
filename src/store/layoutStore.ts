@@ -18,6 +18,8 @@ export interface PanelTab {
   previewFiles?: PreviewFile[]
   // Terminal 特有属性
   ptyId?: string
+  /** 终端所属服务器（PTY 创建时记录；连接/恢复时用该服务器，而不是当前焦点服务器） */
+  serverId?: string
   title?: string
   shellTitle?: string
   customTitle?: string
@@ -45,6 +47,8 @@ export interface TerminalTab {
   id: string // PTY session ID
   title: string // 显示标题
   status: 'connecting' | 'connected' | 'disconnected' | 'exited'
+  /** 所属服务器（PTY 创建时记录；缺省用当前焦点/活动服务器） */
+  serverId?: string
   shellTitle?: string
   customTitle?: string
   buffer?: string
@@ -68,6 +72,7 @@ function buildTerminalPanelTab(
     type: 'terminal',
     position,
     ptyId: tab.id,
+    serverId: tab.serverId,
     title: existing?.title ?? tab.title,
     shellTitle: existing?.shellTitle ?? tab.shellTitle ?? tab.title,
     customTitle: existing?.customTitle ?? tab.customTitle,

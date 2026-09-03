@@ -46,6 +46,8 @@ import { getMessageText, isUserMessage, type AssistantMessageInfo, type Message 
 import { clipboardErrorHandler, copyTextToClipboard, createErrorHandler } from '../utils'
 import { clearSessionRuntimeState } from '../utils/sessionLifecycle'
 import { serverStorage } from '../utils/perServerStorage'
+import { sessionKeyToServerId, splitSessionKey } from '../utils/sessionKey'
+import { serverStore } from '../store/serverStore'
 import { STORAGE_KEY_SELECTED_AGENT } from '../constants'
 import type { ChatAreaHandle } from '../features/chat'
 import { followupQueueStore, useFollowupQueue } from '../store/followupQueueStore'
@@ -134,6 +136,17 @@ export function useChatSession({
     routeSessionIdRef.current = routeSessionId
   }, [routeSessionId])
 
+  /** 当前 pane 绑定的服务器（sessionId 为复合 key，split 出 serverId；home 状态跟随 active server） */
+  const activeServerId = useSyncExternalStore(
+    cb => serverStore.subscribe(cb),
+    () => serverStore.getActiveServerId(),
+    () => serverStore.getActiveServerId(),
+  )
+  const paneServerId = useMemo(
+    () => (routeSessionId ? sessionKeyToServerId(routeSessionId) : activeServerId),
+    [routeSessionId, activeServerId],
+  )
+
   const handleMissingRouteSession = useCallback(
     (missingSessionId: string) => {
       if (routeSessionIdRef.current !== missingSessionId) return
@@ -218,7 +231,7 @@ export function useChatSession({
     refreshPendingRequests,
     resetPendingRequests,
     isReplying,
-  } = usePermissionHandler()
+  } = usePermissionHandler(paneServerId)
 
   // Prevent infinite retry loops when auto-approve API calls fail
   // but the server may have already processed the request (lost response).
@@ -389,7 +402,7 @@ export function useChatSession({
         }
         refetchModels().catch(() => {})
         // 重新获取 agents 列表（切换后端时 currentDirectory 可能没变，useEffect 不会触发）
-        getSelectableAgents(currentDirectory)
+        getSelectableAgents(currentDirectory, paneServerId)
           .then(setAgents)
           .catch(() => {})
       },
@@ -446,7 +459,7 @@ export function useChatSession({
 
   // Load agents
   useEffect(() => {
-    getSelectableAgents(currentDirectory)
+    getSelectableAgents(currentDirectory, paneServerId)
       .then(setAgents)
       .catch(err => handleError('fetch agents', err))
   }, [currentDirectory])
@@ -455,8 +468,8 @@ export function useChatSession({
   useEffect(() => {
     if (!routeSessionId || !effectiveDirectory) return
 
-    prefetchRootDirectory(effectiveDirectory).catch(() => {})
-    prefetchCommands(effectiveDirectory).catch(() => {})
+    prefetchRootDirectory(effectiveDirectory, paneServerId).catch(() => {})
+    prefetchCommands(effectiveDirectory, paneServerId).catch(() => {})
   }, [routeSessionId, effectiveDirectory])
 
   // agents 列表加载后，校验当前选中的 agent 是否存在于列表中
@@ -479,9 +492,10 @@ export function useChatSession({
   // Load child sessions and pending permissions on session change
   // 页面刷新时 childSessionStore 是空的，需要先从 API 恢复子 session 关系
   // 然后再加载权限请求（包括子 session 的权限）
+  // 切换 session 时同样要清空旧 session 的 pending 权限/问题，否则 A 会话的请求会残留在 B 会话
   useEffect(() => {
+    resetPendingRequests()
     if (!routeSessionId) {
-      resetPendingRequests()
       return
     }
 
@@ -492,11 +506,11 @@ export function useChatSession({
       const existingChildren = childSessionStore.getChildSessionIds(routeSessionId!)
       if (existingChildren.length === 0) {
         try {
-          const children = await getSessionChildren(routeSessionId!, effectiveDirectory)
+          const children = await getSessionChildren(routeSessionId!, effectiveDirectory, paneServerId)
           if (cancelled) return
           // 注册所有子 session 到 store
           for (const child of children) {
-            childSessionStore.registerChildSession(child)
+            childSessionStore.registerChildSession(child, paneServerId)
           }
         } catch {
           // 获取子 session 失败不影响主流程
@@ -507,29 +521,40 @@ export function useChatSession({
 
       // Step 2: 获取完整的 session family（主 session + 所有子孙）
       const family = new Set(childSessionStore.getSessionAndDescendants(routeSessionId!))
+      // family 是复合 key；API 返回的 sessionID 是原始 id，兼容两种形式比较
+      const familyRaw = new Set([...family].map(k => splitSessionKey(k).sessionId))
+      const matchesFamily = (rawSessionId: string) =>
+        familyRaw.has(rawSessionId) || familyRaw.has(splitSessionKey(rawSessionId).sessionId)
 
       // Step 3: 获取所有待处理请求，然后用 family 过滤
       // GET /permission 和 GET /question 返回全量数据，不传 sessionId 避免 N 次重复请求
       const [allPerms, allQuestions] = await Promise.all([
-        getPendingPermissions(undefined, effectiveDirectory).catch(() => []),
-        getPendingQuestions(undefined, effectiveDirectory).catch(() => []),
+        getPendingPermissions(undefined, effectiveDirectory, paneServerId).catch(() => []),
+        getPendingQuestions(undefined, effectiveDirectory, paneServerId).catch(() => []),
       ])
 
       if (cancelled) return
 
       // 只保留属于当前 session family 的请求。
       // OMO background subagents may publish permission.asked over SSE before
-      // /permission can list it for this routed instance, so do not drop
-      // SSE-known requests just because the snapshot is missing them.
-      const nextPerms = allPerms.filter(p => family.has(p.sessionID))
+      // /permission can list it for this routed instance. Refresh 时序下子 session 关系
+      // 可能尚未注册（family 不含子 session），因此 SSE 已知请求必须无条件保留，
+      // 否则刷新后子任务的权限弹窗会被 family 过滤误删。
+      const nextPerms = allPerms.filter(p => matchesFamily(p.sessionID))
       setPendingPermissionRequests(prev => {
         const merged = new Map(nextPerms.map(p => [p.id, p]))
         for (const request of prev) {
-          if (family.has(request.sessionID) && !merged.has(request.id)) merged.set(request.id, request)
+          if (!merged.has(request.id)) merged.set(request.id, request)
         }
         return Array.from(merged.values())
       })
-      setPendingQuestionRequests(allQuestions.filter(q => family.has(q.sessionID)))
+      setPendingQuestionRequests(prev => {
+        const merged = new Map(allQuestions.filter(q => matchesFamily(q.sessionID)).map(q => [q.id, q]))
+        for (const q of prev) {
+          if (!merged.has(q.id)) merged.set(q.id, q)
+        }
+        return Array.from(merged.values())
+      })
     }
 
     loadChildSessionsAndPermissions()
@@ -585,15 +610,18 @@ export function useChatSession({
         // 不要在 send 前 setStreaming：新 user 往往还没入列，过程折叠会把
         // 「上一轮已收工」误判成最新 Working 再展开，造成一闪。
         // streaming 在 send 成功后、或 SSE 推到 assistant 时再打开。
-        await sendMessageAsync({
-          sessionId,
-          text: input.content,
-          attachments: input.attachments,
-          model: input.model,
-          agent: input.options?.agent,
-          variant: input.options?.variant,
-          directory: input.directory,
-        })
+        await sendMessageAsync(
+          {
+            sessionId,
+            text: input.content,
+            attachments: input.attachments,
+            model: input.model,
+            agent: input.options?.agent,
+            variant: input.options?.variant,
+            directory: input.directory,
+          },
+          paneServerId,
+        )
 
         messageStore.setStreaming(sessionId, true)
 
@@ -607,7 +635,7 @@ export function useChatSession({
           // 消息数量增加了，说明 SSE 已正常推送
           if (state.messages.length > msgCountBeforeSend) return
 
-          getSessionMessages(pullSessionId, 5, pullDir)
+          getSessionMessages(pullSessionId, 5, pullDir, paneServerId)
             .then(apiMessages => {
               for (const msg of apiMessages) {
                 messageStore.handleMessageUpdated(msg.info)
@@ -822,7 +850,7 @@ export function useChatSession({
               }
             }
           }
-          const forkedSession = await forkSession(assistantInfo.sessionID, forkAtMessageId, effectiveDirectory)
+          const forkedSession = await forkSession(assistantInfo.sessionID, forkAtMessageId, effectiveDirectory, paneServerId)
           setRestoredContent(null)
           navigateToSession(forkedSession.id, forkedSession.directory)
           return
@@ -834,7 +862,7 @@ export function useChatSession({
 
         const userInfo = message.info
         const content = extractUserMessageContent(message)
-        const forkedSession = await forkSession(userInfo.sessionID, targetMessageId, effectiveDirectory)
+        const forkedSession = await forkSession(userInfo.sessionID, targetMessageId, effectiveDirectory, paneServerId)
 
         setRestoredContent({
           sessionId: forkedSession.id,
@@ -863,7 +891,7 @@ export function useChatSession({
     followupQueueStore.clearSession(routeSessionId)
     try {
       const directory = sessionDirectory || currentDirectory
-      await abortSession(routeSessionId, directory)
+      await abortSession(routeSessionId, directory, paneServerId)
       messageStore.handleSessionIdle(routeSessionId)
     } catch (error) {
       handleError('abort session', error)
@@ -918,6 +946,7 @@ export function useChatSession({
             sessionId,
             { providerID: currentModel.providerId, modelID: currentModel.id },
             effectiveDirectory,
+            paneServerId,
           ).catch(err => {
             handleError('execute command', err)
           })
@@ -927,7 +956,7 @@ export function useChatSession({
 
         // Keep command submission semantics aligned with normal messages:
         // once the command is dispatched, clear the draft immediately.
-        void executeCommand(sessionId, command, args, effectiveDirectory).catch(err => {
+        void executeCommand(sessionId, command, args, effectiveDirectory, paneServerId).catch(err => {
           handleError('execute command', err)
         })
 
@@ -979,7 +1008,7 @@ export function useChatSession({
   const handleArchiveSession = useCallback(async () => {
     if (!routeSessionId) return
     try {
-      await updateSession(routeSessionId, { time: { archived: Date.now() } }, effectiveDirectory)
+      await updateSession(routeSessionId, { time: { archived: Date.now() } }, effectiveDirectory, paneServerId)
       navigateHome()
       handleNewChat()
     } catch (error) {

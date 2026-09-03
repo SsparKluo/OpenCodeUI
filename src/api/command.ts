@@ -3,6 +3,7 @@
 // ============================================
 
 import { getSDKClient, unwrap } from './sdk'
+import { resolveSessionTarget } from '../utils/sessionKey'
 import { formatPathForApi } from '../utils/directoryUtils'
 import { serverStore } from '../store/serverStore'
 import i18n from '../i18n'
@@ -30,15 +31,15 @@ const COMMAND_CACHE_TTL_MS = 10_000
 const commandCache = new Map<string, { data: Command[]; expiresAt: number }>()
 const commandInflight = new Map<string, Promise<Command[]>>()
 
-function getCommandCacheKey(directory?: string): string {
-  return `${serverStore.getActiveServerId()}::${i18n.resolvedLanguage || i18n.language}::${formatPathForApi(directory) ?? ''}`
+function getCommandCacheKey(directory?: string, serverId?: string): string {
+  return `${serverId ?? serverStore.getActiveServerId()}::${i18n.resolvedLanguage || i18n.language}::${formatPathForApi(directory, serverId) ?? ''}`
 }
 
-async function fetchCommands(directory?: string): Promise<Command[]> {
+async function fetchCommands(directory?: string, serverId?: string): Promise<Command[]> {
   let apiCommands: ApiCommand[] = []
   try {
-    const sdk = getSDKClient()
-    apiCommands = unwrap(await sdk.command.list({ directory: formatPathForApi(directory) })) ?? []
+    const sdk = getSDKClient(serverId)
+    apiCommands = unwrap(await sdk.command.list({ directory: formatPathForApi(directory, serverId) })) ?? []
   } catch {
     // Backend unreachable — frontend commands still available
   }
@@ -48,8 +49,8 @@ async function fetchCommands(directory?: string): Promise<Command[]> {
   return [...commandsFromApi, ...frontendCommands.filter(c => !apiNames.has(c.name))]
 }
 
-export async function getCommands(directory?: string): Promise<Command[]> {
-  const key = getCommandCacheKey(directory)
+export async function getCommands(directory?: string, serverId?: string): Promise<Command[]> {
+  const key = getCommandCacheKey(directory, serverId)
   const now = Date.now()
   const cached = commandCache.get(key)
   if (cached && cached.expiresAt > now) {
@@ -61,7 +62,7 @@ export async function getCommands(directory?: string): Promise<Command[]> {
     return inflight
   }
 
-  const request = fetchCommands(directory)
+  const request = fetchCommands(directory, serverId)
     .then(data => {
       commandCache.set(key, { data, expiresAt: Date.now() + COMMAND_CACHE_TTL_MS })
       return data
@@ -74,8 +75,8 @@ export async function getCommands(directory?: string): Promise<Command[]> {
   return request
 }
 
-export async function prefetchCommands(directory?: string): Promise<void> {
-  await getCommands(directory)
+export async function prefetchCommands(directory?: string, serverId?: string): Promise<void> {
+  await getCommands(directory, serverId)
 }
 
 export async function executeCommand(
@@ -83,12 +84,14 @@ export async function executeCommand(
   command: string,
   args: string = '',
   directory?: string,
+  serverId?: string,
 ): Promise<unknown> {
-  const sdk = getSDKClient()
+  const target = resolveSessionTarget(sessionId, serverId)
+  const sdk = getSDKClient(target.serverId)
   return unwrap(
     await sdk.session.command({
-      sessionID: sessionId,
-      directory: formatPathForApi(directory),
+      sessionID: target.sessionId,
+      directory: formatPathForApi(directory, target.serverId),
       command,
       arguments: args,
     }),

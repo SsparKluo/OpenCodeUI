@@ -8,6 +8,7 @@ import { useRouter } from '../hooks/useRouter'
 import { handleError, normalizeToForwardSlash, getDirectoryName, isSameDirectory, serverStorage } from '../utils'
 import { layoutStore, useLayoutStore } from '../store/layoutStore'
 import { serverStore } from '../store/serverStore'
+import { multiServerStore, useMultiServerStore } from '../store/multiServerStore'
 import { isTauri } from '../utils/tauri'
 import { DirectoryContext, type DirectoryContextValue, type SavedDirectory } from './DirectoryContext.shared'
 
@@ -60,6 +61,10 @@ export function DirectoryProvider({ children }: { children: ReactNode }) {
 
   const [pathInfo, setPathInfo] = useState<ApiPath | null>(null)
 
+  // 多服务器模式：路径信息跟随焦点服务器（焦点缺省 = 活动服务器）
+  const multiServerConfig = useMultiServerStore()
+  const pathServerId = multiServerConfig.enabled ? multiServerStore.getFocusedServerId() : undefined
+
   // 服务器 ID 切换时切换 per-server 目录；local runtime URL 变化时只刷新 path info。
   useEffect(() => {
     return serverStore.onServerChange((_, reason) => {
@@ -69,14 +74,17 @@ export function DirectoryProvider({ children }: { children: ReactNode }) {
         setUrlDirectory(undefined)
       }
       setPathInfo(null)
-      getPath().then(setPathInfo).catch(handleError('get path info', 'api'))
+      getPath(multiServerStore.isEnabled() ? multiServerStore.getFocusedServerId() : undefined)
+        .then(setPathInfo)
+        .catch(handleError('get path info', 'api'))
     })
   }, [setUrlDirectory])
 
-  // 加载路径信息
+  // 加载路径信息（活动/焦点服务器变化时刷新）
   useEffect(() => {
-    getPath().then(setPathInfo).catch(handleError('get path info', 'api'))
-  }, [])
+    setPathInfo(null)
+    getPath(pathServerId).then(setPathInfo).catch(handleError('get path info', 'api'))
+  }, [pathServerId])
 
   // 保存 savedDirectories 到 per-server storage
   useEffect(() => {

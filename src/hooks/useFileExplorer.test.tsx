@@ -63,7 +63,7 @@ describe('useFileExplorer change scope', () => {
       expect(result.current.fileStatus.get('src/turn.ts')?.status).toBe('added')
     })
 
-    expect(getLastTurnDiff).toHaveBeenCalledWith('session-1', '/repo')
+    expect(getLastTurnDiff).toHaveBeenCalledWith('session-1', '/repo', undefined)
 
     act(() => {
       changeScopeStore.setMode('session-1', 'session')
@@ -74,7 +74,7 @@ describe('useFileExplorer change scope', () => {
     })
 
     expect(result.current.fileStatus.get('src/turn.ts')).toBeUndefined()
-    expect(getSessionDiff).toHaveBeenCalledWith('session-1', '/repo')
+    expect(getSessionDiff).toHaveBeenCalledWith('session-1', '/repo', undefined)
   })
 
   it('restores expanded folders per directory when switching projects', async () => {

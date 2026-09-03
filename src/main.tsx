@@ -8,13 +8,10 @@ import App from './App.tsx'
 import { DirectoryProvider, FullscreenProvider, SessionProvider } from './contexts'
 import { themeStore } from './store/themeStore'
 import { serverStore } from './store/serverStore'
-import { messageStore } from './store/messageStore'
-import { childSessionStore } from './store/childSessionStore'
-import { todoStore } from './store/todoStore'
 import { autoApproveStore } from './store/autoApproveStore'
 import { serviceStore } from './store/serviceStore'
 import { reconnectSSE } from './api/events'
-import { abortInFlightApiRequests, getSDKClientAsync, invalidateSDKClient } from './api/sdk'
+import { getSDKClientAsync, invalidateSDKClient } from './api/sdk'
 import { resetPathModeCache } from './utils/directoryUtils'
 import { isTauri, isTauriMobile } from './utils/tauri'
 import { apiErrorHandler, globalErrorHandler } from './utils/errorHandling'
@@ -58,26 +55,24 @@ if (document.readyState === 'loading') {
   requestAnimationFrame(initOverlayScrollbars)
 }
 
-// 注册 active server 入口变化 → 清理 server-specific 状态 + 重建 SDK/SSE
-serverStore.onServerChange(() => {
-  abortInFlightApiRequests()
-  invalidateSDKClient()
+// 注册 active server 入口变化 → 重建目标服务器的 SDK + 刷新 per-server 配置 + 重连 SSE
+serverStore.onServerChange(serverId => {
+  // SDK client 按 serverId 缓存：仅重建目标服务器的 client
+  invalidateSDKClient(serverId)
   if (isTauri()) {
-    void getSDKClientAsync().catch(err => apiErrorHandler('reinitialize sdk client after server endpoint change', err))
+    void getSDKClientAsync(serverId).catch(err => apiErrorHandler('reinitialize sdk client after server endpoint change', err))
   }
 
-  // 1. 清空内存中的 session/消息数据
-  messageStore.clearAll()
-  childSessionStore.clearAll()
-  todoStore.clearAll()
+  // 多服务器模式：messageStore / childSessionStore / todoStore 的数据按 `serverId::sessionId`
+  // 分片存储，切换 active server 不应清空其他 pane 正在使用的服务器数据，因此不再 clearAll。
 
-  // 2. 重置路径模式缓存（不同服务器可能是不同操作系统）
+  // 重置路径模式缓存（不同服务器可能是不同操作系统）
   resetPathModeCache()
 
-  // 4. 重新加载 auto-approve 开关状态（从新服务器的 storage key 读取）
+  // 重新加载 auto-approve 开关状态（从新服务器的 storage key 读取）
   autoApproveStore.reloadFromStorage()
 
-  // 5. 重连 SSE（会自动连到新的 server endpoint）
+  // 重连 active server 的 SSE（会自动连到新的 server endpoint）
   reconnectSSE()
 })
 

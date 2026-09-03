@@ -10,7 +10,9 @@ import { notificationStore, useHasUnreadCompletedNotification } from '../../stor
 import { SessionChildrenSlot } from '../chat/sidebar/SessionChildrenSlot'
 import type { ApiSession } from '../../api'
 import { startInternalDrag } from '../../lib/internalDragCore'
+import { makeSessionKey, splitSessionKey } from '../../utils/sessionKey'
 import { pinnedSessionsStore, type PinnedSessionEntry } from '../../store/pinnedSessionsStore'
+import { serverStore } from '../../store/serverStore'
 
 interface SessionListProps {
   sessions: ApiSession[]
@@ -34,6 +36,8 @@ interface SessionListProps {
   expandedChildSessionIds?: Set<string>
   /** 按父 ID 分组的直接挂出来的子 session */
   inlineChildSessions?: Map<string, ApiSession[]>
+  /** 数据所属服务器（多服务器模式；缺省用活动服务器） */
+  serverId?: string
   onSelectChildSession?: (session: ApiSession) => void
   pinnedDividerAfterIds?: Set<string>
   /** 拉不到的置顶（灰色展示，可取消） */
@@ -71,6 +75,7 @@ export function SessionList({
   showDirectory = false,
   expandedChildSessionIds,
   inlineChildSessions,
+  serverId,
   onSelectChildSession,
   pinnedDividerAfterIds,
   unavailablePinnedEntries = [],
@@ -229,7 +234,7 @@ export function SessionList({
                         <div key={session.id}>
                           <SessionListItem
                             session={session}
-                            isSelected={session.id === selectedId}
+                            isSelected={!!selectedId && session.id === splitSessionKey(selectedId).sessionId}
                             onSelect={() => onSelect(session)}
                             onDelete={() => setDeleteConfirm({ isOpen: true, sessionId: session.id })}
                             onRename={newTitle => onRename(session.id, newTitle)}
@@ -251,6 +256,7 @@ export function SessionList({
                             (expandedChildSessionIds?.has(session.id) || inlineChildSessions?.has(session.id)) && (
                               <SessionChildrenSlot
                                 parentSession={session}
+                                serverId={serverId}
                                 selectedSessionId={selectedId}
                                 fetchAll={expandedChildSessionIds?.has(session.id)}
                                 children={inlineChildSessions?.get(session.id)}
@@ -297,7 +303,7 @@ export function SessionList({
                 <div key={session.id}>
                   <SessionListItem
                     session={session}
-                    isSelected={session.id === selectedId}
+                    isSelected={!!selectedId && session.id === splitSessionKey(selectedId).sessionId}
                     onSelect={() => onSelect(session)}
                     onDelete={() => setDeleteConfirm({ isOpen: true, sessionId: session.id })}
                     onRename={newTitle => onRename(session.id, newTitle)}
@@ -316,6 +322,7 @@ export function SessionList({
                   {hasChildren && onSelectChildSession && (
                     <SessionChildrenSlot
                       parentSession={session}
+                      serverId={serverId}
                       selectedSessionId={selectedId}
                       fetchAll={shouldFetchAll}
                       children={inlineChildren}
@@ -375,6 +382,8 @@ export interface SessionListItemProps {
   density?: 'default' | 'compact' | 'minimal'
   showStats?: boolean
   showDirectory?: boolean
+  /** 活跃标记查询用复合 key（serverId::sessionId，多服务器模式传入；缺省用 session.id） */
+  activeSessionKey?: string
   // ---- 编辑模式 ----
   isEditMode?: boolean
   isChecked?: boolean
@@ -395,6 +404,7 @@ export function SessionListItem({
   density = 'default',
   showStats = true,
   showDirectory = false,
+  activeSessionKey,
   isEditMode = false,
   isChecked = false,
   checkedPrev = false,
@@ -409,8 +419,10 @@ export function SessionListItem({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const touchMoved = useRef(false)
 
-  // 活跃状态标记
-  const activeEntry = useSessionActiveEntry(session.id)
+  // 活跃状态标记（activeSessionStore / notificationStore 的 key 是复合 serverId::sessionId；
+  // 单服务器模式 session.id 是原始 id，需用活动服务器合成复合 key 查询）
+  const activeQueryKey = activeSessionKey ?? makeSessionKey(serverStore.getActiveServerId(), session.id)
+  const activeEntry = useSessionActiveEntry(activeQueryKey)
   const activeStatus = activeEntry
     ? activeEntry.pendingAction?.type === 'permission'
       ? { dot: 'bg-warning-100', label: t('chat:activeSession.awaitingPermission'), pulse: false }
@@ -420,7 +432,7 @@ export function SessionListItem({
           ? { dot: 'bg-warning-100', label: t('chat:activeSession.retrying'), pulse: false }
           : { dot: 'bg-success-100', label: t('chat:activeSession.working'), pulse: true }
     : null
-  const hasUnreadCompletedNotification = useHasUnreadCompletedNotification(session.id)
+  const hasUnreadCompletedNotification = useHasUnreadCompletedNotification(activeQueryKey)
   const itemRef = useRef<HTMLDivElement>(null)
   const isCompact = density === 'compact'
   const isMinimal = density === 'minimal'
@@ -555,7 +567,7 @@ export function SessionListItem({
       setShowActions(false)
       return
     }
-    notificationStore.markSessionNotificationsRead(session.id, 'completed')
+    notificationStore.markSessionNotificationsRead(activeQueryKey, 'completed')
     onSelect()
   }
 
@@ -576,6 +588,7 @@ export function SessionListItem({
       {
         kind: 'session',
         sessionId: session.id,
+        serverId: activeSessionKey ? splitSessionKey(activeSessionKey).serverId : undefined,
         directory: session.directory,
       },
     )

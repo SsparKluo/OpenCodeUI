@@ -17,19 +17,19 @@ function isRootDirectoryPath(path: string): boolean {
   return path === '' || path === '.' || path === './'
 }
 
-function getRootDirectoryCacheKey(directory?: string): string {
-  return `${serverStore.getActiveServerId()}::${formatPathForApi(directory) ?? ''}`
+function getRootDirectoryCacheKey(directory?: string, serverId?: string): string {
+  return `${serverId ?? serverStore.getActiveServerId()}::${formatPathForApi(directory, serverId) ?? ''}`
 }
 
-async function fetchDirectory(path: string, directory?: string): Promise<FileNode[]> {
-  const sdk = getSDKClient()
+async function fetchDirectory(path: string, directory?: string, serverId?: string): Promise<FileNode[]> {
+  const sdk = getSDKClient(serverId)
   const isAbsolute = /^[a-zA-Z]:/.test(path) || path.startsWith('/')
 
   if (isAbsolute && !directory) {
-    return unwrap(await sdk.file.list({ directory: formatPathForApi(path), path: '' }))
+    return unwrap(await sdk.file.list({ directory: formatPathForApi(path, serverId), path: '' }))
   }
 
-  return unwrap(await sdk.file.list({ path, directory: formatPathForApi(directory) }))
+  return unwrap(await sdk.file.list({ path, directory: formatPathForApi(directory, serverId) }))
 }
 
 /**
@@ -41,13 +41,14 @@ export async function searchFiles(
     directory?: string
     type?: 'file' | 'directory'
     limit?: number
+    serverId?: string
   } = {},
 ): Promise<string[]> {
-  const sdk = getSDKClient()
+  const sdk = getSDKClient(options.serverId)
   return unwrap(
     await sdk.find.files({
       query,
-      directory: formatPathForApi(options.directory),
+      directory: formatPathForApi(options.directory, options.serverId),
       type: options.type,
       limit: options.limit,
     }),
@@ -57,12 +58,12 @@ export async function searchFiles(
 /**
  * 列出目录内容
  */
-export async function listDirectory(path: string, directory?: string): Promise<FileNode[]> {
+export async function listDirectory(path: string, directory?: string, serverId?: string): Promise<FileNode[]> {
   if (!isRootDirectoryPath(path)) {
-    return fetchDirectory(path, directory)
+    return fetchDirectory(path, directory, serverId)
   }
 
-  const key = getRootDirectoryCacheKey(directory)
+  const key = getRootDirectoryCacheKey(directory, serverId)
   const now = Date.now()
   const cached = rootDirectoryCache.get(key)
   if (cached && cached.expiresAt > now) {
@@ -74,7 +75,7 @@ export async function listDirectory(path: string, directory?: string): Promise<F
     return inflight
   }
 
-  const request = fetchDirectory(path === '' ? '.' : path, directory)
+  const request = fetchDirectory(path === '' ? '.' : path, directory, serverId)
     .then(data => {
       rootDirectoryCache.set(key, { data, expiresAt: Date.now() + ROOT_DIRECTORY_CACHE_TTL_MS })
       return data
@@ -87,40 +88,40 @@ export async function listDirectory(path: string, directory?: string): Promise<F
   return request
 }
 
-export async function prefetchRootDirectory(directory?: string): Promise<void> {
-  await listDirectory('.', directory)
+export async function prefetchRootDirectory(directory?: string, serverId?: string): Promise<void> {
+  await listDirectory('.', directory, serverId)
 }
 
 /**
  * 读取文件内容
  */
-export async function getFileContent(path: string, directory?: string): Promise<FileContent> {
-  const sdk = getSDKClient()
-  return unwrap(await sdk.file.read({ path, directory: formatPathForApi(directory) }))
+export async function getFileContent(path: string, directory?: string, serverId?: string): Promise<FileContent> {
+  const sdk = getSDKClient(serverId)
+  return unwrap(await sdk.file.read({ path, directory: formatPathForApi(directory, serverId) }))
 }
 
 /**
  * 获取文件 git 状态
  */
-export async function getFileStatus(directory?: string): Promise<FileStatusItem[]> {
-  const sdk = getSDKClient()
-  return unwrap(await sdk.file.status({ directory: formatPathForApi(directory) }))
+export async function getFileStatus(directory?: string, serverId?: string): Promise<FileStatusItem[]> {
+  const sdk = getSDKClient(serverId)
+  return unwrap(await sdk.file.status({ directory: formatPathForApi(directory, serverId) }))
 }
 
 /**
  * 搜索代码符号
  */
-export async function searchSymbols(query: string, directory?: string): Promise<SymbolInfo[]> {
-  const sdk = getSDKClient()
-  return unwrap(await sdk.find.symbols({ query, directory: formatPathForApi(directory) }))
+export async function searchSymbols(query: string, directory?: string, serverId?: string): Promise<SymbolInfo[]> {
+  const sdk = getSDKClient(serverId)
+  return unwrap(await sdk.find.symbols({ query, directory: formatPathForApi(directory, serverId) }))
 }
 
 /**
  * 搜索文件正文内容
  */
-export async function searchText(pattern: string, directory?: string): Promise<TextSearchMatch[]> {
-  const sdk = getSDKClient()
-  return unwrap(await sdk.find.text({ pattern, directory: formatPathForApi(directory) }))
+export async function searchText(pattern: string, directory?: string, serverId?: string): Promise<TextSearchMatch[]> {
+  const sdk = getSDKClient(serverId)
+  return unwrap(await sdk.find.text({ pattern, directory: formatPathForApi(directory, serverId) }))
 }
 
 /**

@@ -130,6 +130,95 @@ describe('MarkdownRenderer', () => {
     expect(container.querySelector('mark')).toHaveTextContent('mark')
   })
 
+  it('keeps tilde number ranges literal instead of strikethrough or subscript', () => {
+    const cases = [
+      '范围 1~2~3 之间',
+      '大约 3~5个，7~9个',
+      '用时 1~2小时，约 3~5公里',
+      '温度 1~2度，湿度 3~4%',
+      '版本 1.0~2.0 已发布',
+    ]
+    for (const content of cases) {
+      const { container } = render(<MarkdownRenderer content={content} />)
+      const paragraph = container.querySelector('p')
+      expect(paragraph).toHaveTextContent(content)
+      expect(paragraph?.querySelector('del')).toBeNull()
+      expect(paragraph?.querySelector('sub')).toBeNull()
+    }
+  })
+
+  it('still renders chemical subscripts while keeping digit ranges literal in the same line', () => {
+    const { container } = render(<MarkdownRenderer content={'H~2~O 的沸点约 90~100度，CO~2~ 浓度 400~500ppm'} />)
+
+    expect(container.querySelectorAll('sub')).toHaveLength(2)
+    expect(container.querySelectorAll('del')).toHaveLength(0)
+    expect(container.querySelector('p')).toHaveTextContent('H2O 的沸点约 90~100度，CO2 浓度 400~500ppm')
+  })
+
+  it('keeps ~~double tilde~~ strikethrough working', () => {
+    const { container } = render(<MarkdownRenderer content={'这是 ~~删除的内容~~ 测试'} />)
+
+    expect(container.querySelector('del')).toHaveTextContent('删除的内容')
+  })
+
+  it('renders backslash-paren LaTeX inline math delimiters', () => {
+    const { container } = render(<MarkdownRenderer content={String.raw`公式 \(E = mc^2\) 很棒，还有 \(x^2 + y^2 = z^2\)`} />)
+
+    expect(container.querySelectorAll('.katex')).toHaveLength(2)
+    expect(container.querySelector('.katex')).not.toHaveTextContent('\\(')
+  })
+
+  it('renders backslash-bracket LaTeX display math delimiters', () => {
+    const { container } = render(<MarkdownRenderer content={String.raw`\[E = mc^2\]`} />)
+
+    expect(container.querySelector('.katex-display')).toBeInTheDocument()
+    expect(container.querySelector('.katex-error')).not.toBeInTheDocument()
+  })
+
+  it('renders multi-line backslash-bracket display math with = lines (issue #152)', () => {
+    const content = String.raw`\[
+\mathcal R_{\mathrm{final}}
+=
+\mathcal R_{\mathrm{Stage\,2}}
+\cup
+\mathcal E_{\mathrm{verified}}.
+\]`
+    const { container } = render(<MarkdownRenderer content={content} />)
+
+    // `=` 单独成行是 markdown 的 Setext 标题语法，块级数学扩展必须抢在它之前把公式整体吃下
+    expect(container.querySelector('h1')).not.toBeInTheDocument()
+    expect(container.querySelector('.katex-display')).toBeInTheDocument()
+    expect(container.querySelector('.katex-error')).not.toBeInTheDocument()
+  })
+
+  it('renders multi-line dollar display math embedded in a document', () => {
+    const content = String.raw`根据公式
+$$
+x + y = z
+$$
+可得`
+    const { container } = render(<MarkdownRenderer content={content} />)
+
+    expect(container.querySelector('.katex-display')).toBeInTheDocument()
+    expect(container.querySelector('.katex-error')).not.toBeInTheDocument()
+  })
+
+  it('renders math inside table cells', () => {
+    const content = String.raw`| a | b |
+|---|---|
+| $x_i$ | \(y^2\) |`
+    const { container } = render(<MarkdownRenderer content={content} />)
+
+    expect(container.querySelectorAll('.katex')).toHaveLength(2)
+  })
+
+  it('keeps escaped parentheses and brackets literal when they are not math', () => {
+    const { container } = render(<MarkdownRenderer content={String.raw`\(注意\) 这里 \[0\] 是索引，(a) 是文本`} />)
+
+    expect(container.querySelector('.katex')).not.toBeInTheDocument()
+    expect(container.querySelector('p')).toHaveTextContent('(注意) 这里 [0] 是索引，(a) 是文本')
+  })
+
   it('renders footnote references and definitions', () => {
     const content = '这是一段需要说明的文字[^ref1]。这里还有另一个引用[^ref2]。\n\n[^ref2]: 第二个脚注，来自某文献第 42 页。'
     const { container } = render(<MarkdownRenderer content={content} />)
@@ -432,6 +521,29 @@ describe('MarkdownRenderer', () => {
     const { container } = render(<MarkdownRenderer content={'Inline $x + y$ math'} />)
 
     expect(container.querySelector('.katex')).toBeInTheDocument()
+  })
+
+  it('renders inline dollar math whose content contains underscores and backslashes', () => {
+    const content = String.raw`公式 $E = mc^2$ 和 $\mathcal{R}_{\mathrm{final}} = \mathcal{R}_{\mathrm{Stage\,2}} \cup \mathcal{E}_{\mathrm{verified}}$。`
+    const { container } = render(<MarkdownRenderer content={content} />)
+
+    // `_` / `\` 会被 marked 的 emStrong / escape 拆散，数学必须由 marked 扩展在它们之前拦截
+    expect(container.querySelectorAll('.katex')).toHaveLength(2)
+    expect(container.querySelector('.katex-error')).not.toBeInTheDocument()
+  })
+
+  it('keeps escaped dollar signs literal', () => {
+    const { container } = render(<MarkdownRenderer content={'价格 \\$5 和 \\$10 元'} />)
+
+    expect(container.querySelector('.katex')).not.toBeInTheDocument()
+    expect(container.querySelector('p')).toHaveTextContent('价格 $5 和 $10 元')
+  })
+
+  it('keeps unpaired dollar delimiters literal', () => {
+    const { container } = render(<MarkdownRenderer content={'空公式 $$ 和 $ 不渲染，成本约 5 元'} />)
+
+    expect(container.querySelector('.katex')).not.toBeInTheDocument()
+    expect(container.querySelector('p')).toHaveTextContent('空公式 $$ 和 $ 不渲染，成本约 5 元')
   })
 
   it('renders multiline display math blocks', () => {

@@ -142,7 +142,7 @@ describe('SessionChangesPanel', () => {
       await Promise.resolve()
     })
 
-    expect(getLastTurnDiff).toHaveBeenCalledWith('session-1', '/repo')
+    expect(getLastTurnDiff).toHaveBeenCalledWith('session-1', '/repo', undefined)
     expect(screen.getByText('1f')).toBeInTheDocument()
     expect(screen.getAllByText('+1').length).toBeGreaterThan(0)
     expect(screen.getAllByText('-1').length).toBeGreaterThan(0)
@@ -175,7 +175,7 @@ describe('SessionChangesPanel', () => {
       await Promise.resolve()
     })
 
-    expect(getSessionDiff).toHaveBeenCalledWith('session-1', '/repo')
+    expect(getSessionDiff).toHaveBeenCalledWith('session-1', '/repo', undefined)
     expect(changeScopeStore.getMode('session-1')).toBe('session')
     expect(screen.getByText('2f')).toBeInTheDocument()
     expect(screen.getAllByText('app.ts').length).toBeGreaterThan(0)
@@ -205,7 +205,7 @@ describe('SessionChangesPanel', () => {
       await Promise.resolve()
     })
 
-    expect(getVcsDiff).toHaveBeenCalledWith('branch', '/repo')
+    expect(getVcsDiff).toHaveBeenCalledWith('branch', '/repo', undefined)
     expect(changeScopeStore.getMode('session-1')).toBe('branch')
     expect(screen.getAllByText('branch.ts').length).toBeGreaterThan(0)
   })
@@ -294,8 +294,8 @@ describe('SessionChangesPanel', () => {
       await Promise.resolve()
     })
 
-    expect(initGitProject).toHaveBeenCalledWith('/repo')
-    expect(getLastTurnDiff).toHaveBeenCalledWith('session-1', '/repo')
+    expect(initGitProject).toHaveBeenCalledWith('/repo', undefined)
+    expect(getLastTurnDiff).toHaveBeenCalledWith('session-1', '/repo', undefined)
   })
 
   it('opens the selected change file in the files panel from the context menu', async () => {

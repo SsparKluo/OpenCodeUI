@@ -56,6 +56,8 @@ function reconcileDiffPreviewState(diffs: FileDiff[], openFiles: string[], activ
 interface SessionChangesPanelProps {
   sessionId: string
   directory?: string
+  /** 数据所属服务器（缺省用活动服务器；右侧面板跟随焦点 session 时传入） */
+  serverId?: string
   position?: PanelPosition
   isResizing?: boolean
 }
@@ -63,6 +65,7 @@ interface SessionChangesPanelProps {
 export const SessionChangesPanel = memo(function SessionChangesPanel({
   sessionId,
   directory,
+  serverId,
   position = 'right',
   isResizing: isPanelResizing = false,
 }: SessionChangesPanelProps) {
@@ -325,11 +328,11 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
     setError(null)
 
     try {
-      const nextProject = await getCurrentProject(directory)
+      const nextProject = await getCurrentProject(directory, serverId)
       if (requestId !== projectRequestIdRef.current) return null
       setProject(nextProject)
       if (nextProject.vcs) {
-        const nextVcsInfo = await getVcsInfo(directory).catch(() => null)
+        const nextVcsInfo = await getVcsInfo(directory, serverId).catch(() => null)
         if (requestId !== projectRequestIdRef.current) return null
         setVcsInfo(nextVcsInfo)
       } else {
@@ -363,11 +366,11 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
       try {
         let data: FileDiff[]
         if (mode === 'git' || mode === 'branch') {
-          data = await getVcsDiff(mode as VcsDiffMode, directory)
+          data = await getVcsDiff(mode as VcsDiffMode, directory, serverId)
         } else if (mode === 'session') {
-          data = await getSessionDiff(sessionId, directory)
+          data = await getSessionDiff(sessionId, directory, serverId)
         } else {
-          data = await getLastTurnDiff(sessionId, directory)
+          data = await getLastTurnDiff(sessionId, directory, serverId)
         }
 
         if (requestId !== diffRequestIdRef.current[mode]) return
@@ -463,7 +466,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
     setError(null)
 
     try {
-      const nextProject = await initGitProject(directory)
+      const nextProject = await initGitProject(directory, serverId)
       setProject(nextProject)
       setVcsInfo(null)
       setGitDiffs([])
