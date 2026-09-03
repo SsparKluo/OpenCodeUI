@@ -246,4 +246,21 @@ describe('recoverSelectionMarkdown', () => {
     const selection = selectText(container.querySelector('#sel')!)
     expect(recoverSelectionMarkdown(selection)).toBe('$x+y$')
   })
+
+  it('recovers latex inside a mixed prose + formula selection', () => {
+    const source = 'buffer size is $b \\times C_l \\times H_l \\times W_l$.'
+    container.innerHTML = `
+      <div data-md-source="${source.replace(/"/g, '&quot;')}">
+        <p id="sel">
+          buffer size is
+          <span class="katex" data-latex="b \\times C_l \\times H_l \\times W_l">
+            <span class="katex-html">b×Cl×Hl×Wl</span>
+          </span>
+          .
+        </p>
+      </div>
+    `
+    const selection = selectText(container.querySelector('#sel')!)
+    expect(recoverSelectionMarkdown(selection)).toBe(source)
+  })
 })

@@ -13,8 +13,10 @@
  *     back to the rendered plain text.
  */
 
-const MARKUP_CHAR = /[`*_~[\]()#>|!\\]/
+const MARKUP_CHAR = /[`*_~$[\]()#>|!\\]/
 const WHITESPACE = /\s/
+/** Trailing spaces before these are layout artifacts from block/formula boundaries. */
+const PUNCT_AFTER_SPACE = /[.,!?;:]/
 const ORDERED_LIST_MARKER = /^\d+\.\s+/
 const UNORDERED_LIST_MARKER = /^[*+-]\s+/
 
@@ -39,6 +41,23 @@ function listMarkerLength(value: string, index: number): number {
   return unordered ? unordered[0].length : 0
 }
 
+function nextContentChar(value: string, from: number): string | null {
+  for (let i = from; i < value.length; ) {
+    const markerLen = listMarkerLength(value, i)
+    if (markerLen > 0) {
+      i += markerLen
+      continue
+    }
+    const ch = value[i]!
+    if (MARKUP_CHAR.test(ch) || WHITESPACE.test(ch)) {
+      i++
+      continue
+    }
+    return ch
+  }
+  return null
+}
+
 /**
  * Strip Markdown punctuation and collapse whitespace so rendered plain text
  * can be located inside the raw source.
@@ -61,6 +80,13 @@ export function normalizeForMatch(value: string): NormalizedIndex {
     }
     if (WHITESPACE.test(ch)) {
       if (text.length === 0 || text.endsWith(' ')) {
+        i++
+        continue
+      }
+      // Drop spaces that only exist because a formula/block boundary sat
+      // between content and trailing punctuation ("Wl$ ." vs "Wl$.").
+      const next = nextContentChar(value, i + 1)
+      if (next && PUNCT_AFTER_SPACE.test(next)) {
         i++
         continue
       }
@@ -453,6 +479,34 @@ export function wrapLatexSource(sourceMarkdown: string | null, latex: string): s
   return trimmed.includes('\n') ? `$$${trimmed}$$` : `$${trimmed}$`
 }
 
+function rangeEdgeElement(container: Node): Element | null {
+  return container.nodeType === Node.ELEMENT_NODE
+    ? (container as Element)
+    : container.parentElement
+}
+
+export function readKatexLatex(katexEl: Element): string | null {
+  return (
+    katexEl.getAttribute('data-latex') ??
+    katexEl.querySelector('annotation[encoding="application/x-tex"]')?.textContent ??
+    null
+  )
+}
+
+/**
+ * Expand a live Range so any intersecting `.katex` node is included in full.
+ * Partial formula selections have no stable rendered substring, so we always
+ * take the whole formula.
+ */
+export function expandRangeToKatexBoundaries(range: Range): Range {
+  const expanded = range.cloneRange()
+  const startKatex = rangeEdgeElement(range.startContainer)?.closest('.katex')
+  const endKatex = rangeEdgeElement(range.endContainer)?.closest('.katex')
+  if (startKatex) expanded.setStartBefore(startKatex)
+  if (endKatex) expanded.setEndAfter(endKatex)
+  return expanded
+}
+
 /**
  * If `range` is entirely inside a single `.katex` node, return the wrapped
  * TeX source. Otherwise null.
@@ -461,27 +515,58 @@ export function recoverKatexFromRange(
   range: Range,
   sourceMarkdown: string | null,
 ): string | null {
-  const startEl =
-    range.startContainer.nodeType === Node.ELEMENT_NODE
-      ? (range.startContainer as Element)
-      : range.startContainer.parentElement
-  const endEl =
-    range.endContainer.nodeType === Node.ELEMENT_NODE
-      ? (range.endContainer as Element)
-      : range.endContainer.parentElement
+  const startEl = rangeEdgeElement(range.startContainer)
+  const endEl = rangeEdgeElement(range.endContainer)
   if (!startEl || !endEl) return null
 
   const startKatex = startEl.closest('.katex')
   const endKatex = endEl.closest('.katex')
   if (!startKatex || startKatex !== endKatex) return null
 
-  const latex =
-    startKatex.getAttribute('data-latex') ??
-    startKatex.querySelector('annotation[encoding="application/x-tex"]')?.textContent ??
-    null
+  const latex = readKatexLatex(startKatex)
   if (!latex) return null
 
   return wrapLatexSource(sourceMarkdown, latex)
+}
+
+/**
+ * Serialize a range to text, substituting each `.katex` node with its wrapped
+ * TeX source. Used for mixed selections (prose + formula) where
+ * `selection.toString()` would otherwise emit rendered glyphs / MathML soup.
+ */
+export function serializeRangeWithLatex(
+  range: Range,
+  sourceMarkdown: string | null,
+): string {
+  const expanded = expandRangeToKatexBoundaries(range)
+  const fragment = expanded.cloneContents()
+  const katexNodes = fragment.querySelectorAll('.katex')
+  if (katexNodes.length === 0) return expanded.toString()
+
+  katexNodes.forEach(node => {
+    const latex = readKatexLatex(node)
+    const replacement = latex ? wrapLatexSource(sourceMarkdown, latex) : ''
+    node.replaceWith(document.createTextNode(replacement))
+  })
+
+  return fragment.textContent ?? ''
+}
+
+function rangeIntersectsKatex(range: Range): boolean {
+  const startKatex = rangeEdgeElement(range.startContainer)?.closest('.katex')
+  const endKatex = rangeEdgeElement(range.endContainer)?.closest('.katex')
+  if (startKatex || endKatex) return true
+
+  const root = range.commonAncestorContainer
+  const rootEl = rangeEdgeElement(root)
+  if (!rootEl) return false
+  return [...rootEl.querySelectorAll('.katex')].some(el => {
+    try {
+      return range.intersectsNode(el)
+    } catch {
+      return false
+    }
+  })
 }
 
 /**
@@ -507,8 +592,22 @@ export function recoverSelectionMarkdown(selection: Selection): string {
   const source = root?.getAttribute('data-md-source') ?? null
 
   if (selection.rangeCount > 0) {
-    const katex = recoverKatexFromRange(selection.getRangeAt(0), source)
-    if (katex != null) return katex
+    const range = selection.getRangeAt(0)
+
+    // Selection entirely inside one formula → just the wrapped TeX.
+    const pureKatex = recoverKatexFromRange(range, source)
+    if (pureKatex != null) return pureKatex
+
+    // Mixed prose + formula: substitute TeX into the selected text first so
+    // normalize-matching sees `\times` / `_l` instead of rendered glyphs.
+    if (rangeIntersectsKatex(range)) {
+      const withLatex = serializeRangeWithLatex(range, source)
+      if (source) {
+        const recovered = recoverMarkdownFromPlain(source, withLatex)
+        if (recovered != null) return recovered
+      }
+      return withLatex
+    }
   }
 
   if (source) {
