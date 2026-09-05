@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
-  expandMarkdownSlice,
+  renderMarkdownSlice,
   findUniqueIndex,
   normalizeForMatch,
   recoverKatexFromRange,
@@ -109,23 +109,38 @@ describe('recoverMarkdownFromPlain', () => {
       '默认已改为 **`reconstruct`**',
     )
   })
-})
 
-describe('expandMarkdownSlice', () => {
-  it('expands both * and ** emphasis via marked spans', () => {
-    expect(expandMarkdownSlice('*hi*', 1, 3)).toEqual({ start: 0, end: 4 })
-    expect(expandMarkdownSlice('**hi**', 2, 4)).toEqual({ start: 0, end: 6 })
+  it('wraps partially covered spans with markers instead of pulling unselected content', () => {
+    expect(recoverMarkdownFromPlain('**something** else', 'thing')).toBe('**thing**')
+    expect(recoverMarkdownFromPlain('use `npm install` now', 'npm')).toBe('`npm`')
+    expect(recoverMarkdownFromPlain('see [docs here](https://example.com)', 'docs')).toBe(
+      '[docs](https://example.com)',
+    )
+    expect(recoverMarkdownFromPlain('# Title here', 'Title')).toBe('# Title')
   })
 
-  it('completes nested strong+codespan when only the inner word is covered', () => {
+  it('re-wraps nested em+strong without over-marking on partial coverage', () => {
+    expect(recoverMarkdownFromPlain('***both*** sides', 'both')).toBe('***both***')
+    expect(recoverMarkdownFromPlain('***both*** sides', 'oth')).toBe('***oth***')
+  })
+
+  it('emits only the selected lines of a fenced code block', () => {
+    const source = '```ts\nconst a = 1\nconst b = 2\n```'
+    expect(recoverMarkdownFromPlain(source, 'const b = 2')).toBe('```ts\nconst b = 2\n```')
+  })
+})
+
+describe('renderMarkdownSlice', () => {
+  it('wraps * and ** emphasis via marked spans', () => {
+    expect(renderMarkdownSlice('*hi*', 1, 3)).toBe('*hi*')
+    expect(renderMarkdownSlice('**hi**', 2, 4)).toBe('**hi**')
+  })
+
+  it('keeps nested strong+codespan closed when only the inner word is covered', () => {
     const source = '默认已改为 **`reconstruct`**。'
-    // content offsets for "reconstruct"
     const start = source.indexOf('reconstruct')
     const end = start + 'reconstruct'.length
-    expect(expandMarkdownSlice(source, start, end)).toEqual({
-      start: source.indexOf('**`reconstruct`**'),
-      end: source.indexOf('**`reconstruct`**') + '**`reconstruct`**'.length,
-    })
+    expect(renderMarkdownSlice(source, start, end)).toBe('**`reconstruct`**')
   })
 })
 

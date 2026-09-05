@@ -6,9 +6,10 @@
  *     source from `data-latex` / MathML annotation, re-wrapped with the
  *     delimiter found in `sourceMarkdown`.
  *  2. Otherwise normalize away Markdown punctuation + collapse whitespace,
- *     uniquely locate the selection in the source, then expand the raw
- *     slice via the marked AST: any token only partially covered is grown
- *     to its full `token.raw` (so nested strong+codespan never loses a closer).
+ *     uniquely locate the selection in the source, then rebuild the slice
+ *     from the marked AST: fully covered wrapper tokens are emitted
+ *     verbatim, partially covered ones re-emit only their markers around
+ *     the selected content (`**something**` + select `thing` → `**thing**`).
  *  3. Return null when recovery is ambiguous or impossible — caller falls
  *     back to the rendered plain text.
  */
@@ -124,14 +125,27 @@ export function findUniqueIndex(haystack: string, needle: string): number {
   return first
 }
 
-type AstSpan = { start: number; end: number; type: string }
+type EmitSpan = {
+  /** Absolute [start, end) of `token.raw` in the source. */
+  start: number
+  end: number
+  /** Marker text before the token content ('**', '`', '[', '# ', '> '). */
+  open: string
+  /** Marker text after the token content ('**', '`', '](url)', '\n'). */
+  close: string
+  /** Close must always be emitted, even when the selection stops early. */
+  closeRequired: boolean
+  /** Unknown marker shape → fall back to emitting the whole raw on overlap. */
+  verbatim: boolean
+  children: EmitSpan[]
+}
 
 /**
  * Token types whose `raw` adds markers outside the visible text. Transparent
  * containers like `paragraph` / `list` are excluded so a partial selection
  * does not swallow the whole block.
  */
-const EXPAND_TOKEN_TYPES = new Set([
+const WRAPPER_TOKEN_TYPES = new Set([
   'strong',
   'em',
   'del',
@@ -150,15 +164,111 @@ function childTokens(token: Token): Token[] | null {
   return null
 }
 
-/**
- * Walk marked's lexer output and record absolute [start, end) spans for every
- * token that owns a `raw` string. Children are placed by searching for their
- * `raw` inside the parent's raw (unique within that parent).
- */
-export function collectMarkdownSpans(source: string): AstSpan[] {
-  const spans: AstSpan[] = []
+/** Detect a run delimiter (`*`/`_`/`~`) usable on both ends, capped per type. */
+function detectRunMarkers(raw: string, cap: number): { open: string; close: string } | null {
+  const ch = raw[0]
+  if (ch !== '*' && ch !== '_' && ch !== '~') return null
+  let openLen = 0
+  while (raw[openLen] === ch) openLen++
+  let closeLen = 0
+  while (raw[raw.length - 1 - closeLen] === ch) closeLen++
+  const len = Math.min(openLen, closeLen, cap)
+  if (len < 1) return null
+  const marker = ch.repeat(len)
+  return { open: marker, close: marker }
+}
 
-  const visit = (tokens: Token[], parentStart: number, parentRaw: string) => {
+function detectCodespanMarkers(raw: string): { open: string; close: string } | null {
+  if (raw[0] !== '`') return null
+  let openLen = 0
+  while (raw[openLen] === '`') openLen++
+  let closeLen = 0
+  while (raw[raw.length - 1 - closeLen] === '`') closeLen++
+  const len = Math.min(openLen, closeLen)
+  if (len < 1) return null
+  const marker = '`'.repeat(len)
+  return { open: marker, close: marker }
+}
+
+function detectLinkMarkers(raw: string, isImage: boolean): { open: string; close: string } | null {
+  const open = isImage ? raw.slice(0, 2) : raw.slice(0, 1)
+  if (open !== (isImage ? '![' : '[')) return null
+  const closeIdx = raw.lastIndexOf('](')
+  if (closeIdx === -1 || closeIdx < open.length || !raw.endsWith(')')) return null
+  return { open, close: raw.slice(closeIdx) }
+}
+
+function detectMarkers(token: Token, raw: string): Omit<EmitSpan, 'start' | 'end' | 'children'> | null {
+  const blockClose = raw.endsWith('\n') ? '\n' : ''
+  switch (token.type) {
+    case 'strong': {
+      const m = detectRunMarkers(raw, 2)
+      return m && { ...m, closeRequired: true, verbatim: false }
+    }
+    case 'em': {
+      const m = detectRunMarkers(raw, 1)
+      return m && { ...m, closeRequired: true, verbatim: false }
+    }
+    case 'del': {
+      const m = detectRunMarkers(raw, 2)
+      return m && { ...m, closeRequired: true, verbatim: false }
+    }
+    case 'codespan': {
+      const m = detectCodespanMarkers(raw)
+      return m && { ...m, closeRequired: true, verbatim: false }
+    }
+    case 'link': {
+      const m = detectLinkMarkers(raw, false)
+      return m && { ...m, closeRequired: true, verbatim: false }
+    }
+    case 'image': {
+      const m = detectLinkMarkers(raw, true)
+      return m && { ...m, closeRequired: true, verbatim: false }
+    }
+    case 'heading': {
+      const m = /^#{1,6}(?:[ \t]+|$)/.exec(raw)
+      return m && { open: m[0], close: '', closeRequired: false, verbatim: false }
+    }
+    case 'blockquote': {
+      const m = /^>[ \t]?/.exec(raw)
+      return m && { open: m[0], close: blockClose, closeRequired: false, verbatim: false }
+    }
+    case 'list_item': {
+      const m = /^\s*(?:[-+*]|\d+[.)])(?:[ \t]+\[[ xX]\])?[ \t]+/.exec(raw)
+      return m && { open: m[0], close: blockClose, closeRequired: false, verbatim: false }
+    }
+    case 'code': {
+      const lines = raw.split('\n')
+      let last = lines.length - 1
+      while (last > 0 && lines[last] === '') last--
+      const fence = /^\s*(`{3,}|~{3,})/
+      if (lines.length >= 2 && fence.test(lines[0]!) && fence.test(lines[last]!)) {
+        const tail = '\n'.repeat(lines.length - 1 - last)
+        return {
+          open: `${lines[0]}\n`,
+          close: `\n${lines[last]}${tail}`,
+          closeRequired: true,
+          verbatim: false,
+        }
+      }
+      // Indented code has per-line markers we do not reconstruct.
+      return { open: '', close: '', closeRequired: false, verbatim: true }
+    }
+    default:
+      return null
+  }
+}
+
+/**
+ * Walk marked's lexer output and build a forest of wrapper spans with
+ * absolute [start, end) offsets. Children are placed by searching for their
+ * `raw` inside the parent's raw (unique within that parent). Tokens whose
+ * marker shape cannot be detected become verbatim spans.
+ */
+function buildSpanForest(source: string): EmitSpan[] {
+  const forest: EmitSpan[] = []
+
+  const visit = (tokens: Token[], parentStart: number, parentRaw: string, out: EmitSpan[]) => {
     let cursor = 0
     for (const token of tokens) {
       const raw = typeof token.raw === 'string' ? token.raw : ''
@@ -170,48 +280,72 @@ export function collectMarkdownSpans(source: string): AstSpan[] {
 
       const start = parentStart + rel
       const end = start + raw.length
-      spans.push({ start, end, type: token.type })
       cursor = rel + raw.length
 
-      const children = childTokens(token)
-      if (children && children.length > 0) visit(children, start, raw)
+      const children: EmitSpan[] = []
+      const nested = childTokens(token)
+      if (nested && nested.length > 0) visit(nested, start, raw, children)
+
+      if (WRAPPER_TOKEN_TYPES.has(token.type)) {
+        const markers = detectMarkers(token, raw)
+        if (markers) {
+          out.push({ start, end, children, ...markers })
+          continue
+        }
+      }
+      out.push(...children)
     }
   }
 
-  visit(marked.lexer(source) as Token[], 0, source)
-  return spans
+  visit(marked.lexer(source) as Token[], 0, source, forest)
+  return forest
 }
 
 /**
- * Expand a raw [start, end) content match so every marked wrapper token it
- * partially covers is included in full via `token.raw`. This is what keeps
- * nested strong+codespan closed when the selection only saw the inner word.
+ * Emit the source slice [lo, hi) as markdown: fully covered spans verbatim,
+ * partially covered wrappers as open + selected content + close. Gaps and
+ * children that did not place flow through as raw source slices (which keeps
+ * per-line prefixes like `> ` on blockquote continuation lines).
  */
-export function expandMarkdownSlice(source: string, start: number, end: number): { start: number; end: number } {
-  let lo = Math.max(0, Math.min(start, source.length))
-  let hi = Math.max(lo, Math.min(end, source.length))
-  if (lo === hi) return { start: lo, end: hi }
+function emitSpanSlice(spans: EmitSpan[], lo: number, hi: number, source: string): string {
+  let out = ''
+  let cursor = lo
+  for (const span of spans) {
+    if (span.end <= lo || span.start >= hi) continue
+    if (span.start > cursor) out += source.slice(cursor, Math.min(span.start, hi))
 
-  const spans = collectMarkdownSpans(source)
-  let changed = true
-  while (changed) {
-    changed = false
-    for (const span of spans) {
-      if (!EXPAND_TOKEN_TYPES.has(span.type)) continue
-      if (span.end <= lo || span.start >= hi) continue
-      if (span.start >= lo && span.end <= hi) continue
-      if (span.start < lo) {
-        lo = span.start
-        changed = true
-      }
-      if (span.end > hi) {
-        hi = span.end
-        changed = true
-      }
+    if (span.verbatim || (span.start >= lo && span.end <= hi)) {
+      out += source.slice(span.start, span.end)
+      cursor = span.end
+      continue
     }
-  }
 
-  return { start: lo, end: hi }
+    const contentStart = span.start + span.open.length
+    const contentEnd = span.end - span.close.length
+    const from = Math.max(lo, contentStart)
+    const to = Math.min(hi, contentEnd)
+    cursor = Math.min(hi, span.end)
+    // Selection only covered markers — nothing meaningful to wrap.
+    if (to <= from) continue
+
+    out += span.open
+    out += emitSpanSlice(span.children, from, to, source)
+    if (span.closeRequired || hi >= span.end) out += span.close
+  }
+  if (cursor < hi) out += source.slice(cursor, hi)
+  return out
+}
+
+/**
+ * Rebuild the raw markdown for a content range [start, end): wrapper tokens
+ * partially covered by the range contribute their markers around the covered
+ * content only, never the unselected remainder of the token.
+ */
+export function renderMarkdownSlice(source: string, start: number, end: number): string {
+  const lo = Math.max(0, Math.min(start, source.length))
+  const hi = Math.max(lo, Math.min(end, source.length))
+  if (lo === hi) return source.slice(lo, hi)
+  return emitSpanSlice(buildSpanForest(source), lo, hi, source)
 }
 
 /**
@@ -249,8 +383,7 @@ export function recoverMarkdownFromPlain(
   const raw = normalizedMatchToRawRange(source, matchStart, selected.text.length)
   if (!raw) return null
 
-  const expanded = expandMarkdownSlice(sourceMarkdown, raw.start, raw.end)
-  return sourceMarkdown.slice(expanded.start, expanded.end)
+  return renderMarkdownSlice(sourceMarkdown, raw.start, raw.end)
 }
 
 /**
