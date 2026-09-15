@@ -453,6 +453,7 @@
       "retryStart": "Retry start",
       "updating": "Updating...",
       "setDefault": "Set as default server",
+      "setDefaultHint": "Auto-connect to this WSL server when the app starts (the default server preference is currently offered on WSL server cards only)",
       "unsetDefault": "Unset default server",
       "defaultTag": "Default"
     },

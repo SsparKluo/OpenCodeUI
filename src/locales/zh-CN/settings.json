@@ -453,6 +453,7 @@
       "retryStart": "重试启动",
       "updating": "正在更新...",
       "setDefault": "设为默认服务器",
+      "setDefaultHint": "应用启动后自动连接此 WSL 服务器（默认服务器偏好目前仅在 WSL 服务器卡片上提供）",
       "unsetDefault": "取消默认服务器",
       "defaultTag": "默认"
     },

@@ -8,7 +8,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
-import { CircleIcon, KeyIcon, PlugIcon, SpinnerIcon, TrashIcon, WifiIcon, WifiOffIcon } from '../../../components/Icons'
+import { CircleIcon, KeyIcon, PlugIcon, SpinnerIcon, TrashIcon } from '../../../components/Icons'
 import { wslApi } from '../../../api/wsl'
 import { useWslStore } from '../../../store/wslStore'
 import { serverStore } from '../../../store/serverStore'
@@ -19,18 +19,25 @@ import { wslOpencodeAction, wslRuntimeRetryable } from '../settings-model'
 import type { WslServerItem } from '../types'
 import type { ServerHealth } from '../../../store/serverStore'
 
-/** runtime 生命周期状态点：与健康检查（探测 URL 可达性）语义不同，两者并存 */
+/** runtime 生命周期状态点（评审 UI5）。刻意与右侧健康检查按钮用不同的视觉语言：
+ *  圆点表达这台服务自身的进程状态（ready=绿色实心；starting=转圈动画；failed=红色
+ *  实心，具体崩溃原因在行内下方另有红字），Wi-Fi 图标表达"主动探测 URL 是否可达"，
+ *  两者含义不同、形状也不再撞车。
+ *  关于 stopped（灰色空心圆）：当前产品没有"停止"操作入口，它只会作为应用启动时
+ *  restore_persisted 恢复出的初始态短暂出现（后端随即拉起并转入其它状态），
+ *  普通用户无法稳定看到。保留这一形状是为了将来的停止功能不再与 failed 同形同色。 */
 function StatusDot({ kind }: { kind: WslServerItem['runtime']['kind'] }) {
   switch (kind) {
     case 'starting':
       return <SpinnerIcon size={12} className="shrink-0 animate-spin text-text-400" />
     case 'ready':
-      return <WifiIcon size={12} className="shrink-0 text-success-100" />
+      return <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full bg-success-100" />
     case 'failed':
+      return <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full bg-danger-100" />
     case 'stopped':
-      return <WifiOffIcon size={12} className="shrink-0 text-danger-100" />
+      return <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full border border-text-400" />
     default:
-      return <WifiOffIcon size={12} className="shrink-0 text-text-400" />
+      return <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full border border-text-400/50" />
   }
 }
 
@@ -174,7 +181,7 @@ export function WslServerRow({
                 serverStore.setDefaultServer(item.config.id)
               }}
               className={actionButtonClass}
-              title={t('wsl.server.setDefault')}
+              title={t('wsl.server.setDefaultHint')}
               aria-label={t('wsl.server.setDefault')}
             >
               {t('wsl.server.setDefault')}
