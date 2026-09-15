@@ -1037,10 +1037,17 @@ export function subscribeToEvents(callbacks: EventCallbacks): () => void {
   let unsubscribe = subscribeToServerEvents(currentServerId, callbacks)
 
   const offServerChange = serverStore.onServerChange((newServerId, reason) => {
-    // 同 id 且非 runtime 变更 → 无需重订阅。server-runtime-updated 表示端口/鉴权变了
-    // （WSL sidecar 重启），活动中的 SSE 还连着旧地址，必须拆旧建新；
-    // 建连时 URL/鉴权由 getApiBaseUrl/getAuthHeader 从 serverStore 现读，重订阅即拿到新值
-    if (newServerId === currentServerId && reason !== 'server-runtime-updated') return
+    // server-runtime-updated 表示端口/鉴权变了（WSL sidecar 重启、本地运行时 URL 切换），
+    // 活动中的 SSE 还连着旧地址，必须拆旧建新；建连时 URL/鉴权由 getApiBaseUrl/getAuthHeader
+    // 从 serverStore 现读，重订阅即拿到新值。但该广播由 upsertServer 对任意服务器无条件发出
+    // （含非 active 服务器首次注册，如 WSL 就绪）：本 shim 的订阅跟随 active server，
+    // 变化的不是当前订阅的服务器时只能忽略，否则会把订阅错误地「迁移」到非 active 服务器上
+    if (reason === 'server-runtime-updated') {
+      if (newServerId !== currentServerId) return
+    } else if (newServerId === currentServerId) {
+      // 同 id 且非 runtime 变更 → 无需重订阅
+      return
+    }
     unsubscribe()
     currentServerId = newServerId
     unsubscribe = subscribeToServerEvents(currentServerId, callbacks)
