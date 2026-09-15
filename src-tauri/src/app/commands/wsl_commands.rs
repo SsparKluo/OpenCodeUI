@@ -135,8 +135,9 @@ fn decide_online_action(cache: Option<&OnlineCache>, now: u64, force: bool) -> O
 }
 
 /// 运行中的 sidecar 句柄：cancel token 触发后监督任务杀掉子进程。
-/// token 是"所有权凭证"——stop/remove 会先从 map 移除再 cancel，
-/// 监督任务用 attempt 核对 map 里的句柄是否仍是自己，不是则保持静默。
+/// token 是"所有权凭证"——stop/remove 会先从 map 移除再 cancel；
+/// 启动流程的其余清理路径都先用 attempt 核对句柄仍是自己的才移除
+/// （见 should_remove_handle），被顶替的旧流程则保持静默。
 struct SidecarHandle {
     token: CancellationToken,
     attempt: u64,
@@ -617,6 +618,22 @@ pub async fn install_wsl(state: tauri::State<'_, WslState>) -> Result<(), String
     }
 }
 
+/// 安装成功后的收尾判定（纯函数，独立可测）：本命令的成败只由本地操作决定
+/// ——已装列表 + 新发行版探测。在线目录不在输入里：装上发行版不会改变微软
+/// 的在线目录（评审 I1 的旧实现把 `wsl --list --online` 也塞进同一个 match，
+/// 联网一失败就把已成功的 installed+probe 一起判死——前端报错，发行版其实
+/// 装好了）。在线目录的新鲜度由 refresh_distros 的 stale-while-revalidate
+/// 独立负责，谁失败只报谁。
+fn decide_install_finish(
+    installed: Result<Vec<WslInstalledDistro>, String>,
+    probe: Result<WslDistroProbe, String>,
+) -> Result<(Vec<WslInstalledDistro>, WslDistroProbe), String> {
+    match (installed, probe) {
+        (Ok(installed), Ok(probe)) => Ok((installed, probe)),
+        (Err(e), _) | (_, Err(e)) => Err(e),
+    }
+}
+
 /// 安装指定发行版（官方 installDistro：成功后刷新列表并探测该发行版）
 #[command]
 pub async fn install_wsl_distro(name: String, state: tauri::State<'_, WslState>) -> Result<(), String> {
@@ -627,20 +644,19 @@ pub async fn install_wsl_distro(name: String, state: tauri::State<'_, WslState>)
     let result = wsl_runtime::install_wsl_distro(&name, Some(&token)).await;
     match result {
         Ok(r) if r.code == Some(0) => {
+            // 只刷本地：已装列表 + 新发行版探测，不拉在线目录（见 decide_install_finish）
             let installed = wsl_runtime::list_installed_distros(Some(&token)).await;
-            let online = wsl_runtime::list_online_distros(Some(&token)).await;
             let probe = wsl_runtime::probe_distro(&name, Some(&token)).await;
-            match (installed, online, probe) {
-                (Ok(installed), Ok(online), Ok(probe)) => {
+            match decide_install_finish(installed, probe) {
+                Ok((installed, probe)) => {
                     state.set_state(|s| {
                         s.installed = installed;
-                        s.online = online;
                         s.distro_probes.insert(name.clone(), probe);
                     });
                     state.end_job(&token);
                     Ok(())
                 }
-                (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
+                Err(e) => {
                     state.end_job(&token);
                     Err(e)
                 }
@@ -810,6 +826,17 @@ fn is_current_attempt(app: &AppHandle, id: &str, attempt: u64) -> bool {
     attempt_ok && server_ok
 }
 
+/// 健康轮询超时预算：生产路径与单元测试共用同一常量，防止测试与实现漂移。
+const HEALTH_TIMEOUT_MS: u64 = 30_000;
+
+/// 健康轮询超时判定（纯函数，独立可测）：本回合已用时达到预算即超时。
+/// 轮询循环的另两个出口是"就绪"与"进程提前退出"；进程活着但端口永不同
+/// 通时两者都不会触发，没有这个 deadline 判定，任务会以 10Hz 永远轮询、
+/// 服务器永远停在 Starting、任务永不回收。
+fn health_poll_expired(elapsed_ms: u64, timeout_ms: u64) -> bool {
+    elapsed_ms >= timeout_ms
+}
+
 /// 启动单个 WSL 服务器（官方 spawnWslSidecar + startServer 合并）：
 ///
 /// - stdin 下发 `bash -se` 启动脚本（PATH 清洗 /mnt/*、WSLENV=、禁 filewatcher、
@@ -903,6 +930,10 @@ async fn run_start_server(app: &AppHandle, id: &str, attempt: u64) {
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
+    // 与 run_process 同款（评审 I7）：监督任务所在 future 被丢弃（如运行时
+    // 关停）时，child 随之 drop，kill_on_drop 保证 wsl.exe 被杀掉——
+    // 否则会留下一个没人持有句柄的 opencode serve 孤儿进程占着端口
+    cmd.kill_on_drop(true);
 
     #[cfg(target_os = "windows")]
     {
@@ -968,16 +999,18 @@ async fn run_start_server(app: &AppHandle, id: &str, attempt: u64) {
         );
     }
 
-    // Promise.race([health, exit, timedOut])：健康检查 / 提前退出 / 30s 超时
+    // Promise.race([health, exit, timedOut])：健康检查 / 提前退出 / 30s 超时。
+    // 出循环后 failure 为 None 即"健康检查赢"（ready），Some 即失败腿
     let url = format!("http://127.0.0.1:{}", port);
-    let health_timeout_ms: u64 = 30_000;
-    let mut ready = false;
+    // 用 tokio 单调时钟（评审建议）而非 SystemTime：NTP 校时/手动改系统时间
+    // 会让墙上时钟回跳或前跳，导致超时判定失真；elapsed() 只随真实推进增长
+    let poll_started_at = tokio::time::Instant::now();
     let mut failure: Option<String> = None;
-    while !ready && failure.is_none() {
+    while failure.is_none() {
         // attempt 失效（stop/remove/restart）：终止并静默退出
         if !is_current() {
             let _ = child.kill().await;
-            cleanup_sidecar(&state, id);
+            cleanup_sidecar(&state, id, attempt);
             return;
         }
         // 进程在就绪前退出：附带最近输出（官方 startupFailure serverExitedBeforeHealthy）
@@ -996,23 +1029,26 @@ async fn run_start_server(app: &AppHandle, id: &str, attempt: u64) {
             break;
         }
         if super::opencode::is_service_running_with_auth(&url, Some((username, &password))).await {
-            ready = true;
+            // ready：failure 保持 None 退出循环，走后面的 Ready 路径
+            break;
+        }
+        // race 的第三腿 timedOut：进程存活但端口从不通（WSL 端口转发失败的
+        // 常见形态）。必须在循环内判超时——没有这个出口，任务会永远停在下面的
+        // 100ms 轮询里，服务器卡在 Starting，UI 按钮永不恢复。
+        // （官方 healthTimeout）
+        if health_poll_expired(poll_started_at.elapsed().as_millis() as u64, HEALTH_TIMEOUT_MS) {
+            failure = Some(format!(
+                "opencode serve in distribution '{}' did not become healthy within {}ms",
+                distro, HEALTH_TIMEOUT_MS
+            ));
             break;
         }
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
-    if !ready && failure.is_none() {
-        // 健康检查超时（官方 healthTimeout）
-        failure = Some(format!(
-            "opencode serve in distribution '{}' did not become healthy within {}ms",
-            distro, health_timeout_ms
-        ));
-    }
-
     if let Some(message) = failure {
         let _ = child.kill().await;
-        cleanup_sidecar(&state, id);
+        cleanup_sidecar(&state, id, attempt);
         if is_current() {
             set_runtime(&state, id, WslServerRuntime::Failed { message });
         }
@@ -1022,7 +1058,7 @@ async fn run_start_server(app: &AppHandle, id: &str, attempt: u64) {
     // attempt 失效：杀掉本次进程避免泄漏
     if !is_current() {
         let _ = child.kill().await;
-        cleanup_sidecar(&state, id);
+        cleanup_sidecar(&state, id, attempt);
         return;
     }
 
@@ -1041,43 +1077,55 @@ async fn run_start_server(app: &AppHandle, id: &str, attempt: u64) {
     // 监督：Ready 后进程退出 → failed（官方 listener.onExit → serverExited）。
     // token 触发（stop/remove）时先移除句柄再杀进程，监督任务静默退出；
     // 自然退出时句柄还在 map 里（是自己）→ 标记 failed。
+    // wait() 本身也可能返回 Err（系统调用失败等），此时子进程状态未知——
+    // 旧实现 `if let Ok(status)` 让 Err 静默蒸发：句柄留在 map、runtime
+    // 永远停在 Ready 指向一个死/未知进程（评审 I7）。Err 与意外退出同等处理。
     let watch_token = token.clone();
     let mut child = child;
-    if let Ok(status) = tokio::select! {
+    let waited = tokio::select! {
         status = child.wait() => status,
         _ = watch_token.cancelled() => {
             let _ = child.kill().await;
-            cleanup_sidecar(&state, id);
+            cleanup_sidecar(&state, id, attempt);
             return;
         }
-    } {
-        // 只有当 map 里的句柄仍是本次启动注册的（attempt 匹配）才处理退出
-        let owned = state
-            .sidecars
-            .lock()
-            .map(|m| m.get(id).map(|h| h.attempt == attempt).unwrap_or(false))
-            .unwrap_or(false);
-        cleanup_sidecar(&state, id);
-        if owned && is_current() {
-            set_runtime(
-                &state,
-                id,
-                WslServerRuntime::Failed {
-                    message: format!(
-                        "opencode serve exited (exit code {})",
-                        status.code().map(|c| c.to_string()).unwrap_or_else(|| "null".to_string())
-                    ),
-                },
-            );
-        }
+    };
+    // 只有当 map 里的句柄仍是本次启动注册的（attempt 匹配）才处理退出；
+    // cleanup_sidecar 在同一把锁内完成归属判断+摘除，返回归属结果，
+    // 避免旧流程晚醒时误删新流程句柄后还把退出误报成本次服务的失败
+    let owned = cleanup_sidecar(&state, id, attempt);
+    if owned && is_current() {
+        let message = match waited {
+            Ok(status) => format!(
+                "opencode serve exited (exit code {})",
+                status.code().map(|c| c.to_string()).unwrap_or_else(|| "null".to_string())
+            ),
+            Err(e) => format!("failed to wait on opencode serve process: {}", e),
+        };
+        set_runtime(&state, id, WslServerRuntime::Failed { message });
     }
 }
 
-/// 从 sidecars 移除本次启动的句柄（仅当 token 匹配时）
-fn cleanup_sidecar(state: &tauri::State<'_, WslState>, id: &str) {
+/// 句柄归属判定（纯函数，独立可测）：map 里存的 attempt 等于本次 attempt 才允许移除。
+/// 被顶替的旧流程晚醒时（例如卡在健康 HTTP 调用里、期间用户重试且新流程已注册
+/// 自己的句柄），若无条件按 id 移除就会把新流程的"所有权凭证"删掉——此后
+/// stop/remove/退出清理都找不到 token，opencode serve 泄漏在发行版里占着端口，
+/// 而 remove 命令照样返回 Ok。
+fn should_remove_handle(held: Option<u64>, attempt: u64) -> bool {
+    held == Some(attempt)
+}
+
+/// 从 sidecars 移除本次启动的句柄——仅当句柄仍归属本次 attempt（见 should_remove_handle），
+/// 返回是否真正移除（即归属是否仍是本次）。无条件移除点只有 stop_sidecar_internal：
+/// 主动停止方自己摘走句柄；被废弃流程的收尾清理必须先证明句柄还是自己的。
+fn cleanup_sidecar(state: &tauri::State<'_, WslState>, id: &str, attempt: u64) -> bool {
     if let Ok(mut sidecars) = state.sidecars.lock() {
-        sidecars.remove(id);
+        if should_remove_handle(sidecars.get(id).map(|h| h.attempt), attempt) {
+            sidecars.remove(id);
+            return true;
+        }
     }
+    false
 }
 
 /// 停止 sidecar：从 map 移除句柄并 cancel token（监督任务杀进程）。
@@ -1120,17 +1168,25 @@ pub async fn add_wsl_server(
         distro: distro.clone(),
     };
 
-    // 持久化 → 更新内存（runtime 直接 starting，官方同款）→ 立即启动
-    let configs: Vec<WslServerConfig> = {
-        let mut s = state.state.lock().map_err(|e| e.to_string())?;
+    // 先持久化、后改内存（评审 I7）：旧顺序先注册 Starting + spawn 启动再写盘，
+    // 写盘失败会留下一个配置从未落盘、重启后必然消失的"幽灵服务器"——用户
+    // 对着一个不可能存在的运行中条目做停止/删除。落盘失败时内存与进程都不动。
+    let configs = {
+        let s = state.state.lock().map_err(|e| e.to_string())?;
+        let mut configs: Vec<WslServerConfig> = s.servers.iter().map(|item| item.config.clone()).collect();
+        configs.push(config.clone());
+        configs
+    };
+    persist_servers(&state.app, &configs)?;
+
+    // 落盘成功 → 注册 runtime（runtime 直接 starting，官方同款）→ 立即启动。
+    // set_state 内部已 emit，无需再单独推送
+    state.set_state(|s| {
         s.servers.push(WslServerItem {
             config: config.clone(),
             runtime: WslServerRuntime::Starting,
         });
-        s.servers.iter().map(|item| item.config.clone()).collect()
-    };
-    persist_servers(&state.app, &configs)?;
-    state.emit();
+    });
 
     start_server_internal(&state.app, &id);
     Ok(config)
@@ -1228,7 +1284,7 @@ pub fn initialize_wsl(app: &AppHandle) {
 }
 
 // ============================================
-// 单元测试 —— 在线目录缓存的纯决策逻辑
+// 单元测试 —— 纯决策逻辑（在线目录缓存 / sidecar 句柄所有权 / 健康轮询超时）
 // 模块已在 mod.rs 按 target_os = "windows" 门控，测试只需 cfg(test)
 // ============================================
 
@@ -1301,5 +1357,109 @@ mod tests {
         assert_eq!(parsed.fetched_at, 123);
         assert_eq!(parsed.distros.len(), 2);
         assert_eq!(parsed.distros[0].name, "Debian");
+    }
+
+    // ---- sidecar 句柄所有权（评审 B4）----
+
+    #[test]
+    fn owning_attempt_removes_its_own_handle() {
+        // 归属仍是本次 attempt：允许摘除
+        assert!(should_remove_handle(Some(7), 7));
+    }
+
+    #[test]
+    fn stale_attempt_does_not_remove_newer_handle() {
+        // 交错场景：旧 attempt(7) 从网络等待中晚醒，map 里已是重试后
+        // attempt(8) 注册的句柄——旧流程绝不能把它当成自己的摘掉，
+        // 否则 stop/remove 找不到 token，opencode serve 泄漏在发行版里占着端口
+        assert!(!should_remove_handle(Some(8), 7));
+    }
+
+    #[test]
+    fn missing_handle_is_not_attributed_to_caller() {
+        // stop_sidecar_internal（唯一无条件移除点）已摘走句柄：
+        // 迟到的清理既无从移除，也不得误报"句柄归属我"
+        assert!(!should_remove_handle(None, 7));
+    }
+
+    // ---- 健康轮询超时（评审 B3）----
+
+    #[test]
+    fn health_poll_not_expired_before_deadline() {
+        // 预算未用尽：进程还没就绪也必须继续等，不得误判超时
+        assert!(!health_poll_expired(0, HEALTH_TIMEOUT_MS));
+        assert!(!health_poll_expired(HEALTH_TIMEOUT_MS - 100, HEALTH_TIMEOUT_MS));
+    }
+
+    #[test]
+    fn health_poll_expired_at_and_after_deadline() {
+        // 恰好到点即超时（>=），过期后维持超时
+        assert!(health_poll_expired(HEALTH_TIMEOUT_MS, HEALTH_TIMEOUT_MS));
+        assert!(health_poll_expired(HEALTH_TIMEOUT_MS + 400, HEALTH_TIMEOUT_MS));
+    }
+
+    #[test]
+    fn health_poll_converges_when_process_alive_but_never_healthy() {
+        // 模拟最常见的挂死形态：进程存活、每轮健康探测都失败。旧循环只有
+        // ready/退出两个出口，此形态永远自旋；现在退出只依赖超时谓词，
+        // 按 100ms 节奏推进必须收敛，否则由回合上限判失败（防挂死）
+        let mut elapsed = 0u64;
+        let mut rounds = 0u32;
+        while !health_poll_expired(elapsed, HEALTH_TIMEOUT_MS) {
+            elapsed += 100;
+            rounds += 1;
+            assert!(rounds < 400, "轮询必须因超时收敛，不得无限进行");
+        }
+        assert!(elapsed >= HEALTH_TIMEOUT_MS);
+    }
+
+    // ---- 安装收尾判定（评审 I1）----
+
+    fn installed_distro(name: &str) -> WslInstalledDistro {
+        WslInstalledDistro {
+            name: name.to_string(),
+            version: Some(2),
+            is_default: false,
+        }
+    }
+
+    fn capable_probe(name: &str) -> WslDistroProbe {
+        WslDistroProbe {
+            name: name.to_string(),
+            can_execute: true,
+            has_bash: true,
+            has_curl: true,
+            error: None,
+        }
+    }
+
+    #[test]
+    fn install_finish_stands_without_online_catalog() {
+        // 收尾成败只由本地两路结果决定；在线目录不在签名里，联网拉目录
+        // 失败已不可能把"安装成功"判死（旧实现把 online 塞进同一个 match）
+        let (installed, probe) = decide_install_finish(
+            Ok(vec![installed_distro("Ubuntu")]),
+            Ok(capable_probe("Ubuntu")),
+        )
+        .expect("installed+probe 齐备即成功");
+        assert_eq!(installed.len(), 1);
+        assert_eq!(probe.name, "Ubuntu");
+    }
+
+    #[test]
+    fn install_finish_reports_only_local_failures() {
+        // 本地操作失败仍如实上报（谁失败只报谁），错误不被吞掉
+        let err = decide_install_finish(Err("list failed".to_string()), Ok(capable_probe("Ubuntu"))).unwrap_err();
+        assert_eq!(err, "list failed");
+        let err = decide_install_finish(Ok(vec![]), Err("probe failed".to_string())).unwrap_err();
+        assert_eq!(err, "probe failed");
+    }
+
+    #[test]
+    fn wsl_job_field_serialization_matches_frontend_contract() {
+        // 评审"描述不实"之 2：变体名 kebab-case（tag "kind"）、字段名 camelCase——
+        // 对齐 src/features/wsl/types.ts 判别联合的声明；修复前实发 started_at
+        let json = serde_json::to_string(&WslJob::Runtime { started_at: 7 }).unwrap();
+        assert_eq!(json, r#"{"kind":"runtime","startedAt":7}"#);
     }
 }

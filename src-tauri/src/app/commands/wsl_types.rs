@@ -92,8 +92,10 @@ pub struct WslServerItem {
 }
 
 /// WSL 任务类型
+/// variant 名 kebab-case（tag "kind" 的值）、字段名 camelCase——
+/// 与 src/features/wsl/types.ts 的判别联合声明对齐（评审"描述不实"之 2）
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
+#[serde(tag = "kind", rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum WslJob {
     Runtime { started_at: u64 },
     Distros { started_at: u64 },
