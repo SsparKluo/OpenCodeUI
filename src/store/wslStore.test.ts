@@ -200,3 +200,49 @@ describe('reduceWslRestore', () => {
     expect(outcome.state).toEqual({ bootTarget: null, pendingRestoreId: null })
   })
 })
+
+// 评审 I6：pendingRestoreId 的用户意志过期——崩溃恢复的正向路径与放弃路径
+describe('wslStore crash-restore intent lifecycle', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    localStorage.clear()
+    sessionStorage.clear()
+    pushState = () => {}
+  })
+
+  it('restores active back to a crashed WSL server that revives while user waits', async () => {
+    const { wslStore } = await import('./wslStore')
+    const { serverStore } = await import('./serverStore')
+    wslStore.start()
+
+    pushState({ type: 'state', state: makeState([readyItem('wsl:Ubuntu')]) })
+    serverStore.setActiveServer('wsl:Ubuntu')
+    // sidecar 崩溃：active 死亡 → 记 pendingRestoreId 并回退
+    pushState({ type: 'state', state: makeState([startingItem('wsl:Ubuntu')]) })
+    expect(serverStore.getActiveServerId()).not.toBe('wsl:Ubuntu')
+
+    // 用户没动过 → 复活即恢复（正向功能必须保持）
+    pushState({ type: 'state', state: makeState([readyItem('wsl:Ubuntu')]) })
+    expect(serverStore.getActiveServerId()).toBe('wsl:Ubuntu')
+  })
+
+  it('abandons the restore intent when the user switches to another server before revive', async () => {
+    const { wslStore } = await import('./wslStore')
+    const { serverStore } = await import('./serverStore')
+    // 预置一个非 WSL 服务器作为用户主动切换的目标
+    serverStore.upsertServer({ id: 'remote', name: 'remote', url: 'http://127.0.0.1:59999' })
+    wslStore.start()
+
+    pushState({ type: 'state', state: makeState([readyItem('wsl:Ubuntu')]) })
+    serverStore.setActiveServer('wsl:Ubuntu')
+    pushState({ type: 'state', state: makeState([startingItem('wsl:Ubuntu')]) })
+
+    // 用户主动切走（同步循环之外）→ 恢复意图作废
+    serverStore.setActiveServer('remote')
+    expect(serverStore.getActiveServerId()).toBe('remote')
+
+    // Ubuntu 复活 → 不得把用户劫持回去
+    pushState({ type: 'state', state: makeState([readyItem('wsl:Ubuntu')]) })
+    expect(serverStore.getActiveServerId()).toBe('remote')
+  })
+})

@@ -90,6 +90,10 @@ class WslStore {
   // （Rust 端 remove_wsl_server 直接把 config 从全量 state 移除，再不会推来 unready 事件），
   // 故必须在这里主动回收，否则 serverStore / 白名单会残留幽灵服务器
   private _knownIds: Set<string> = new Set()
+  // 同步循环内的广播守卫（评审 I6）：服务器死亡瞬间 removeServer 会同步广播
+  // 「active 回退」的 server-switch——那是系统行为不是用户意志，此刻刚记下的
+  // pendingRestoreId 不能被误清；只有循环之外（用户主动切换）的 server-switch 才作废恢复意图
+  private _syncing = false
 
   constructor() {
     this._snapshot = this._makeSnapshot()
@@ -115,6 +119,17 @@ class WslStore {
       this._syncServers()
       this._emit()
     })
+
+    // 评审 I6：用户在同步循环之外主动切换活动服务器 = 已放弃"等复活跳回"的意图。
+    // 崩溃恢复的正当路径（sidecar 复活时用户仍在原地）不受影响：那种场景在此之前不会
+    // 发生 server-switch。服务器死亡瞬间 removeServer 同步广播的 active 回退也不在此列——
+    // 那是系统行为，由 _syncing 守卫排除，否则会把刚记下的 pendingRestoreId 误清、废掉恢复。
+    serverStore.onServerChange((_serverId, reason) => {
+      if (reason === 'server-switch' && !this._syncing && this._restoreState.pendingRestoreId !== null) {
+        this._restoreState = { ...this._restoreState, pendingRestoreId: null }
+      }
+    })
+
     void wslApi
       .getState()
       .then(state => {
@@ -154,17 +169,23 @@ class WslStore {
   private _syncServers() {
     const state = this._state
     if (!state) return
-    const currentIds = new Set<string>()
-    for (const item of state.servers) {
-      currentIds.add(item.config.id)
-      this._syncServer(item)
+    // 同步内部的 active 切换（死亡回退 / 恢复切回）广播时置位，见字段注释（评审 I6）
+    this._syncing = true
+    try {
+      const currentIds = new Set<string>()
+      for (const item of state.servers) {
+        currentIds.add(item.config.id)
+        this._syncServer(item)
+      }
+      // 后端全量 state 是权威事实源：上次还在、这次消失的 id = 已被删除的服务器，
+      // 它不会再推来 unready 事件，只能在此主动回收。首次同步 _knownIds 为空 → 不会误删
+      for (const id of this._knownIds) {
+        if (!currentIds.has(id)) this._reclaimRemoved(id)
+      }
+      this._knownIds = currentIds
+    } finally {
+      this._syncing = false
     }
-    // 后端全量 state 是权威事实源：上次还在、这次消失的 id = 已被删除的服务器，
-    // 它不会再推来 unready 事件，只能在此主动回收。首次同步 _knownIds 为空 → 不会误删
-    for (const id of this._knownIds) {
-      if (!currentIds.has(id)) this._reclaimRemoved(id)
-    }
-    this._knownIds = currentIds
   }
 
   /** 回收一个已从后端 state 中消失（被删除）的 WSL 服务器：摘白名单 + 删连接 + 清恢复指针 */
