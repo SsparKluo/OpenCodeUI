@@ -1096,7 +1096,7 @@ function FolderRecentSection({
                   <button
                     type="button"
                     onClick={() => void refresh()}
-                    className="px-2 py-1 text-[length:var(--fs-xs)] text-error-100 hover:text-error-200 text-left"
+                    className="px-2 py-1 text-[length:var(--fs-xs)] text-danger-100 hover:text-danger-200 text-left"
                   >
                     {t('sidebar.loadFailed')}
                   </button>
@@ -1162,32 +1162,43 @@ function FolderRecentSection({
                     )
                   })}
 
-                  {hasMore && (
+                  {/* 刷新失败：有旧数据也必须露出失败态（可点重试），并让位给重试入口而不是「显示更多」 */}
+                  {error ? (
                     <button
-                      onClick={() => void loadMore()}
-                      disabled={isLoadingMore}
-                      aria-busy={isLoadingMore}
-                      aria-label={isLoadingMore ? t('common:loadingMore') : t('sidebar.showMoreChats')}
-                      className="group w-full rounded-md px-2 py-1.5 text-[length:var(--fs-xs)] text-text-400/85 transition-colors hover:text-text-200 disabled:cursor-default disabled:opacity-70"
+                      type="button"
+                      onClick={() => void refresh()}
+                      className="px-2 py-1 text-[length:var(--fs-xs)] text-danger-100 hover:text-danger-200 text-left"
                     >
-                      <span className="flex items-center justify-center">
-                        <span className="relative inline-flex shrink-0 items-center gap-1.5 font-medium">
-                          <span
-                            aria-hidden="true"
-                            className="pointer-events-none absolute right-full top-1/2 mr-2 h-px w-6 -translate-y-1/2 bg-text-600/35 transition-colors group-hover:bg-text-500/55"
-                          />
-                          <span>{t('sidebar.showMoreChats')}</span>
-                          {isLoadingMore ? (
-                            <SpinnerIcon size={12} className="animate-spin text-text-400" />
-                          ) : (
-                            <ChevronDownIcon
-                              size={12}
-                              className="text-text-400/90 transition-colors group-hover:text-text-200"
-                            />
-                          )}
-                        </span>
-                      </span>
+                      {t('sidebar.loadFailed')}
                     </button>
+                  ) : (
+                    hasMore && (
+                      <button
+                        onClick={() => void loadMore()}
+                        disabled={isLoadingMore}
+                        aria-busy={isLoadingMore}
+                        aria-label={isLoadingMore ? t('common:loadingMore') : t('sidebar.showMoreChats')}
+                        className="group w-full rounded-md px-2 py-1.5 text-[length:var(--fs-xs)] text-text-400/85 transition-colors hover:text-text-200 disabled:cursor-default disabled:opacity-70"
+                      >
+                        <span className="flex items-center justify-center">
+                          <span className="relative inline-flex shrink-0 items-center gap-1.5 font-medium">
+                            <span
+                              aria-hidden="true"
+                              className="pointer-events-none absolute right-full top-1/2 mr-2 h-px w-6 -translate-y-1/2 bg-text-600/35 transition-colors group-hover:bg-text-500/55"
+                            />
+                            <span>{t('sidebar.showMoreChats')}</span>
+                            {isLoadingMore ? (
+                              <SpinnerIcon size={12} className="animate-spin text-text-400" />
+                            ) : (
+                              <ChevronDownIcon
+                                size={12}
+                                className="text-text-400/90 transition-colors group-hover:text-text-200"
+                              />
+                            )}
+                          </span>
+                        </span>
+                      </button>
+                    )
                   )}
                 </>
               )}

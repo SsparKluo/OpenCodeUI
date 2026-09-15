@@ -458,6 +458,8 @@
     },
     "onboarding": {
       "installWsl": "Install WSL",
+      "installWslAdminNotice": "Installing WSL will request administrator permission.",
+      "uacDenied": "Installation canceled — administrator permission was declined.",
       "restartRequired": "Windows needs to restart to finish installing WSL.",
       "windowsRestartRequired": "Restart Windows to finish installing WSL, then reopen OpenCode.",
       "wslNotInstalled": {

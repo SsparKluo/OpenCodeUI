@@ -29,7 +29,7 @@ function statusDotClass(state: ConnectionInfo['state']): string {
     case 'connecting':
       return 'bg-warning-100'
     case 'error':
-      return 'bg-error-100'
+      return 'bg-danger-100'
     default:
       return 'bg-text-500/50'
   }

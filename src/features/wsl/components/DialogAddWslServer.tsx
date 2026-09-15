@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Dialog } from '../../../components/ui/Dialog'
 import { Button } from '../../../components/ui/Button'
-import { SpinnerIcon } from '../../../components/Icons'
+import { SpinnerIcon, DownloadIcon, ChevronRightIcon } from '../../../components/Icons'
 import { wslApi } from '../../../api/wsl'
 import { useWslStore } from '../../../store/wslStore'
 import { notificationStore } from '../../../store/notificationStore'
@@ -37,6 +37,13 @@ function requestError(err: unknown) {
   console.error('WSL servers request failed', err instanceof Error ? (err.stack ?? err.message) : String(err))
   const message = err instanceof Error ? err.message : String(err)
   notificationStore.push('error', message, message, '')
+}
+
+/** 判定是否为 UAC 提权被用户拒绝（PowerShell Start-Process -Verb RunAs 的取消形态，
+ *  中文 Windows 报「操作已被用户取消」、英文报 "canceled by the user"） */
+function isUacDeniedError(err: unknown) {
+  const message = err instanceof Error ? err.message : String(err)
+  return /canceled by the user|cancelled by the user|操作已被用户取消/i.test(message)
 }
 
 interface DialogWslServerProps {
@@ -123,6 +130,25 @@ export function DialogAddWslServer({ isOpen, onClose, onAdded }: DialogWslServer
     run(() => wslApi.refreshDistros(true))
   }
 
+  /** runtime 探测重试（unavailable 分支的「重新检测」）：与自动探测共用同一触发器，
+   *  reset 失败门控后手动执行；结果经 wslStore 状态回流驱动视图切换 */
+  const recheckRuntime = () => {
+    gateRef.current.reset()
+    run(() => wslApi.probeRuntime())
+  }
+
+  /** 安装 WSL 运行时（触发 UAC 提权）：用户拒绝提权时给可读的本地化文案，
+   *  其余错误原样透出 */
+  const installWsl = () => {
+    run(async () => {
+      try {
+        await wslApi.installWsl()
+      } catch (err) {
+        throw isUacDeniedError(err) ? new Error(t('wsl.onboarding.uacDenied')) : err
+      }
+    })
+  }
+
   const installDistro = (name: string) => {
     gateRef.current.reset()
     run(async () => {
@@ -199,7 +225,8 @@ export function DialogAddWslServer({ isOpen, onClose, onAdded }: DialogWslServer
         error={runtimeError}
         installable={isWslRuntimeMissing(runtimeError)}
         busy={model.busy}
-        onInstall={() => run(() => wslApi.installWsl())}
+        onInstall={installWsl}
+        onRecheck={recheckRuntime}
         onClose={onClose}
       />
     )
@@ -224,7 +251,11 @@ export function DialogAddWslServer({ isOpen, onClose, onAdded }: DialogWslServer
               {model.filteredInstallableDistros.length === 0 ? (
                 model.distrosChecking ? (
                   // 在线目录同样受列表刷新影响：刷新期间显示检测中
-                  <div className="flex items-center justify-center gap-2 py-4 text-text-400 text-[length:var(--fs-xs)]">
+                  <div
+                    className="flex items-center justify-center gap-2 py-4 text-text-400 text-[length:var(--fs-xs)]"
+                    role="status"
+                    aria-live="polite"
+                  >
                     <SpinnerIcon size={14} className="animate-spin" />
                     <span>{t('wsl.onboarding.checkingDistros')}</span>
                   </div>
@@ -261,7 +292,7 @@ export function DialogAddWslServer({ isOpen, onClose, onAdded }: DialogWslServer
             <Button
               variant="primary"
               size="sm"
-              style={{ width: '99px' }}
+              style={{ minWidth: '99px' }}
               disabled={model.busy || !model.catalogTarget}
               isLoading={model.installingCatalogDistro}
               onClick={installCatalogDistro}
@@ -286,7 +317,11 @@ export function DialogAddWslServer({ isOpen, onClose, onAdded }: DialogWslServer
               {model.addableInstalledDistros.length === 0 ? (
                 model.distrosChecking ? (
                   // 列表还在后台刷新：显示检测中而不是"尚未检测到"（WSL 冷启动可能要等较久）
-                  <div className="flex items-center justify-center gap-2 py-4 text-text-400 text-[length:var(--fs-xs)]">
+                  <div
+                    className="flex items-center justify-center gap-2 py-4 text-text-400 text-[length:var(--fs-xs)]"
+                    role="status"
+                    aria-live="polite"
+                  >
                     <SpinnerIcon size={14} className="animate-spin" />
                     <span>{t('wsl.onboarding.checkingDistros')}</span>
                   </div>
@@ -304,13 +339,18 @@ export function DialogAddWslServer({ isOpen, onClose, onAdded }: DialogWslServer
                   const needsOpenOnce = wsl.distroProbes[d.name]?.canExecute === false
                   // 行容器用 div 而非 button：HTML 不允许按钮嵌套，禁用语义用 aria-disabled + 跳过触发表达
                   const rowDisabled = d.version === 1 || model.busy
+                  // WSL 1 发行版不可添加：保留可聚焦并经 aria-describedby 指向行内「WSL 2 required」原因，
+                  // 键盘用户也能读到不能选的原因（临时 busy 行无需解释，维持不可聚焦）
+                  const wsl2Required = d.version === 1
+                  const wsl2ReasonId = `wsl2-required-${d.name}`
                   const selectDistro = () => setSelectedDistro(d.name)
                   return (
                     <div
                       key={d.name}
                       role="button"
-                      tabIndex={rowDisabled ? undefined : 0}
+                      tabIndex={rowDisabled && !wsl2Required ? undefined : 0}
                       aria-disabled={rowDisabled || undefined}
+                      aria-describedby={wsl2Required ? wsl2ReasonId : undefined}
                       onClick={() => {
                         if (!rowDisabled) selectDistro()
                       }}
@@ -343,6 +383,7 @@ export function DialogAddWslServer({ isOpen, onClose, onAdded }: DialogWslServer
                         <div className="shrink-0 flex items-center gap-1.5 ml-2">
                           {status && (
                             <span
+                              id={wsl2Required ? wsl2ReasonId : undefined}
                               className={`text-[length:var(--fs-xs)] ${
                                 status.tone === 'success'
                                   ? 'text-success-100'
@@ -387,14 +428,7 @@ export function DialogAddWslServer({ isOpen, onClose, onAdded }: DialogWslServer
                 }}
                 className="w-full flex items-center gap-3 p-3 rounded-lg border border-border-200/40 hover:border-border-300 text-left transition-colors"
               >
-                <span className="shrink-0 text-text-400">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path
-                      d="M13.5564 10.4443V13.5554H4.22309C3.24087 13.5554 2.44531 13.5554 2.44531 13.5554V10.4443M11.112 5.99989L8.00087 9.111L4.88976 5.99989M8.00087 9.111L8.00087 2.44434"
-                      stroke="currentColor"
-                    />
-                  </svg>
-                </span>
+                <DownloadIcon size={16} className="shrink-0 text-text-400" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-[length:var(--fs-sm)] font-medium text-text-100">
                     {t('wsl.onboarding.needAnotherDistro')}
@@ -403,11 +437,7 @@ export function DialogAddWslServer({ isOpen, onClose, onAdded }: DialogWslServer
                     {t('wsl.onboarding.needAnotherDistroHint')}
                   </span>
                 </span>
-                <span className="shrink-0 text-text-400">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M6 12L10 8L6 4" stroke="currentColor" />
-                  </svg>
-                </span>
+                <ChevronRightIcon size={16} className="shrink-0 text-text-400" />
               </button>
             )}
           </div>
@@ -421,7 +451,7 @@ export function DialogAddWslServer({ isOpen, onClose, onAdded }: DialogWslServer
               size="sm"
               disabled={!primaryButton.loading && primaryButton.disabled}
               isLoading={primaryButton.loading}
-              style={primaryButton.width ? { width: primaryButton.width } : undefined}
+              style={primaryButton.minWidth ? { minWidth: primaryButton.minWidth } : undefined}
               onClick={() => void runPrimary()}
             >
               {!primaryButton.loading && translate(t, primaryButton.label)}
@@ -440,6 +470,8 @@ function DialogWslSetup(props: {
   installable: boolean
   busy: boolean
   onInstall: () => void
+  /** 「重新检测」：runtime 探测重试（与主视图 checkAgain 同一显式重试模式） */
+  onRecheck: () => void
   onClose: () => void
 }) {
   const { t } = useTranslation('settings')
@@ -459,12 +491,20 @@ function DialogWslSetup(props: {
   return (
     <Dialog isOpen onClose={props.onClose} width={440}>
       <div className="flex flex-col items-center text-center gap-2 py-4">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+          className="text-text-400"
+        >
           <path
             fillRule="evenodd"
             clipRule="evenodd"
             d="M12 -0.00244141L23.6926 20.2498H0.308594L12 -0.00244141ZM12.7954 6.32932C12.5844 6.11834 12.2982 5.99982 11.9999 5.99982C11.7015 5.99982 11.4154 6.11834 11.2044 6.32932C10.9934 6.5403 10.8749 6.82645 10.8749 7.12482V11.6248C10.8749 11.9232 10.9934 12.2093 11.2044 12.4203C11.4154 12.6313 11.7015 12.7498 11.9999 12.7498C12.2982 12.7498 12.5844 12.4203 12.7954 12.4203C13.0064 12.2093 13.1249 11.9232 13.1249 11.6248V7.12482C13.1249 6.82645 13.0064 6.5403 12.7954 6.32932ZM13.0605 17.5605C12.7792 17.8418 12.3977 17.9998 11.9999 17.9998C11.6021 17.9998 11.2205 17.8418 10.9392 17.5605C10.6579 17.2792 10.4999 16.8976 10.4999 16.4998C10.4999 16.102 10.6579 15.7205 10.9392 15.4392C11.2205 15.1579 11.6021 14.9998 11.9999 14.9998C12.3977 14.9998 12.7792 15.1579 13.0605 15.4392C13.3418 15.7205 13.4999 16.102 13.4999 16.4998C13.4999 16.8976 13.3418 17.2792 13.0605 17.5605Z"
-            fill="#DBDBDB"
+            fill="currentColor"
           />
         </svg>
         <h2 className="text-[length:var(--fs-md)] font-medium text-text-100">{title}</h2>
@@ -473,8 +513,17 @@ function DialogWslSetup(props: {
           <p className="text-[length:var(--fs-xs)] text-danger-100 break-all">{props.error}</p>
         )}
         {props.state === 'unavailable' && props.installable && (
-          <Button variant="secondary" size="sm" disabled={props.busy} onClick={props.onInstall}>
-            {t('wsl.onboarding.installWsl')}
+          <>
+            {/* UAC 预告：安装会弹系统提权确认，提前一句话说明，避免用户被突兀的 UAC 弹窗打断 */}
+            <p className="text-[length:var(--fs-xs)] text-text-400">{t('wsl.onboarding.installWslAdminNotice')}</p>
+            <Button variant="secondary" size="sm" disabled={props.busy} onClick={props.onInstall}>
+              {t('wsl.onboarding.installWsl')}
+            </Button>
+          </>
+        )}
+        {props.state === 'unavailable' && (
+          <Button variant="ghost" size="sm" disabled={props.busy} onClick={props.onRecheck}>
+            {t('wsl.onboarding.checkAgain')}
           </Button>
         )}
         <Button variant="ghost" size="sm" onClick={props.onClose}>

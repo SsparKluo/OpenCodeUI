@@ -32,7 +32,8 @@ export type AddServerPrimaryButton = {
   disabled: boolean
   action: 'install-opencode' | 'add' | null
   loading: boolean
-  width: string | null
+  /** 最小宽度下限（按 zh 文案标定）：长 locale 下按钮随文案自然变宽，不再裁切 */
+  minWidth: string | null
 }
 
 export type AddServerRuntimeState = 'loading' | 'pendingRestart' | 'checking' | 'unavailable' | 'ready'
@@ -222,7 +223,7 @@ function addServerPrimaryButton(input: {
       disabled: true,
       action: null,
       loading: probingSelected,
-      width: null,
+      minWidth: null,
     }
   }
   if (!addServerOpencodeReady(input.opencodeCheck)) {
@@ -237,7 +238,7 @@ function addServerPrimaryButton(input: {
       disabled: !!input.state?.job || input.adding,
       action: 'install-opencode',
       loading: installingOpencode,
-      width: update ? '138px' : '129px',
+      minWidth: update ? '138px' : '129px',
     }
   }
   return {
@@ -246,7 +247,7 @@ function addServerPrimaryButton(input: {
     disabled: input.adding || !!input.state?.job,
     action: 'add',
     loading: input.adding,
-    width: null,
+    minWidth: null,
   }
 }
 

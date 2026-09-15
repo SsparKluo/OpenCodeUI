@@ -8,7 +8,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
-import { CircleIcon, KeyIcon, PlugIcon, SpinnerIcon, WifiIcon, WifiOffIcon } from '../../../components/Icons'
+import { CircleIcon, KeyIcon, PlugIcon, SpinnerIcon, TrashIcon, WifiIcon, WifiOffIcon } from '../../../components/Icons'
 import { wslApi } from '../../../api/wsl'
 import { useWslStore } from '../../../store/wslStore'
 import { serverStore } from '../../../store/serverStore'
@@ -41,7 +41,7 @@ function requestError(err: unknown) {
 }
 
 const tagClass =
-  'shrink-0 text-[length:var(--fs-xs)] font-medium text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded'
+  'shrink-0 text-[length:var(--fs-xs)] font-medium text-info-100 bg-info-100/10 px-1.5 py-0.5 rounded'
 const actionButtonClass =
   'h-7 px-2 rounded-md text-[length:var(--fs-xs)] font-medium text-text-400 hover:text-accent-main-100 hover:bg-accent-main-100/10 transition-colors'
 
@@ -79,7 +79,7 @@ export function WslServerRow({
     <>
       <div
         onClick={ready ? onSelect : undefined}
-        className={`group flex items-center gap-1.5 p-2.5 rounded-lg border transition-colors min-w-0
+        className={`group flex flex-wrap items-center gap-1.5 p-2.5 rounded-lg border transition-colors min-w-0
           ${
             isActive ? 'border-accent-main-100/40 bg-accent-main-100/5' : 'border-border-200/40 hover:border-border-300'
           }`}
@@ -124,7 +124,8 @@ export function WslServerRow({
             )}
           </div>
         </button>
-        <div className="shrink-0 flex items-center gap-0.5">
+        {/* 换行允许：窄窗口（800×600）下操作区整体折到第二行右对齐，避免横向溢出 */}
+        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-0.5">
           {ready && (
             <button
               type="button"
@@ -209,7 +210,8 @@ export function WslServerRow({
               {t('wsl.server.retryStart')}
             </button>
           )}
-          {/* 彻底删除（区别于普通服务器的「移除连接」）：连同 WSL 侧服务一起移除 */}
+          {/* 彻底删除（区别于普通服务器的「移除连接」）：连同 WSL 侧服务一起移除；
+              图标与 ServersSettings 的移除按钮保持一致（TrashIcon 13px） */}
           <button
             type="button"
             onClick={e => {
@@ -220,7 +222,7 @@ export function WslServerRow({
             title={t('common:delete')}
             aria-label={t('common:delete')}
           >
-            ×
+            <TrashIcon size={13} />
           </button>
         </div>
       </div>

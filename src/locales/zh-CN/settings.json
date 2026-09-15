@@ -458,6 +458,8 @@
     },
     "onboarding": {
       "installWsl": "安装 WSL",
+      "installWslAdminNotice": "安装 WSL 将请求管理员权限。",
+      "uacDenied": "已取消安装——未授予管理员权限。",
       "restartRequired": "Windows 需要重启才能完成 WSL 安装。",
       "windowsRestartRequired": "重启 Windows 以完成 WSL 安装，然后重新打开 OpenCode。",
       "wslNotInstalled": {

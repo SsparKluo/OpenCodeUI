@@ -620,6 +620,8 @@ export function ServersSettings() {
                 <button
                   ref={addMenuRef}
                   onClick={() => setAddMenuOpen(!addMenuOpen)}
+                  aria-haspopup="menu"
+                  aria-expanded={addMenuOpen}
                   className="h-7 px-2.5 rounded-md text-[length:var(--fs-sm)] font-medium text-accent-main-100 hover:bg-accent-main-100/10 transition-colors"
                 >
                   {t('common:add')} ▾

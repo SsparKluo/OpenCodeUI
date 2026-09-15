@@ -69,7 +69,7 @@ function statusDotClass(state: ConnectionInfo['state']): string {
     case 'connecting':
       return 'bg-warning-100'
     case 'error':
-      return 'bg-error-100'
+      return 'bg-danger-100'
     default:
       return 'bg-text-500/50'
   }
@@ -221,7 +221,7 @@ const ServerFolderGroup = memo(function ServerFolderGroup({
             {displayName}
             {isWslServerId(serverId) && (
               <span
-                className="ml-1.5 shrink-0 text-[length:var(--fs-xs)] font-medium text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded"
+                className="ml-1.5 shrink-0 text-[length:var(--fs-xs)] font-medium text-info-100 bg-info-100/10 px-1.5 py-0.5 rounded"
               >
                 {t('wsl.server.label', { ns: 'settings' })}
               </span>
