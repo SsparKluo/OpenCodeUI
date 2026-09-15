@@ -60,8 +60,9 @@ if (document.readyState === 'loading') {
 }
 
 // 注册 active server 入口变化 → 重建目标服务器的 SDK + 刷新 per-server 配置 + 重连 SSE
-serverStore.onServerChange(serverId => {
-  // SDK client 按 serverId 缓存：仅重建目标服务器的 client
+serverStore.onServerChange((serverId, reason) => {
+  // SDK client 按 serverId 缓存：仅重建目标服务器的 client。
+  // 这是「该服务器端点事实已变」的处理，与 active 无关，任何 reason 都要做
   invalidateSDKClient(serverId)
   if (isTauri()) {
     void getSDKClientAsync(serverId).catch(err => apiErrorHandler('reinitialize sdk client after server endpoint change', err))
@@ -69,6 +70,13 @@ serverStore.onServerChange(serverId => {
 
   // 多服务器模式：messageStore / childSessionStore / todoStore 的数据按 `serverId::sessionId`
   // 分片存储，切换 active server 不应清空其他 pane 正在使用的服务器数据，因此不再 clearAll。
+
+  // 以下动作只作用于「当前 active 服务器的数据/连接」，必须按 reason 门控：
+  // - server-switch：active 本身变了（含删除回退）→ 缓存与 SSE 目标都换了
+  // - server-runtime-updated / local-runtime-url：仅当变的这台就是 active 才相关；
+  //   非 active 的 WSL 服务器重启不得重置 active 缓存、更不得重连 active 的 SSE
+  //   （重连窗口会丢事件、会话列表闪烁）
+  if (reason !== 'server-switch' && serverStore.getActiveServerId() !== serverId) return
 
   // 重置路径模式缓存（不同服务器可能是不同操作系统）
   resetPathModeCache()

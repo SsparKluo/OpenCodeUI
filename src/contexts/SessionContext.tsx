@@ -218,7 +218,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [matchesCurrentDirectory])
 
   useEffect(() => {
-    return serverStore.onServerChange(() => {
+    return serverStore.onServerChange((serverId, reason) => {
+      // 会话列表跟随 active server：非 active 服务器端点变化（WSL 重启）不影响本列表，
+      // 避免无关事件触发「清空 → 重拉」的可见闪烁；只有 active 数据源真的变了才重置
+      if (reason !== 'server-switch' && serverStore.getActiveServerId() !== serverId) return
       currentLimitRef.current = 30
       setSessions([])
       void fetchSessionsRef.current()

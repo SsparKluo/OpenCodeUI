@@ -16,12 +16,6 @@ import { autoDetectPathStyle, isSameDirectory } from '../utils'
 // 不落空态——消费方据此区分「还在加载」与「确实没有对话」
 const SESSION_RETRY_DELAYS_MS = [500, 1500, 3000]
 
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => {
-    window.setTimeout(resolve, ms)
-  })
-}
-
 interface UseSessionsOptions {
   /** 每页数量 */
   pageSize?: number
@@ -88,6 +82,19 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
   const fetchSessionsRef = useRef<(params?: SessionListParams & { append?: boolean }) => Promise<void>>(
     () => Promise.resolve(),
   )
+  // 重试退避的在途句柄：unmount 时清 timer 并唤醒循环，防止组件消失后仍继续发请求
+  const pendingRetryRef = useRef<{ cancel: () => void } | null>(null)
+  // 卸载标记：重试循环与 finally 的后续动作据此整体退出（React 卸载后不应再有网络/状态动作）
+  const unmountedRef = useRef(false)
+
+  // unmount 中断在途重试（对齐旧实现 retryTimerRef 的清理语义）
+  useEffect(() => {
+    unmountedRef.current = false
+    return () => {
+      unmountedRef.current = true
+      pendingRetryRef.current?.cancel()
+    }
+  }, [])
 
   useEffect(() => {
     enabledRef.current = enabled
@@ -156,14 +163,29 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
               setError(e instanceof Error ? e : new Error('Failed to fetch sessions'))
               return
             }
-            // 重试未耗尽 = 仍在加载：loading 不落地，按退避表等待后进入下一轮
-            await delay(SESSION_RETRY_DELAYS_MS[retryAttempt])
-            // 等待期间可能被新请求覆盖，或组件已禁用（懒加载闸门回退）
-            if (requestId !== requestIdRef.current || !enabledRef.current) return
+            // 重试未耗尽 = 仍在加载：loading 不落地，按退避表等待后进入下一轮。
+            // 等待做成「可取消」：unmount 的 cleanup 会清 timer 并立即 resolve，
+            // 循环经下面的 unmounted 检查正常退出，不会再发重试请求
+            await new Promise<void>(resolve => {
+              const timer = window.setTimeout(() => {
+                pendingRetryRef.current = null
+                resolve()
+              }, SESSION_RETRY_DELAYS_MS[retryAttempt])
+              pendingRetryRef.current = {
+                cancel: () => {
+                  window.clearTimeout(timer)
+                  pendingRetryRef.current = null
+                  resolve()
+                },
+              }
+            })
+            // 等待期间可能被新请求覆盖、组件已禁用（懒加载闸门回退）或已卸载
+            if (unmountedRef.current || requestId !== requestIdRef.current || !enabledRef.current) return
           }
         }
       } finally {
-        if (requestId === requestIdRef.current) {
+        // 卸载后状态与排队动作整体跳过：退避 promise 被 cancel 唤醒时 finally 也会执行
+        if (!unmountedRef.current && requestId === requestIdRef.current) {
           isFetchingRef.current = false
           setIsLoading(false)
           setIsLoadingMore(false)
@@ -282,7 +304,10 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
     // 固定服务器订阅（多服务器模式）：不随 active server 切换刷新
     if (serverId) return
 
-    return serverStore.onServerChange(() => {
+    return serverStore.onServerChange((changedServerId, reason) => {
+      // 本实例跟随 active server：非 active 服务器端点变化（WSL 重启）与列表无关，
+      // 不该触发「清空 → 重拉」；仅 active 换了或变的这台就是 active 时才重置
+      if (reason !== 'server-switch' && serverStore.getActiveServerId() !== changedServerId) return
       currentLimitRef.current = pageSize
       setSessions([])
       void fetchSessionsRef.current({ search: searchRef.current || undefined })

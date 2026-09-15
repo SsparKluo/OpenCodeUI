@@ -28,6 +28,7 @@ const {
   getActiveServerIdMock,
   checkHealthMock,
   onServerChangeMock,
+  reconnectServerSSEMock,
   serverChangeListeners,
   registeredServerIds,
   serverStoreListeners,
@@ -66,6 +67,8 @@ const {
   applyServerConnectedTimestampMock: vi.fn(),
   getActiveServerIdMock: vi.fn(() => 'local'),
   checkHealthMock: vi.fn(() => Promise.resolve({ status: 'online' })),
+  // 端点变化的定向重连入口：测试需要断言「谁被重连、谁不该被碰」
+  reconnectServerSSEMock: vi.fn(),
   onServerChangeMock: vi.fn((listener: (serverId: string, reason?: string) => void) => {
     serverChangeListeners.add(listener)
     return () => {
@@ -111,6 +114,7 @@ vi.mock('../api', () => ({
   subscribeToEvents: subscribeToEventsMock,
   // 透传 serverId 作为第二参数：测试需要区分「哪个服务器建了订阅」
   subscribeToServerEvents: (serverId: string, cb: unknown) => subscribeToEventsMock(cb, serverId),
+  reconnectServerSSE: (...args: unknown[]) => reconnectServerSSEMock(...args),
   getSessionStatus: getSessionStatusMock,
   getPendingPermissions: getPendingPermissionsMock,
   getPendingQuestions: getPendingQuestionsMock,
@@ -225,6 +229,7 @@ describe('useGlobalEvents', () => {
     getActiveServerIdMock.mockReset()
     checkHealthMock.mockReset()
     onServerChangeMock.mockReset()
+    reconnectServerSSEMock.mockReset()
     clearSessionRuntimeStateMock.mockReset()
     clearPaneSessionMock.mockReset()
     autoApproveStoreMock.fullAutoMode = 'off'
@@ -298,6 +303,28 @@ describe('useGlobalEvents', () => {
     serverChangeListeners.forEach(listener => listener('remote'))
 
     expect(checkHealthMock).toHaveBeenCalledWith('remote')
+  })
+
+  it('force-reconnects the subscribed server whose endpoint changed and nobody else', async () => {
+    renderHook(() => useGlobalEvents())
+
+    await waitFor(() => expect(onServerChangeMock).toHaveBeenCalled())
+    // 默认集合 = [active 'local']：等主 effect 建好订阅
+    await waitFor(() => expect(subscribeToEventsMock).toHaveBeenCalled())
+
+    // active（在订阅集合内）端点变化：定向强制重连，引用计数的拆旧建新是空操作不可用
+    serverChangeListeners.forEach(listener => listener('local', 'server-runtime-updated'))
+    expect(reconnectServerSSEMock).toHaveBeenCalledTimes(1)
+    expect(reconnectServerSSEMock).toHaveBeenCalledWith('local')
+
+    // 未订阅服务器端点变化：没有连接需要修，重连由集合重算 → 新建订阅时现读 URL 完成
+    reconnectServerSSEMock.mockClear()
+    serverChangeListeners.forEach(listener => listener('ghost', 'server-runtime-updated'))
+    expect(reconnectServerSSEMock).not.toHaveBeenCalled()
+
+    // 切换事件不走定向重连分支：订阅集合增删由增量同步处理，active 连接不该被白白拆断
+    serverChangeListeners.forEach(listener => listener('remote', 'server-switch'))
+    expect(reconnectServerSSEMock).not.toHaveBeenCalled()
   })
 
   it('refreshes active server health when SSE reconnects', async () => {
@@ -855,8 +882,10 @@ describe('useGlobalEvents', () => {
     expect(unsubscribes.local[0]).not.toHaveBeenCalled()
   })
 
-  it('rebuilds only the changed server subscription on server-runtime-updated', async () => {
-    // sidecar 重启换端口：定向拆旧建新，其余服务器的 SSE 不受牵连
+  it('reconnects only the changed server subscription on server-runtime-updated', async () => {
+    // sidecar 重启换端口：只对变的服务器强制重连，其余服务器的 SSE 不受牵连。
+    // 评审 I3 教训：「先 subscribe 再 unsubscribe」在引用计数传输层是空操作（1→2→1），
+    // 连接根本不会断——定向修复必须走 reconnectServerSSE，订阅对象本身保持不动
     multiServerMock.enabled = true
     multiServerMock.subscribedIds = ['local', 'wsl:Ubuntu']
     registeredServerIds.add('wsl:Ubuntu')
@@ -874,8 +903,12 @@ describe('useGlobalEvents', () => {
 
     serverChangeListeners.forEach(listener => listener('wsl:Ubuntu', 'server-runtime-updated'))
 
-    await waitFor(() => expect(unsubscribes['wsl:Ubuntu']).toHaveLength(2))
-    expect(unsubscribes['wsl:Ubuntu'][0]).toHaveBeenCalledTimes(1)
+    expect(reconnectServerSSEMock).toHaveBeenCalledTimes(1)
+    expect(reconnectServerSSEMock).toHaveBeenCalledWith('wsl:Ubuntu')
+    // 订阅未被拆建（引用计数保持 1），旧的取消函数没有被调用
+    expect(unsubscribes['wsl:Ubuntu']).toHaveLength(1)
+    expect(unsubscribes['wsl:Ubuntu'][0]).not.toHaveBeenCalled()
+    // active（local）的连接完全不被触碰
     expect(unsubscribes.local).toHaveLength(1)
     expect(unsubscribes.local[0]).not.toHaveBeenCalled()
   })

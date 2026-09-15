@@ -16,7 +16,13 @@ import { soundStore } from '../store/soundStore'
 import { playNotificationSoundDeduped } from '../utils/notificationSoundBridge'
 import { clearSessionRuntimeState } from '../utils/sessionLifecycle'
 import { makeSessionKey, sessionKeyToServerId } from '../utils/sessionKey'
-import { subscribeToServerEvents, getSessionStatus, getPendingPermissions, getPendingQuestions } from '../api'
+import {
+  subscribeToServerEvents,
+  reconnectServerSSE,
+  getSessionStatus,
+  getPendingPermissions,
+  getPendingQuestions,
+} from '../api'
 import type { EventCallbacks } from '../types/api/event'
 import { replyPermission } from '../api/permission'
 import { autoApproveStore } from '../store/autoApproveStore'
@@ -806,15 +812,16 @@ export function useGlobalEvents(directories?: string[]) {
     serverSyncRef.current = syncSubscriptions
     syncSubscriptions()
 
-    // WSL 服务器端点变化（sidecar 重启换端口）：对已在订阅集合内的定向拆旧建新。
+    // WSL 服务器端点变化（sidecar 重启换端口）：对已在订阅集合内的服务器定向重连。
     // 不能指望自动重连——旧连接一直「健康」地连着死地址，不断线就永远不会自愈。
-    // 不在集合内的无需处理：注册事件本身会触发集合重算 → 建订阅时 URL 现读 serverStore
+    // 不在集合内的无需处理：注册事件本身会触发集合重算 → 建订阅时 URL 现读 serverStore。
+    // 注意：不能用「先 subscribe 再 unsubscribe」拆旧建新——订阅是引用计数的，
+    // 同服务器 size 只走 1→2→1，连接从不断开（空操作）；reconnectServerSSE 才真正
+    // 拆掉旧传输并按新端点重连，且只动 changedId 那条连接，不碰 active 的 SSE
     const offRuntimeChange = serverStore.onServerChange((changedId, reason) => {
       if (reason !== 'server-runtime-updated') return
-      const unsubscribe = subscriptions.get(changedId)
-      if (!unsubscribe) return
-      subscriptions.set(changedId, subscribeToServerEvents(changedId, buildServerCallbacks(changedId)))
-      unsubscribe()
+      if (!subscriptions.has(changedId)) return
+      reconnectServerSSE(changedId)
     })
 
     return () => {

@@ -78,7 +78,15 @@ export function useVcsInfo(directory?: string, serverId?: string): UseVcsInfoRes
   useEffect(() => {
     if (!directory) return
 
-    return serverStore.onServerChange(() => {
+    return serverStore.onServerChange((changedId, reason) => {
+      // 数据主体是 serverId ?? active 服务器：
+      // - 固定服务器模式：只有「这台」服务器端点变化才需要重置重拉，别的服务器切换与它无关
+      // - 跟随 active 模式：非 active 服务器重启与当前数据无关（避免 VCS 徽章闪烁）
+      if (serverId) {
+        if (changedId !== serverId) return
+      } else if (reason !== 'server-switch' && serverStore.getActiveServerId() !== changedId) {
+        return
+      }
       setVcsInfo(null)
       setError(null)
       void fetchVcs()
