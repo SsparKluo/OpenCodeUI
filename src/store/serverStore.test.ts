@@ -442,6 +442,39 @@ describe('serverStore removeServer active fallback', () => {
   })
 })
 
+describe('serverStore removeServer default preference cleanup', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    localStorage.clear()
+    sessionStorage.clear()
+  })
+
+  it('clears a default preference that points at a removed server', async () => {
+    const { serverStore } = await import('./serverStore')
+    const remote = serverStore.addServer({ name: 'Remote', url: 'http://remote.test' })
+    serverStore.setDefaultServer(remote.id)
+
+    expect(serverStore.removeServer(remote.id)).toBe(true)
+
+    // 只增不减的隐患修复：内存与持久层都必须摘掉指向已删服务器的偏好
+    expect(serverStore.getDefaultServerId()).toBeNull()
+    expect(localStorage.getItem('opencode-default-server')).toBeNull()
+  })
+
+  it('keeps the default preference when a WSL server is only transiently removed', async () => {
+    // WSL 未就绪也会走 removeServer，但配置仍在后端、稍后重新注册；
+    // 默认偏好不能被抹掉（否则 bootTarget 恢复语义被破坏），删除回收由 wslStore 负责
+    const { serverStore } = await import('./serverStore')
+    serverStore.upsertServer({ id: 'wsl:Ubuntu', name: 'Ubuntu', url: 'http://127.0.0.1:33333' })
+    serverStore.setDefaultServer('wsl:Ubuntu')
+
+    expect(serverStore.removeServer('wsl:Ubuntu')).toBe(true)
+
+    expect(serverStore.getDefaultServerId()).toBe('wsl:Ubuntu')
+    expect(localStorage.getItem('opencode-default-server')).toBe('wsl:Ubuntu')
+  })
+})
+
 describe('serverStore health check', () => {
   beforeEach(() => {
     vi.resetModules()

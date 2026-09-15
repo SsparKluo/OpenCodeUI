@@ -564,6 +564,18 @@ class ServerStore {
     this.healthCheckSeqMap.delete(id)
     this.clockCalibrationMap.delete(id)
 
+    // 默认服务器偏好指向被删服务器时必须一并清除（只增不减的隐患）：否则下次启动仍会拿一个
+    // 已不存在的 id 当默认目标。仅限非 WSL：WSL 的 removeServer 常因瞬时未就绪（starting/stopped）
+    // 触发，配置仍在后端、稍后会重新注册，其默认偏好不能在此被抹掉——WSL 的删除回收由 wslStore 处理
+    if (this.defaultServerId === id && !id.startsWith(WSL_SERVER_PREFIX)) {
+      this.defaultServerId = null
+      try {
+        localStorage.removeItem(DEFAULT_SERVER_KEY)
+      } catch {
+        // 清偏好持久化失败不回滚本次删除：内存态已清，下次启动兜底逻辑会忽略列表外的 id
+      }
+    }
+
     // 如果删除的是当前选中的，切换到默认
     if (wasActive) {
       this.activeServerId = this.servers[0]?.id ?? null

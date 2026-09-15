@@ -86,6 +86,10 @@ class WslStore {
   private _started = false
   // 恢复状态机：bootTarget 启动时算好，pendingRestoreId 随生命周期事件演进
   private _restoreState: WslRestoreState = { bootTarget: null, pendingRestoreId: null }
+  // 最近一次推送里出现过的 WSL id。后端是权威事实源：id 从这里消失即代表用户已删除该服务器
+  // （Rust 端 remove_wsl_server 直接把 config 从全量 state 移除，再不会推来 unready 事件），
+  // 故必须在这里主动回收，否则 serverStore / 白名单会残留幽灵服务器
+  private _knownIds: Set<string> = new Set()
 
   constructor() {
     this._snapshot = this._makeSnapshot()
@@ -150,8 +154,38 @@ class WslStore {
   private _syncServers() {
     const state = this._state
     if (!state) return
+    const currentIds = new Set<string>()
     for (const item of state.servers) {
+      currentIds.add(item.config.id)
       this._syncServer(item)
+    }
+    // 后端全量 state 是权威事实源：上次还在、这次消失的 id = 已被删除的服务器，
+    // 它不会再推来 unready 事件，只能在此主动回收。首次同步 _knownIds 为空 → 不会误删
+    for (const id of this._knownIds) {
+      if (!currentIds.has(id)) this._reclaimRemoved(id)
+    }
+    this._knownIds = currentIds
+  }
+
+  /** 回收一个已从后端 state 中消失（被删除）的 WSL 服务器：摘白名单 + 删连接 + 清恢复指针 */
+  private _reclaimRemoved(id: string) {
+    // 白名单必须先摘：幽灵分组若继续订阅会反复尝试连接已消失的服务器
+    multiServerStore.setSubscribed(id, false)
+    // removeServer 内部处理 active 优雅降级 + server-switch 广播（对非 active / 未注册 id 幂等）
+    serverStore.removeServer(id)
+    // WSL 是真删除（区别于瞬时未就绪），指向它的默认偏好一并清除，
+    // 否则下次启动仍会拿一个已被删除的 distro 当默认目标（serverStore.removeServer 出于
+    // 未就绪保留语义不处理 WSL，这里补上）
+    if (serverStore.getDefaultServerId() === id) {
+      serverStore.setDefaultServer(null)
+    }
+    // 本 store 的每-id 记账：恢复状态机若仍指向被删 id，必须清掉，
+    // 否则用户重新添加同名 distro 时会被旧的 pendingRestoreId/bootTarget 劫持回 active
+    if (this._restoreState.bootTarget === id || this._restoreState.pendingRestoreId === id) {
+      this._restoreState = {
+        bootTarget: this._restoreState.bootTarget === id ? null : this._restoreState.bootTarget,
+        pendingRestoreId: this._restoreState.pendingRestoreId === id ? null : this._restoreState.pendingRestoreId,
+      }
     }
   }
 
