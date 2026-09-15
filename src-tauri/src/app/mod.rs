@@ -548,5 +548,28 @@ pub fn run() {
                 }
             }
         }
+
+        // Windows: 进程退出兜底（评审 I4；真机验收实测坐实泄漏后才加回）。
+        // 缺口：we_started=false（只跑 WSL、没跑 Local 服务）时关窗不拦截、
+        // confirm_close_app → stop_all_wsl_servers 这条清理链永远不被触发。
+        // kill_on_drop 也救不了：sidecar 的 Child 移进了监督任务、阻塞在 wait()，
+        // 进程收尾时 tokio 运行时先死，drop 里的 kill 没有执行机会
+        // （实测：关窗后 wsl.exe 客户端与 distro 内 opencode serve 双双存活）。
+        // ExitRequested 是运行时还活着的最后时机：block_on 在本线程驱动
+        // stop_all_wsl_servers（token.cancel → 监督任务显式 kill wsl.exe，
+        // 每台 50ms 上限有界），整体再套 10s timeout 防任何意外挂死退出流程。
+        // 与 confirm_close_app 已清理过的路径幂等：sidecars 空 map → no-op。
+        #[cfg(target_os = "windows")]
+        if let tauri::RunEvent::ExitRequested { .. } = &_event {
+            if let Some(state) = _app_handle.try_state::<commands::wsl_commands::WslState>() {
+                tauri::async_runtime::block_on(async {
+                    let _ = tokio::time::timeout(
+                        std::time::Duration::from_secs(10),
+                        commands::wsl_commands::stop_all_wsl_servers(&state),
+                    )
+                    .await;
+                });
+            }
+        }
     });
 }
