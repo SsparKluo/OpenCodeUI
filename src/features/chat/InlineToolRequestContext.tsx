@@ -11,7 +11,19 @@ import type { ApiPermissionRequest, ApiQuestionRequest, PermissionReply, Questio
 import { childSessionStore } from '../../store'
 import { makeSessionKey, splitSessionKey } from '../../utils/sessionKey'
 
+/**
+ * task 工具匹配子 session 请求时的定位信息。
+ * sessionKey 取自工具 metadata，可能是原始 id；serverId 是 pane 绑定的服务器（权威值），
+ * 绝不能从「全局活动服务器」猜测——多服务器 / WSL 场景下两者不同，孙 session 会永远匹配不上。
+ */
+export interface TaskChildSessionRef {
+  sessionKey: string
+  serverId: string
+}
+
 export interface InlineToolRequestContextValue {
+  /** 当前 pane 绑定的服务器，供 task 工具解析子 session 的服务器作用域 key */
+  serverId: string
   /** 当前 pending 的权限请求 */
   pendingPermissions: ApiPermissionRequest[]
   /** 当前 pending 的提问请求 */
@@ -27,6 +39,8 @@ export interface InlineToolRequestContextValue {
 }
 
 const defaultValue: InlineToolRequestContextValue = {
+  // 没有 Provider 就没有 pane 绑定，空串表示「无权威服务器」，不做任何猜测
+  serverId: '',
   pendingPermissions: [],
   pendingQuestions: [],
   onPermissionReply: () => {},
@@ -43,26 +57,30 @@ export function useInlineToolRequests() {
 
 /**
  * 根据 callID 查找关联的权限请求。
- * 对于 task tool，额外传入 childSessionId，
+ * 对于 task tool，额外传入 child（子 session key + pane 绑定的权威服务器），
  * 匹配子 session（及其子孙）内部发出的权限请求。
  */
 export function findPermissionRequestForTool(
   pendingPermissions: ApiPermissionRequest[],
   callID: string,
-  childSessionId?: string,
+  child?: TaskChildSessionRef,
 ): ApiPermissionRequest | undefined {
   // 先按 callID 精确匹配（直接工具调用）
   const direct = pendingPermissions.find(p => p.tool?.callID === callID)
   if (direct) return direct
 
   // 对 task tool，按子 session 归属匹配
-  if (childSessionId) {
-    // 消息 metadata 里的 sessionId 是原始 id，pending 请求的 sessionID 可能是复合 key（SSE）
-    // 或原始 id（轮询）：统一按原始 id 比较，isChildOf 需要复合 key（childSessionStore 存复合）
-    const { serverId: childServerId, sessionId: childRawId } = splitSessionKey(childSessionId)
-    const childScoped = childSessionId.includes('::') ? childSessionId : makeSessionKey(childServerId, childRawId)
+  if (child) {
+    // 复合 key 以调用方传入的权威 serverId 合成：对原始 id 做 splitSessionKey 会回退到
+    // 全局活动服务器，pane 绑定其他服务器时（多服务器 / WSL）孙 session 永远匹配不上
+    const childScoped = child.sessionKey.includes('::')
+      ? child.sessionKey
+      : makeSessionKey(child.serverId, child.sessionKey)
+    const { serverId: childServerId, sessionId: childRawId } = splitSessionKey(childScoped)
     const isMatch = (sid: string) => {
       const { sessionId: raw } = splitSessionKey(sid)
+      // 消息 metadata 里的 sessionId 是原始 id，pending 请求的 sessionID 可能是复合 key（SSE）
+      // 或原始 id（轮询）：统一按原始 id 比较，isChildOf 需要复合 key（childSessionStore 存复合）
       if (raw === childRawId) return true
       const scoped = sid.includes('::') ? sid : makeSessionKey(childServerId, raw)
       return childSessionStore.isChildOf(scoped, childScoped)
@@ -75,19 +93,21 @@ export function findPermissionRequestForTool(
 
 /**
  * 根据 callID 查找关联的提问请求。
- * 对于 task tool，额外传入 childSessionId。
+ * 对于 task tool，额外传入 child（子 session key + pane 绑定的权威服务器）。
  */
 export function findQuestionRequestForTool(
   pendingQuestions: ApiQuestionRequest[],
   callID: string,
-  childSessionId?: string,
+  child?: TaskChildSessionRef,
 ): ApiQuestionRequest | undefined {
   const direct = pendingQuestions.find(q => q.tool?.callID === callID)
   if (direct) return direct
 
-  if (childSessionId) {
-    const { serverId: childServerId, sessionId: childRawId } = splitSessionKey(childSessionId)
-    const childScoped = childSessionId.includes('::') ? childSessionId : makeSessionKey(childServerId, childRawId)
+  if (child) {
+    const childScoped = child.sessionKey.includes('::')
+      ? child.sessionKey
+      : makeSessionKey(child.serverId, child.sessionKey)
+    const { serverId: childServerId, sessionId: childRawId } = splitSessionKey(childScoped)
     const isMatch = (sid: string) => {
       const { sessionId: raw } = splitSessionKey(sid)
       if (raw === childRawId) return true
