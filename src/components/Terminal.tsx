@@ -812,13 +812,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, serverId, isA
       terminalRef.current = null
       fitAddonRef.current = null
     }
-  }, [
-    ptyId,
-    hasBeenActive,
-    clearStickyModifiers,
-    sendTerminalData,
-    preferTouchUi,
-  ])
+  }, [ptyId, hasBeenActive, clearStickyModifiers, sendTerminalData, preferTouchUi, serverId])
 
   useEffect(() => {
     const container = containerRef.current

@@ -128,7 +128,7 @@ export function ProjectDialog({ isOpen, onClose, onSelect, initialPath = '', ser
       cancelled = true
       clearTimeout(timer)
     }
-  }, [isOpen, initialPath])
+  }, [isOpen, initialPath, serverId])
 
   // ==========================================
   // Load Directory
@@ -187,7 +187,7 @@ export function ProjectDialog({ isOpen, onClose, onSelect, initialPath = '', ser
       cancelled = true
       clearTimeout(timer)
     }
-  }, [isOpen, currentDir])
+  }, [isOpen, currentDir, serverId])
 
   // ==========================================
   // Scroll to Selection

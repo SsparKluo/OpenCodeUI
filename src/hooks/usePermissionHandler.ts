@@ -86,6 +86,10 @@ export function usePermissionHandler(serverId: string): UsePermissionHandlerResu
   // 防止重复回复
   const replyingIdsRef = useRef<Set<string>>(new Set())
 
+  // serverId 是本 hook 的作用域：所有发起请求的回调都必须把它列入依赖。
+  // pane 的服务器绑定会变（切会话、多服务器、WSL sidecar 就绪后切回），
+  // 空依赖数组会把 serverId 冻在首次渲染的值上，回复被发到旧服务器：
+  // 旧服务器报错 → 请求在真实服务器上仍 pending → 弹窗消失后又冒出来，对话不前进。
   const handlePermissionReply = useCallback(
     async (requestId: string, reply: PermissionReply, directory?: string, sessionId?: string): Promise<boolean> => {
       // 防止重复回复
@@ -122,7 +126,7 @@ export function usePermissionHandler(serverId: string): UsePermissionHandlerResu
         setIsReplying(false)
       }
     },
-    [],
+    [serverId],
   )
 
   const handleQuestionReply = useCallback(
@@ -150,7 +154,7 @@ export function usePermissionHandler(serverId: string): UsePermissionHandlerResu
         setIsReplying(false)
       }
     },
-    [],
+    [serverId],
   )
 
   const handleQuestionReject = useCallback(async (requestId: string, directory?: string): Promise<boolean> => {
@@ -175,7 +179,7 @@ export function usePermissionHandler(serverId: string): UsePermissionHandlerResu
       replyingIdsRef.current.delete(requestId)
       setIsReplying(false)
     }
-  }, [])
+  }, [serverId])
 
   // 主动轮询获取 pending 请求（用于 SSE 可能丢失事件的情况）
   // 一次拉取全量数据，用 sessionFamily 过滤后直接替换本地状态
