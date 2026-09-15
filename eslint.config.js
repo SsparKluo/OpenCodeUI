@@ -7,8 +7,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  // opencode/ 是本地参考用的外部仓库，不属于本项目源码
-  globalIgnores(['dist', 'node_modules', 'public/material-icons', 'src-tauri/target/**', 'opencode']),
+  globalIgnores(['dist', 'node_modules', 'public/material-icons', 'src-tauri/target/**']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
