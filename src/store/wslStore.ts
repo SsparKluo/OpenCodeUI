@@ -113,8 +113,15 @@ class WslStore {
       pendingRestoreId: null,
     }
 
+    // 评审 N1：事件推送与初始 getState 走不同 IPC 通道，到达顺序无保证。
+    // 全量事件本身就是权威快照——只要落地过任何一个事件，稍后到达的初始查询结果
+    // 必然更旧，直接丢弃；否则删除对账会拿陈旧快照把「事件刚登记的服务器」误判为
+    // 已删除而回收（连订阅意图与默认偏好一起清掉，且不会自动恢复）
+    let receivedLiveState = false
+
     // 订阅周期与应用一致，无需退订
     subscribeWslState((event: WslServersEvent) => {
+      receivedLiveState = true
       this._state = event.state
       this._syncServers()
       this._emit()
@@ -133,6 +140,8 @@ class WslStore {
     void wslApi
       .getState()
       .then(state => {
+        // 评审 N1：实时事件已落地则丢弃这份可能陈旧的快照（权威推进交给后续事件）
+        if (receivedLiveState) return
         this._state = state
         this._syncServers()
         this._emit()

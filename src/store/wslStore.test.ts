@@ -5,10 +5,17 @@ import type { WslServerItem, WslServersEvent, WslServersState } from '../feature
 // wslStore 粘合真实 serverStore / multiServerStore 来验证「删除后完整回收」，
 // 因此只 mock 掉 Tauri 边界（api/wsl 推送通道 + isTauri），其余走真实 store 逻辑。
 let pushState: (event: WslServersEvent) => void = () => {}
+// 评审 N1 竞态测试用：可控 resolve 的初始 getState（模拟"快照晚于事件到达"）
+let resolveGetState: (state: WslServersState) => void = () => {}
 
 vi.mock('../utils/tauri', () => ({ isTauri: () => true }))
 vi.mock('../api/wsl', () => ({
-  wslApi: { getState: () => new Promise<WslServersState>(() => {}) },
+  wslApi: {
+    getState: () =>
+      new Promise<WslServersState>(resolve => {
+        resolveGetState = resolve
+      }),
+  },
   subscribeWslState: (cb: (event: WslServersEvent) => void) => {
     pushState = cb
     return () => {}
@@ -244,5 +251,49 @@ describe('wslStore crash-restore intent lifecycle', () => {
     // Ubuntu 复活 → 不得把用户劫持回去
     pushState({ type: 'state', state: makeState([readyItem('wsl:Ubuntu')]) })
     expect(serverStore.getActiveServerId()).toBe('remote')
+  })
+})
+
+// 评审 N1：事件推送与初始 getState 快照乱序——陈旧快照不得触发删除对账回收
+describe('wslStore initial-snapshot ordering', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    localStorage.clear()
+    sessionStorage.clear()
+    pushState = () => {}
+    resolveGetState = () => {}
+  })
+
+  it('discards a stale getState snapshot that resolves after live events', async () => {
+    const { wslStore } = await import('./wslStore')
+    const { serverStore } = await import('./serverStore')
+    const { multiServerStore } = await import('./multiServerStore')
+
+    wslStore.start()
+    serverStore.setDefaultServer('wsl:Ubuntu')
+    // 实时事件先到：Ubuntu 就绪登记，对账基线记入该 id
+    pushState({ type: 'state', state: makeState([readyItem('wsl:Ubuntu')]) })
+    expect(serverStore.getServer('wsl:Ubuntu')).not.toBeNull()
+
+    // 更早发出的初始 getState 此刻才 resolve，且是不含 Ubuntu 的陈旧快照
+    resolveGetState(makeState([]))
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    // 陈旧快照必须被丢弃：服务器、白名单订阅、默认偏好都不许被"误删除"回收
+    expect(serverStore.getServer('wsl:Ubuntu')).not.toBeNull()
+    expect(multiServerStore.isSubscribed('wsl:Ubuntu')).toBe(true)
+    expect(serverStore.getDefaultServerId()).toBe('wsl:Ubuntu')
+  })
+
+  it('still applies the initial snapshot when no live event has arrived', async () => {
+    const { wslStore } = await import('./wslStore')
+    const { serverStore } = await import('./serverStore')
+
+    wslStore.start()
+    resolveGetState(makeState([readyItem('wsl:Debian')]))
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    // 防过度清理：没有事件落地过，初始快照仍是唯一数据源，必须正常生效
+    expect(serverStore.getServer('wsl:Debian')).not.toBeNull()
   })
 })
