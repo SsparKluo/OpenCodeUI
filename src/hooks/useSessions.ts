@@ -8,6 +8,7 @@ import {
   type ApiSession,
   type SessionListParams,
 } from '../api'
+import { affectsBoundServer } from '../store/serverChangeScope'
 import { serverStore } from '../store/serverStore'
 import { pinnedSessionsStore } from '../store/pinnedSessionsStore'
 import { autoDetectPathStyle, isSameDirectory } from '../utils'
@@ -307,7 +308,7 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
     return serverStore.onServerChange((changedServerId, reason) => {
       // 本实例跟随 active server：非 active 服务器端点变化（WSL 重启）与列表无关，
       // 不该触发「清空 → 重拉」；仅 active 换了或变的这台就是 active 时才重置
-      if (reason !== 'server-switch' && serverStore.getActiveServerId() !== changedServerId) return
+      if (!affectsBoundServer(undefined, changedServerId, reason, serverStore.getActiveServerId())) return
       currentLimitRef.current = pageSize
       setSessions([])
       void fetchSessionsRef.current({ search: searchRef.current || undefined })

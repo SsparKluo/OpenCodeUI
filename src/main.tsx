@@ -7,6 +7,7 @@ import { initOverlayScrollbars } from './lib/overlayScrollbar'
 import App from './App.tsx'
 import { DirectoryProvider, FullscreenProvider, SessionProvider } from './contexts'
 import { themeStore } from './store/themeStore'
+import { affectsBoundServer } from './store/serverChangeScope'
 import { serverStore } from './store/serverStore'
 import { autoApproveStore } from './store/autoApproveStore'
 import { serviceStore } from './store/serviceStore'
@@ -76,7 +77,7 @@ serverStore.onServerChange((serverId, reason) => {
   // - server-runtime-updated / local-runtime-url：仅当变的这台就是 active 才相关；
   //   非 active 的 WSL 服务器重启不得重置 active 缓存、更不得重连 active 的 SSE
   //   （重连窗口会丢事件、会话列表闪烁）
-  if (reason !== 'server-switch' && serverStore.getActiveServerId() !== serverId) return
+  if (!affectsBoundServer(undefined, serverId, reason, serverStore.getActiveServerId())) return
 
   // 重置路径模式缓存（不同服务器可能是不同操作系统）
   resetPathModeCache()

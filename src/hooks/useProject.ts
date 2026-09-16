@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getCurrentProject, getProjects, type ApiProject } from '../api'
+import { affectsBoundServer } from '../store/serverChangeScope'
 import { serverStore } from '../store/serverStore'
 import { apiErrorHandler } from '../utils'
 import { serverStorage } from '../utils/perServerStorage'
@@ -79,7 +80,7 @@ export function useProject(): UseProjectResult {
     return serverStore.onServerChange((serverId, reason) => {
       // 项目列表读的是 per-server 存储 + 当前 active 服务器的接口：
       // 非 active 服务器端点变化与本项目数据无关，只有 active 换了或变的这台就是 active 才重载
-      if (reason !== 'server-switch' && serverStore.getActiveServerId() !== serverId) return
+      if (!affectsBoundServer(undefined, serverId, reason, serverStore.getActiveServerId())) return
       void loadProjects()
     })
   }, [loadProjects])
