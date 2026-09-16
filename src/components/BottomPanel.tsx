@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { TerminalIcon } from './Icons'
 import { PanelContainer } from './PanelContainer'
 import { layoutStore, useLayoutStore, type TerminalTab, type PanelTab } from '../store/layoutStore'
+import { affectsBoundServer } from '../store/serverChangeScope'
 import { serverStore } from '../store/serverStore'
 import { createPtySession, removePtySession, listPtySessions } from '../api/pty'
 import { useCurrentSessionId } from '../store'
@@ -100,9 +101,10 @@ export const BottomPanel = memo(function BottomPanel({ directory, serverId }: Bo
 
     void restoreSessions(++restoreRequestIdRef.current)
     return serverStore.onServerChange((changedId, reason) => {
-      // 终端恢复针对当前面板服务器的会话列表：非 active 服务器重启（WSL 换端口）
-      // 不影响本面板数据，不该触发重恢复；门控用 serverStore 现读，不引入新的闭包依赖
-      if (reason !== 'server-switch' && changedId !== serverStore.getActiveServerId()) return
+      // 评审 N2：终端恢复的数据主体是 serverId ?? active（对齐 useVcsInfo 的绑定语义）。
+      // 旧实现拿 changedId 与 active 比对：面板固定绑定 WSL 而 active 在 local 时，
+      // 这台 WSL 换端口重启会被误跳过（终端全部失联）；反之无关服务器切换会误触发重恢复。
+      if (!affectsBoundServer(serverId, changedId, reason, serverStore.getActiveServerId())) return
       void restoreSessions(++restoreRequestIdRef.current)
     })
   }, [normalizedDirectory])
