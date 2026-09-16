@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EventCallbacks } from '../types/api/event'
+import type { ServerChangeReason } from '../store/serverStore'
 import { useSessions } from './useSessions'
 
 function createDeferred<T>() {
@@ -27,7 +28,7 @@ const {
   onServerChangeMock: vi.fn<AnyFn>(() => () => {}),
 }))
 let latestEventCallbacks: Partial<EventCallbacks> = {}
-let latestServerChange: (() => void) | undefined
+let latestServerChange: ((serverId: string, reason: ServerChangeReason) => void) | undefined
 
 vi.mock('../api', () => ({
   getSessions: (...args: unknown[]) => getSessionsMock(...args),
@@ -75,7 +76,7 @@ describe('useSessions', () => {
       latestEventCallbacks = callbacks
       return vi.fn()
     })
-    onServerChangeMock.mockImplementation((listener: () => void) => {
+    onServerChangeMock.mockImplementation((listener: (serverId: string, reason: ServerChangeReason) => void) => {
       latestServerChange = listener
       return vi.fn()
     })
@@ -244,7 +245,8 @@ describe('useSessions', () => {
     expect(getSessionsMock).toHaveBeenCalledTimes(1)
 
     await act(async () => {
-      latestServerChange?.()
+      // active 服务器自身端点变化（serverId = active）才应触发重拉
+      latestServerChange?.('local', 'server-runtime-updated')
       await Promise.resolve()
     })
 
@@ -265,5 +267,143 @@ describe('useSessions', () => {
     })
 
     expect(result.current.sessions.map(session => session.id)).toEqual(['fresh'])
+  })
+
+  it('refetches only for active-server events, ignoring non-active runtime updates', async () => {
+    getSessionsMock.mockResolvedValue([makeSession('session-1')])
+
+    renderHook(() => useSessions({ directory: '/workspace/demo' }))
+
+    await act(async () => {
+      vi.runAllTimers()
+      await Promise.resolve()
+    })
+
+    expect(getSessionsMock).toHaveBeenCalledTimes(1)
+
+    // 非 active 服务器（remote）端点变化：与当前列表无关，不得清空/重拉
+    await act(async () => {
+      latestServerChange?.('remote', 'server-runtime-updated')
+      await Promise.resolve()
+    })
+    expect(getSessionsMock).toHaveBeenCalledTimes(1)
+
+    // active（getActiveServerId mock = 'local'）自身端点变化：数据源地址变了，需要重拉
+    await act(async () => {
+      latestServerChange?.('local', 'server-runtime-updated')
+      await Promise.resolve()
+    })
+    expect(getSessionsMock).toHaveBeenCalledTimes(2)
+
+    // 真实切换：事件里的 serverId 即新 active，照常重拉
+    await act(async () => {
+      latestServerChange?.('remote', 'server-switch')
+      await Promise.resolve()
+    })
+    expect(getSessionsMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('keeps loading during retry backoff and lands error only at terminal failure', async () => {
+    getSessionsMock.mockRejectedValue(new Error('service not ready'))
+
+    const { result } = renderHook(() => useSessions({ directory: '/workspace/demo' }))
+
+    // 首次失败：进入重试等待期，必须仍是 loading（空列表 + 非 loading 会闪现空态文案）
+    await act(async () => {
+      vi.runOnlyPendingTimers()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(getSessionsMock).toHaveBeenCalledTimes(1)
+    expect(result.current.isLoading).toBe(true)
+    expect(result.current.error).toBeNull()
+
+    // 前两次退避到期后仍在加载（等待第三次重试），第三次退避会耗尽重试
+    for (const backoff of [500, 1500]) {
+      await act(async () => {
+        vi.advanceTimersByTime(backoff)
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(result.current.isLoading).toBe(true)
+    }
+
+    // 第三次退避到期 → 第四次尝试 → 耗尽 → 终态
+    await act(async () => {
+      vi.advanceTimersByTime(3000)
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(getSessionsMock).toHaveBeenCalledTimes(4)
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.error).not.toBeNull()
+    expect(result.current.sessions).toEqual([])
+
+    // 重试耗尽（500+1500+3000 后第四次尝试）：终态 = 非 loading + error，而非「没有对话」
+    await act(async () => {
+      vi.advanceTimersByTime(3000)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(getSessionsMock).toHaveBeenCalledTimes(4)
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.error).not.toBeNull()
+    expect(result.current.sessions).toEqual([])
+  })
+
+  it('lands success after a retry and clears error', async () => {
+    getSessionsMock
+      .mockRejectedValueOnce(new Error('service not ready'))
+      .mockResolvedValueOnce([makeSession('session-1')])
+
+    const { result } = renderHook(() => useSessions({ directory: '/workspace/demo' }))
+
+    await act(async () => {
+      vi.runOnlyPendingTimers()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      vi.advanceTimersByTime(500)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(result.current.sessions.map(session => session.id)).toEqual(['session-1'])
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.error).toBeNull()
+  })
+
+  it('cancels the pending retry backoff when unmounted', async () => {
+    getSessionsMock.mockRejectedValueOnce(new Error('service not ready'))
+    getSessionsMock.mockResolvedValue([])
+
+    const { unmount } = renderHook(() => useSessions({ directory: '/workspace/demo' }))
+
+    // 首次失败 → 停在 500ms 退避等待中
+    await act(async () => {
+      vi.runOnlyPendingTimers()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(getSessionsMock).toHaveBeenCalledTimes(1)
+
+    unmount()
+
+    // 推过整个退避表：卸载必须中断重试，否则陈旧 timer 会在组件消失后再发最多 3 次请求
+    await act(async () => {
+      vi.advanceTimersByTime(6000)
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(getSessionsMock).toHaveBeenCalledTimes(1)
   })
 })

@@ -16,7 +16,13 @@ import { soundStore } from '../store/soundStore'
 import { playNotificationSoundDeduped } from '../utils/notificationSoundBridge'
 import { clearSessionRuntimeState } from '../utils/sessionLifecycle'
 import { makeSessionKey, sessionKeyToServerId } from '../utils/sessionKey'
-import { subscribeToServerEvents, getSessionStatus, getPendingPermissions, getPendingQuestions } from '../api'
+import {
+  subscribeToServerEvents,
+  reconnectServerSSE,
+  getSessionStatus,
+  getPendingPermissions,
+  getPendingQuestions,
+} from '../api'
 import type { EventCallbacks } from '../types/api/event'
 import { replyPermission } from '../api/permission'
 import { autoApproveStore } from '../store/autoApproveStore'
@@ -301,7 +307,13 @@ function collectActiveServerIds(): string[] {
     }
     ids.add(serverStore.getActiveServerId())
   }
-  return Array.from(ids)
+  // 过滤未注册服务器：WSL 白名单 id 在 sidecar 就绪前就存在于持久化配置中，
+  // 而 getServerBaseUrl 对未知 id 静默回退 local——不过滤就会拿 local 的数据
+  // 写到 wsl: 键下（数据串服）。服务器注册进 serverStore 时 notify 触发重算，自然入集
+  const registered = Array.from(ids).filter(id => serverStore.getServer(id) !== null)
+  // 兜底：pane 可能仍指向已失效的服务器（如 WSL sidecar 崩溃后未清理），
+  // 过滤后为空会让 SSE 全灭——active server 恒注册，保住它
+  return registered.length > 0 ? registered : [serverStore.getActiveServerId()]
 }
 
 export function useGlobalEvents(directories?: string[]) {
@@ -322,6 +334,9 @@ export function useGlobalEvents(directories?: string[]) {
   }, [])
   const activeServerIdsRef = useRef(activeServerIds)
 
+  // 订阅集合增量同步入口：主 effect 挂载时写入，集合变化 effect 调用
+  const serverSyncRef = useRef<(() => void) | null>(null)
+
   useEffect(() => {
     activeServerIdsRef.current = activeServerIds
   }, [activeServerIds])
@@ -334,9 +349,15 @@ export function useGlobalEvents(directories?: string[]) {
     const unsubscribeMulti = multiServerStore.subscribe(() => {
       updateActiveServerIds()
     })
+    // 服务器注册/注销（WSL sidecar 就绪注册进 serverStore）也要重算：
+    // collectActiveServerIds 现在会过滤未注册 id，就绪事件是它们入集的唯一信号
+    const unsubscribeServerStore = serverStore.subscribe(() => {
+      updateActiveServerIds()
+    })
     return () => {
       unsubscribeLayout()
       unsubscribeMulti()
+      unsubscribeServerStore()
     }
   }, [updateActiveServerIds])
 
@@ -765,23 +786,59 @@ export function useGlobalEvents(directories?: string[]) {
       }
     }
 
-    const unsubscribes = activeServerIds.map(serverId =>
-      subscribeToServerEvents(serverId, buildServerCallbacks(serverId)),
-    )
-    activeServerIds.forEach(serverId => {
-      fetchAndInitialize(serverId)
-      refreshServerHealth(serverId)
+    // 订阅集合增量管理（Map 按 serverId 索引）：服务器加入 → 只连新的
+    // （建订阅 + 初始拉取 + 健康检查），移出 → 只拆旧的。集合变化不再
+    // 触发全量 SSE 拆建与全量重拉（WSL 就绪注册、active 切换是典型场景）
+    const subscriptions = new Map<string, () => void>()
+    const syncSubscriptions = () => {
+      const desired = activeServerIdsRef.current
+      let attached = false
+      for (const [serverId, unsubscribe] of subscriptions) {
+        if (!desired.includes(serverId)) {
+          unsubscribe()
+          subscriptions.delete(serverId)
+        }
+      }
+      for (const serverId of desired) {
+        if (subscriptions.has(serverId)) continue
+        subscriptions.set(serverId, subscribeToServerEvents(serverId, buildServerCallbacks(serverId)))
+        fetchAndInitialize(serverId)
+        refreshServerHealth(serverId)
+        attached = true
+      }
+      // 有新服务器接入时补一次全局自动审批（该服务器上的 pending 权限也要被处理）
+      if (attached) approveGlobalPendingPermissions()
+    }
+    serverSyncRef.current = syncSubscriptions
+    syncSubscriptions()
+
+    // WSL 服务器端点变化（sidecar 重启换端口）：对已在订阅集合内的服务器定向重连。
+    // 不能指望自动重连——旧连接一直「健康」地连着死地址，不断线就永远不会自愈。
+    // 不在集合内的无需处理：注册事件本身会触发集合重算 → 建订阅时 URL 现读 serverStore。
+    // 注意：不能用「先 subscribe 再 unsubscribe」拆旧建新——订阅是引用计数的，
+    // 同服务器 size 只走 1→2→1，连接从不断开（空操作）；reconnectServerSSE 才真正
+    // 拆掉旧传输并按新端点重连，且只动 changedId 那条连接，不碰 active 的 SSE
+    const offRuntimeChange = serverStore.onServerChange((changedId, reason) => {
+      if (reason !== 'server-runtime-updated') return
+      if (!subscriptions.has(changedId)) return
+      reconnectServerSSE(changedId)
     })
-    approveGlobalPendingPermissions()
 
     return () => {
       disposed = true
       refreshRef.current = null
-      unsubscribes.forEach(unsubscribe => unsubscribe())
+      serverSyncRef.current = null
+      offRuntimeChange()
+      subscriptions.forEach(unsubscribe => unsubscribe())
       unsubscribeAutoApprove()
       unsubscribeServerChange()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 活跃服务器集合变化 → 增量同步订阅（ref 由前面的 effect 更新，
+  // syncSubscriptions 由主 effect 挂载；主 effect 本身只在 mount 跑一次）
+  useEffect(() => {
+    serverSyncRef.current?.()
   }, [activeServerIds])
 
   useLayoutEffect(() => {
