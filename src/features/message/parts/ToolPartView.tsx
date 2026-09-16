@@ -13,6 +13,7 @@ import {
   useInlineToolRequests,
   findPermissionRequestForTool,
   findQuestionRequestForTool,
+  type TaskChildSessionRef,
 } from '../../chat/InlineToolRequestContext'
 import { InlinePermission } from '../../chat/InlinePermission'
 import { InlineQuestion } from '../../chat/InlineQuestion'
@@ -67,14 +68,21 @@ export const ToolPartView = memo(function ToolPartView({
   const duration = rawDuration !== undefined && isActive ? Math.max(0, rawDuration) : rawDuration
   const { inlineToolRequests, immersiveMode, compactInlinePermission } = useTheme()
 
-  const { pendingPermissions, pendingQuestions, onPermissionReply, onQuestionReply, onQuestionReject, isReplying } =
-    useInlineToolRequests()
-  const childSessionId = getTaskChildSessionId(part)
+  const {
+    serverId,
+    pendingPermissions,
+    pendingQuestions,
+    onPermissionReply,
+    onQuestionReply,
+    onQuestionReject,
+    isReplying,
+  } = useInlineToolRequests()
+  const childSession = getTaskChildSessionRef(part, serverId)
   const permissionRequest = inlineToolRequests
-    ? findPermissionRequestForTool(pendingPermissions, part.callID, childSessionId)
+    ? findPermissionRequestForTool(pendingPermissions, part.callID, childSession)
     : undefined
   const questionRequest = inlineToolRequests
-    ? findQuestionRequestForTool(pendingQuestions, part.callID, childSessionId)
+    ? findQuestionRequestForTool(pendingQuestions, part.callID, childSession)
     : undefined
 
   const toolDone = state.status === 'completed' || state.status === 'error'
@@ -543,10 +551,12 @@ const ToolBody = memo(function ToolBody({
   return <DefaultRenderer part={part} data={data} onFullscreenChange={onFullscreenChange} />
 })
 
-function getTaskChildSessionId(part: ToolPart): string | undefined {
+/** task 工具派出的子 session：metadata 里是原始 id，服务器以 pane 绑定的 serverId 为权威 */
+function getTaskChildSessionRef(part: ToolPart, serverId: string): TaskChildSessionRef | undefined {
   if (part.tool.toLowerCase() !== 'task') return undefined
   const metadata = part.state.metadata as Record<string, unknown> | undefined
-  return metadata?.sessionId as string | undefined
+  const sessionId = metadata?.sessionId as string | undefined
+  return sessionId ? { sessionKey: sessionId, serverId } : undefined
 }
 
 /** Extract description from tool input as title fallback (available while running) */

@@ -136,7 +136,12 @@ export function useChatSession({
     routeSessionIdRef.current = routeSessionId
   }, [routeSessionId])
 
-  /** 当前 pane 绑定的服务器（sessionId 为复合 key，split 出 serverId；home 状态跟随 active server） */
+  /**
+   * 当前 pane 绑定的服务器（sessionId 为复合 key，split 出 serverId；home 状态跟随 active server）。
+   * 约定：凡发起服务器作用域请求的 memo/effect/回调都必须声明 paneServerId——
+   * 它的值会在 pane 生命周期内变化（切会话、活动服务器切换、WSL sidecar 就绪后切回），
+   * 漏声明就会把请求打到旧服务器。被 routeSessionId 守卫的单元除外：此时 paneServerId 是它的纯函数。
+   */
   const activeServerId = useSyncExternalStore(
     cb => serverStore.subscribe(cb),
     () => serverStore.getActiveServerId(),
@@ -490,6 +495,7 @@ export function useChatSession({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs and stable functions
     [
       paneId,
+      paneServerId,
       effectiveDirectory,
       routeSessionId,
       sessionFamily,
@@ -542,7 +548,7 @@ export function useChatSession({
     getSelectableAgents(currentDirectory, paneServerId)
       .then(setAgents)
       .catch(err => handleError('fetch agents', err))
-  }, [currentDirectory])
+  }, [currentDirectory, paneServerId])
 
   // Preload @ root directory and / commands for current session directory
   useEffect(() => {
@@ -550,7 +556,7 @@ export function useChatSession({
 
     prefetchRootDirectory(effectiveDirectory, paneServerId).catch(() => {})
     prefetchCommands(effectiveDirectory, paneServerId).catch(() => {})
-  }, [routeSessionId, effectiveDirectory])
+  }, [routeSessionId, effectiveDirectory, paneServerId])
 
   // agents 列表加载后，校验当前选中的 agent 是否存在于列表中
   useEffect(() => {
@@ -645,6 +651,7 @@ export function useChatSession({
   }, [
     routeSessionId,
     effectiveDirectory,
+    paneServerId,
     resetPendingRequests,
     setPendingPermissionRequests,
     setPendingQuestionRequests,
@@ -750,7 +757,7 @@ export function useChatSession({
         return false
       }
     },
-    [routeSessionId, navigateToSession, createSession],
+    [routeSessionId, navigateToSession, createSession, paneServerId],
   )
 
   // Send message handler
@@ -960,7 +967,7 @@ export function useChatSession({
         handleError('fork session', error)
       }
     },
-    [effectiveDirectory, navigateToSession],
+    [effectiveDirectory, navigateToSession, paneServerId],
   )
 
   // Abort handler
@@ -973,7 +980,7 @@ export function useChatSession({
     } catch (error) {
       handleError('abort session', error)
     }
-  }, [routeSessionId, sessionDirectory, currentDirectory])
+  }, [routeSessionId, sessionDirectory, currentDirectory, paneServerId])
 
   // Command handler (slash commands)
   const handleCommand = useCallback(
@@ -1043,7 +1050,16 @@ export function useChatSession({
         return false
       }
     },
-    [routeSessionId, effectiveDirectory, createSession, navigateToSession, currentModel, navigateHome, handleNewChat],
+    [
+      routeSessionId,
+      effectiveDirectory,
+      createSession,
+      navigateToSession,
+      currentModel,
+      navigateHome,
+      handleNewChat,
+      paneServerId,
+    ],
   )
 
   // Undo with animation
@@ -1091,7 +1107,7 @@ export function useChatSession({
     } catch (error) {
       handleError('archive session', error)
     }
-  }, [routeSessionId, effectiveDirectory, navigateHome, handleNewChat])
+  }, [routeSessionId, effectiveDirectory, navigateHome, handleNewChat, paneServerId])
 
   // Navigate to previous session
   const handlePreviousSession = useCallback(() => {

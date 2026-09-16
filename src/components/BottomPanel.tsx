@@ -107,7 +107,7 @@ export const BottomPanel = memo(function BottomPanel({ directory, serverId }: Bo
       if (!affectsBoundServer(serverId, changedId, reason, serverStore.getActiveServerId())) return
       void restoreSessions(++restoreRequestIdRef.current)
     })
-  }, [normalizedDirectory])
+  }, [normalizedDirectory, serverId])
 
   // 创建新终端
   const handleNewTerminal = useCallback(async () => {
@@ -125,7 +125,7 @@ export const BottomPanel = memo(function BottomPanel({ directory, serverId }: Bo
     } catch (error) {
       uiErrorHandler('create terminal', error)
     }
-  }, [normalizedDirectory])
+  }, [normalizedDirectory, serverId])
 
   // 关闭终端
   const handleCloseTerminal = useCallback(
@@ -136,7 +136,7 @@ export const BottomPanel = memo(function BottomPanel({ directory, serverId }: Bo
         // ignore - may already be closed
       }
     },
-    [normalizedDirectory],
+    [normalizedDirectory, serverId],
   )
 
   // 渲染内容
@@ -225,7 +225,7 @@ export const BottomPanel = memo(function BottomPanel({ directory, serverId }: Bo
         </>
       )
     },
-    [isRestoring, handleNewTerminal, directory, sessionId, isPanelResizing, t],
+    [isRestoring, handleNewTerminal, directory, sessionId, isPanelResizing, t, serverId],
   )
 
   return (
