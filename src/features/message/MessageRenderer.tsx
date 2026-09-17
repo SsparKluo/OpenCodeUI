@@ -13,6 +13,7 @@ import {
   useInlineToolRequests,
   findPermissionRequestForTool,
   findQuestionRequestForTool,
+  type TaskChildSessionRef,
 } from '../chat/InlineToolRequestContext'
 import {
   TextPartView,
@@ -968,14 +969,14 @@ const ToolGroup = memo(function ToolGroup({
 }: ToolGroupProps) {
   const { t } = useTranslation('message')
   const { descriptiveToolSteps, inlineToolRequests, immersiveMode, processCollapseEnabled } = useTheme()
-  const { pendingPermissions, pendingQuestions } = useInlineToolRequests()
+  const { serverId, pendingPermissions, pendingQuestions } = useInlineToolRequests()
   const hasPendingInteraction =
     inlineToolRequests &&
     parts.some(part => {
-      const childSessionId = getTaskChildSessionId(part)
+      const childSession = getTaskChildSessionRef(part, serverId)
       return (
-        findPermissionRequestForTool(pendingPermissions, part.callID, childSessionId) ||
-        findQuestionRequestForTool(pendingQuestions, part.callID, childSessionId)
+        findPermissionRequestForTool(pendingPermissions, part.callID, childSession) ||
+        findQuestionRequestForTool(pendingQuestions, part.callID, childSession)
       )
     })
 
@@ -1368,10 +1369,12 @@ function isToolPartActive(part: ToolPart): boolean {
   return part.state.status === 'running' || part.state.status === 'pending'
 }
 
-function getTaskChildSessionId(part: ToolPart): string | undefined {
+/** task 工具派出的子 session：metadata 里是原始 id，服务器以 pane 绑定的 serverId 为权威 */
+function getTaskChildSessionRef(part: ToolPart, serverId: string): TaskChildSessionRef | undefined {
   if (part.tool.toLowerCase() !== 'task') return undefined
   const metadata = part.state.metadata as Record<string, unknown> | undefined
-  return metadata?.sessionId as string | undefined
+  const sessionId = metadata?.sessionId as string | undefined
+  return sessionId ? { sessionKey: sessionId, serverId } : undefined
 }
 
 /** 从 extractToolData 的结果计算 diff stats（当 metadata 没给 diffStats 时） */

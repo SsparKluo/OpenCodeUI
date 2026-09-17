@@ -2,11 +2,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ServersSettings } from './ServersSettings'
 
-const { useServerStoreMock, navigateHomeMock, clearSessionMock, isTauriMock } = vi.hoisted(() => ({
+const { useServerStoreMock, navigateHomeMock, clearSessionMock, isTauriMock, getDesktopPlatformMock } = vi.hoisted(() => ({
   useServerStoreMock: vi.fn(),
   navigateHomeMock: vi.fn(),
   clearSessionMock: vi.fn(),
   isTauriMock: vi.fn(() => false),
+  getDesktopPlatformMock: vi.fn(() => 'linux'),
 }))
 
 vi.mock('react-i18next', () => ({
@@ -18,6 +19,7 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('../../../utils/tauri', () => ({
   isTauri: isTauriMock,
+  getDesktopPlatform: getDesktopPlatformMock,
 }))
 
 vi.mock('../../../hooks', () => ({

@@ -6,6 +6,7 @@
 // 存储 { sessionId, directory, title } 以便未加载 session 详情时也能渲染。
 
 import { serverStorage } from '../utils/perServerStorage'
+import { affectsBoundServer } from './serverChangeScope'
 import { serverStore } from './serverStore'
 
 export interface PinnedSessionEntry {
@@ -58,7 +59,10 @@ class PinnedSessionsStore {
 
   constructor() {
     this.reload()
-    serverStore.onServerChange(() => {
+    serverStore.onServerChange((serverId, reason) => {
+      // 置顶数据按 serverId 分片存储：非 active 服务器端点变化（WSL 重启）不影响
+      // active 的列表，重载 + emit 只会造成无谓的重渲染；仅 active 数据源真的变了才重置
+      if (!affectsBoundServer(undefined, serverId, reason, serverStore.getActiveServerId())) return
       this.reload()
       this.emit()
     })

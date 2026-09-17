@@ -1,5 +1,33 @@
 # Changelog
 
+## [v0.6.46] - 2026-09-16
+
+- fix(ui): 评审 N2——BottomPanel 终端恢复门控改比对自身绑定服务器 (23cf65a6)
+- refactor(store): 评审 N3——门控抽成共享纯函数谓词，8 个消费点统一语义 (526db887)
+- fix(store): 评审 N1——实时事件落地后丢弃迟到的陈旧初始快照 (8b870dcd)
+- fix(tauri): 评审修正——应用退出兜底回收 WSL sidecar (b168c40a)
+- fix(ui): 评审修正——生命周期圆点与 Wi-Fi 探测图标分离 (92eb319b)
+- fix(store): 评审修正——sidecar 复活不再劫持用户主动切换 (3221502d)
+- fix(ui): 评审修正——WSL 界面语义色、图标一致性与可达性 (31f95a68)
+- fix(events): 评审修正——服务器变化事件按 reason 门控消费 (3ea91924)
+- fix(tauri): 评审修正——轮询单调时钟、sidecar 句柄归属与安装容错 (4b9ed336)
+- fix(store): 评审修正——删除服务器时回收默认指针与 WSL 绑定 (24ef8773)
+- fix(events): 评审修正——非活动服务器端点变化不再迁移 SSE 订阅 (d8a946e4)
+- fix(config): 评审修正——清理 PR 内本地配置与行尾噪音 (7096f48d)
+- test: 放宽配置搜索用例超时，避免并发下误报 (84ab01aa)
+- fix(multi-server): 子 session 内嵌请求改用面板绑定的服务器 (94259914)
+- fix(multi-server): 服务器作用域请求统一使用当前绑定的 serverId (4f6999c9)
+- fix(sessions): 评审修正——过滤后兜底 active server、enabled 关闭中断重试、去除空 catch (e0601b71)
+- fix(wsl): 评审修正——在线目录 revalidate 去重、prewarm 跳过就绪服务器、测试门控简化 (0659e112)
+- fix(sidebar): 会话列表加载态与错误态——重试间隙不再闪现空态文案 (3e7110ee)
+- perf(sessions): 修复启动级联——未注册服务器过滤、upsert 短路、订阅集合增量管理 (59885c19)
+- perf(wsl): 按需预热——启动零探测、设置页意图驱动、在线目录 TTL 缓存 (68afa5b3)
+- fix(deps): bump fast-uri to 3.1.6 (CVE-2026-13676) (d823f189)
+- fix(wsl): sidebar group and SSE follow WSL server registered after boot (b5a21665)
+- feat(wsl): frontend server sync, settings UI and connections integration (d32b6411)
+- feat(wsl): backend server management commands for Windows desktop (1642caea)
+- chore: exclude local opencode reference dir from git, eslint and vitest (cfd5ce63)
+
 ## [v0.6.45] - 2026-08-29
 
 - fix(session): bound getLastTurnDiff to latest page instead of full message fetch (7c7a47ef)

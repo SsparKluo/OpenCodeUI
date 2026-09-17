@@ -1,6 +1,6 @@
 {
   "name": "opencodeui",
-  "version": "0.6.45",
+  "version": "0.6.46",
   "description": "A third-party web frontend for OpenCode",
   "license": "GPL-3.0-only",
   "type": "module",
@@ -44,6 +44,7 @@
     "clsx": "^2.1.1",
     "diff": "^8.0.4",
     "dompurify": "^3.4.11",
+    "fuzzysort": "^4.0.2",
     "i18next": "^26.0.1",
     "i18next-browser-languagedetector": "^8.2.1",
     "katex": "^0.16.38",

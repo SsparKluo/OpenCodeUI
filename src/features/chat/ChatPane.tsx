@@ -858,6 +858,8 @@ export const ChatPane = memo(function ChatPane({
 
   const inlineToolRequestCtx = useMemo<InlineToolRequestContextValue>(
     () => ({
+      // 子 session 请求匹配必须用 pane 绑定的服务器，而不是全局活动服务器（多服务器 / WSL 下两者不同）
+      serverId: paneServerId,
       pendingPermissions: pendingPermissionRequests,
       pendingQuestions: pendingQuestionRequests,
       onPermissionReply: (requestId, reply) => {
@@ -869,6 +871,7 @@ export const ChatPane = memo(function ChatPane({
       isReplying,
     }),
     [
+      paneServerId,
       pendingPermissionRequests,
       pendingQuestionRequests,
       handlePermissionReply,

@@ -1,8 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EventTypes } from '../types/api/event'
 
+// 按 serverId 返回 URL 的 http mock：订阅迁移测试需要断言「新连接建到了哪台服务器」，
+// 固定 URL 的 mock 无法区分 local 与 wsl:Ubuntu。未登记的 serverId 回退到 example.test，
+// 保持与既有流式解析测试（不断言 URL）兼容。
+const httpMocks = vi.hoisted(() => ({
+  baseUrls: new Map<string, string>(),
+}))
+
 vi.mock('./http', () => ({
-  getApiBaseUrl: () => 'http://example.test',
+  getApiBaseUrl: (serverId?: string) => httpMocks.baseUrls.get(serverId ?? '') ?? 'http://example.test',
   getAuthHeader: () => ({}),
   isActiveAccessMode: () => false,
 }))
@@ -244,5 +251,110 @@ describe('subscribeToEvents', () => {
 
     secondFetch.reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
     unsubscribe()
+  })
+})
+
+describe('subscribeToEvents server-change migration', () => {
+  const LOCAL_URL = 'http://local.test'
+  const WSL_URL = 'http://wsl.test'
+
+  function fetchedUrls(fetchMock: ReturnType<typeof vi.fn>): string[] {
+    return fetchMock.mock.calls.map(call => String(call[0]))
+  }
+
+  beforeEach(() => {
+    // 与相邻 describe 平级，外层的 vi.resetModules 不会作用于本块测试；
+    // 必须自行重置，否则 events/serverStore 的模块级状态（连接池、变更监听器）跨测试泄漏
+    vi.resetModules()
+    localStorage.clear()
+    sessionStorage.clear()
+    httpMocks.baseUrls.set('local', LOCAL_URL)
+    httpMocks.baseUrls.set('wsl:Ubuntu', WSL_URL)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    httpMocks.baseUrls.clear()
+  })
+
+  it('keeps the active subscription untouched when a non-active server reports server-runtime-updated', async () => {
+    // 场景：active 是 local，WSL sidecar 首次注册 wsl:Ubuntu。upsertServer 对任何
+    // runtime 变化的服务器都无条件广播 server-runtime-updated，订阅绝不能被「迁移」到非 active 服务器
+    const openStream = createDeferred<Pick<Response, 'ok' | 'body'>>()
+    const fetchMock = vi.fn().mockReturnValue(openStream.promise)
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { subscribeToEvents } = await import('./events')
+    const { serverStore } = await import('../store/serverStore')
+
+    const unsubscribe = subscribeToEvents({})
+
+    expect(fetchedUrls(fetchMock)).toEqual([`${LOCAL_URL}/global/event`])
+
+    serverStore.upsertServer({ id: 'wsl:Ubuntu', name: 'Ubuntu (WSL)', url: WSL_URL })
+    await Promise.resolve()
+
+    // local 连接未被拆、未向 wsl:Ubuntu 发起新连接
+    expect(fetchedUrls(fetchMock)).toEqual([`${LOCAL_URL}/global/event`])
+
+    unsubscribe()
+    openStream.resolve(createFetchResponse([]))
+  })
+
+  it('re-subscribes the active subscription when the active server reports server-runtime-updated', async () => {
+    // 合法迁移场景：active local 的端点变了（如本地运行时 URL override 落到新端口），
+    // 旧 SSE 还连着死地址，必须拆旧建新、用新 URL 重订阅
+    const firstStream = createDeferred<Pick<Response, 'ok' | 'body'>>()
+    const secondStream = createDeferred<Pick<Response, 'ok' | 'body'>>()
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => firstStream.promise)
+      .mockImplementationOnce(() => secondStream.promise)
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { subscribeToEvents } = await import('./events')
+    const { serverStore } = await import('../store/serverStore')
+
+    const unsubscribe = subscribeToEvents({})
+    expect(fetchedUrls(fetchMock)).toEqual([`${LOCAL_URL}/global/event`])
+
+    httpMocks.baseUrls.set('local', `${LOCAL_URL}:9999`)
+    serverStore.upsertServer({ id: 'local', name: 'Local', url: `${LOCAL_URL}:9999`, isDefault: true })
+    await Promise.resolve()
+
+    expect(fetchedUrls(fetchMock)).toEqual([`${LOCAL_URL}/global/event`, `${LOCAL_URL}:9999/global/event`])
+
+    unsubscribe()
+    firstStream.resolve(createFetchResponse([]))
+    secondStream.resolve(createFetchResponse([]))
+  })
+
+  it('migrates the subscription on a real server-switch', async () => {
+    // 焦点真实切换（setActiveServer）→ 订阅必须跟着迁移到新 active 服务器
+    const firstStream = createDeferred<Pick<Response, 'ok' | 'body'>>()
+    const secondStream = createDeferred<Pick<Response, 'ok' | 'body'>>()
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => firstStream.promise)
+      .mockImplementationOnce(() => secondStream.promise)
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { subscribeToEvents } = await import('./events')
+    const { serverStore } = await import('../store/serverStore')
+
+    const unsubscribe = subscribeToEvents({})
+    expect(fetchedUrls(fetchMock)).toEqual([`${LOCAL_URL}/global/event`])
+
+    // 先注册非 active 的 wsl:Ubuntu（不应动订阅），再把焦点切过去（应迁移）
+    serverStore.upsertServer({ id: 'wsl:Ubuntu', name: 'Ubuntu (WSL)', url: WSL_URL })
+    serverStore.setActiveServer('wsl:Ubuntu')
+    await Promise.resolve()
+
+    expect(fetchedUrls(fetchMock)).toEqual([`${LOCAL_URL}/global/event`, `${WSL_URL}/global/event`])
+
+    unsubscribe()
+    firstStream.resolve(createFetchResponse([]))
+    secondStream.resolve(createFetchResponse([]))
   })
 })

@@ -121,7 +121,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
         setIsLoading(false)
       }
     }
-  }, [effectiveDirectory, t])
+  }, [effectiveDirectory, serverId, t])
 
   const loadStatuses = useCallback(async () => {
     if (!effectiveDirectory) {
@@ -169,7 +169,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
       if (loadId !== statusLoadIdRef.current) return
       setFileStatus(new Map())
     }
-  }, [changeMode, effectiveDirectory, sessionId])
+  }, [changeMode, effectiveDirectory, sessionId, serverId])
 
   // 加载子目录
   const loadChildren = useCallback(
@@ -217,7 +217,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
         )
       }
     },
-    [effectiveDirectory],
+    [effectiveDirectory, serverId],
   )
 
   const updateExpandedPaths = useCallback(
@@ -311,7 +311,7 @@ export function useFileExplorer(options: UseFileExplorerOptions = {}): UseFileEx
         }
       }
     },
-    [effectiveDirectory, t],
+    [effectiveDirectory, t, serverId],
   )
 
   const clearPreview = useCallback(() => {

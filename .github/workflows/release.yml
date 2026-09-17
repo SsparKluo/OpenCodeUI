@@ -125,7 +125,13 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # android-actions/setup-android 的默认 packages 是 "tools platform-tools"，
+      # 其中 legacy `tools` 包已被 Google 从 SDK 仓库移除，安装会以
+      # "Failed to find package 'tools'" 失败（2026-09 发 v0.6.46 时实测，v4 默认值同样如此）。
+      # 只装 platform-tools：sdkmanager 本身由 cmdline-tools 提供，NDK 在下一步单独安装。
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
 
       - run: sdkmanager "ndk;29.0.14206865"
 

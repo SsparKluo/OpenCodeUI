@@ -30,6 +30,7 @@ import { deleteSession, updateSession, type ApiSession } from '../../../api'
 import { isSameDirectory } from '../../../utils'
 import { clearSessionRuntimeState } from '../../../utils/sessionLifecycle'
 import { uiErrorHandler } from '../../../utils'
+import { isWslServerId } from '../../wsl/settings-model'
 import {
   FolderRecentList,
   createDirectoryProject,
@@ -68,7 +69,7 @@ function statusDotClass(state: ConnectionInfo['state']): string {
     case 'connecting':
       return 'bg-warning-100'
     case 'error':
-      return 'bg-error-100'
+      return 'bg-danger-100'
     default:
       return 'bg-text-500/50'
   }
@@ -218,6 +219,13 @@ const ServerFolderGroup = memo(function ServerFolderGroup({
           </span>
           <span className="min-w-0 flex-1 truncate text-[length:var(--fs-sm)] font-medium text-text-300">
             {displayName}
+            {isWslServerId(serverId) && (
+              <span
+                className="ml-1.5 shrink-0 text-[length:var(--fs-xs)] font-medium text-info-100 bg-info-100/10 px-1.5 py-0.5 rounded"
+              >
+                {t('wsl.server.label', { ns: 'settings' })}
+              </span>
+            )}
             {health?.status === 'online' && health.version ? ` · v${health.version}` : ''}
           </span>
         </button>

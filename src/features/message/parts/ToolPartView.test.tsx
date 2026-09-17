@@ -48,6 +48,7 @@ vi.mock('../../../store/serverStore', () => ({
 
 vi.mock('../../chat/InlineToolRequestContext', () => ({
   useInlineToolRequests: () => ({
+    serverId: 'local',
     pendingPermissions: [],
     pendingQuestions: [],
     onPermissionReply: vi.fn(),
