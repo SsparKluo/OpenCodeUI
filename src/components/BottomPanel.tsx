@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { TerminalIcon } from './Icons'
 import { PanelContainer } from './PanelContainer'
 import { layoutStore, useLayoutStore, type TerminalTab, type PanelTab } from '../store/layoutStore'
+import { affectsBoundServer } from '../store/serverChangeScope'
 import { serverStore } from '../store/serverStore'
 import { createPtySession, removePtySession, listPtySessions } from '../api/pty'
 import { useCurrentSessionId } from '../store'
@@ -99,10 +100,14 @@ export const BottomPanel = memo(function BottomPanel({ directory, serverId }: Bo
     }
 
     void restoreSessions(++restoreRequestIdRef.current)
-    return serverStore.onServerChange(() => {
+    return serverStore.onServerChange((changedId, reason) => {
+      // 评审 N2：终端恢复的数据主体是 serverId ?? active（对齐 useVcsInfo 的绑定语义）。
+      // 旧实现拿 changedId 与 active 比对：面板固定绑定 WSL 而 active 在 local 时，
+      // 这台 WSL 换端口重启会被误跳过（终端全部失联）；反之无关服务器切换会误触发重恢复。
+      if (!affectsBoundServer(serverId, changedId, reason, serverStore.getActiveServerId())) return
       void restoreSessions(++restoreRequestIdRef.current)
     })
-  }, [normalizedDirectory])
+  }, [normalizedDirectory, serverId])
 
   // 创建新终端
   const handleNewTerminal = useCallback(async () => {
@@ -120,7 +125,7 @@ export const BottomPanel = memo(function BottomPanel({ directory, serverId }: Bo
     } catch (error) {
       uiErrorHandler('create terminal', error)
     }
-  }, [normalizedDirectory])
+  }, [normalizedDirectory, serverId])
 
   // 关闭终端
   const handleCloseTerminal = useCallback(
@@ -131,7 +136,7 @@ export const BottomPanel = memo(function BottomPanel({ directory, serverId }: Bo
         // ignore - may already be closed
       }
     },
-    [normalizedDirectory],
+    [normalizedDirectory, serverId],
   )
 
   // 渲染内容
@@ -220,7 +225,7 @@ export const BottomPanel = memo(function BottomPanel({ directory, serverId }: Bo
         </>
       )
     },
-    [isRestoring, handleNewTerminal, directory, sessionId, isPanelResizing, t],
+    [isRestoring, handleNewTerminal, directory, sessionId, isPanelResizing, t, serverId],
   )
 
   return (

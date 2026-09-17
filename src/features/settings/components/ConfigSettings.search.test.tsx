@@ -49,5 +49,7 @@ describe('ConfigSettings search', () => {
     const field = await screen.findByDisplayValue('https://gateway.example.com')
     await waitFor(() => expect(field.closest('[data-config-field]')).toHaveClass('settings-search-highlight'))
     expect(field).toHaveFocus()
-  })
+    // 单跑 0.5s 就过；但本文件要挂载完整 ConfigSettings + 配置编辑器弹窗（jsdom 冷启动最重的路径之一），
+    // 全量并发下会超出 5s 默认值误报。给足时间，避免「新增任何测试文件就把它压崩」。
+  }, 20000)
 })

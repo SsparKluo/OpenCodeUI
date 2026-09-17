@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EventCallbacks } from '../types/api/event'
 import { SessionContext } from './SessionContext.shared'
 import { SessionProvider } from './SessionContext'
+import type { ServerChangeReason } from '../store/serverStore'
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void
@@ -40,7 +41,7 @@ const {
 }))
 let latestEventCallbacks: Partial<EventCallbacks> = {}
 let latestContext: ContextType<typeof SessionContext> = null
-let latestServerChange: (() => void) | undefined
+let latestServerChange: ((serverId: string, reason: ServerChangeReason) => void) | undefined
 
 vi.mock('../api', () => ({
   getSessions: (...args: unknown[]) => getSessionsMock(...args),
@@ -74,6 +75,7 @@ vi.mock('../store/todoStore', () => ({
 vi.mock('../store/serverStore', () => ({
   serverStore: {
     onServerChange: (...args: unknown[]) => onServerChangeMock(...args),
+    getActiveServerId: () => 'local',
   },
 }))
 
@@ -120,7 +122,7 @@ describe('SessionProvider', () => {
       return vi.fn()
     })
     onServerChangeMock.mockImplementation(listener => {
-      latestServerChange = listener as () => void
+      latestServerChange = listener as (serverId: string, reason: ServerChangeReason) => void
       return vi.fn()
     })
   })
@@ -270,7 +272,8 @@ describe('SessionProvider', () => {
     expect(getSessionsMock).toHaveBeenCalledTimes(1)
 
     await act(async () => {
-      latestServerChange?.()
+      // active 服务器自身端点变化（serverId = active）才应触发重拉
+      latestServerChange?.('local', 'server-runtime-updated')
       await Promise.resolve()
     })
 
@@ -291,5 +294,32 @@ describe('SessionProvider', () => {
     })
 
     expect(latestContext?.sessions.map(session => session.id)).toEqual(['fresh'])
+  })
+
+  it('keeps the session list untouched when a non-active server endpoint changes', async () => {
+    getSessionsMock.mockResolvedValue([{ id: 'session-1', directory: '/workspace/demo' }])
+
+    render(
+      <SessionProvider>
+        <SessionContextProbe />
+      </SessionProvider>,
+    )
+
+    await act(async () => {
+      vi.runAllTimers()
+      await Promise.resolve()
+    })
+
+    expect(getSessionsMock).toHaveBeenCalledTimes(1)
+    expect(latestContext?.sessions.map(session => session.id)).toEqual(['session-1'])
+
+    // 非 active 服务器（remote）端点变化：与 active 会话列表无关，不得清空/重拉
+    await act(async () => {
+      latestServerChange?.('remote', 'server-runtime-updated')
+      await Promise.resolve()
+    })
+
+    expect(getSessionsMock).toHaveBeenCalledTimes(1)
+    expect(latestContext?.sessions.map(session => session.id)).toEqual(['session-1'])
   })
 })

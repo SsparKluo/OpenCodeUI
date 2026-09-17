@@ -8,6 +8,7 @@ import {
   type SessionListParams,
 } from '../api'
 import { todoStore } from '../store/todoStore'
+import { affectsBoundServer } from '../store/serverChangeScope'
 import { serverStore } from '../store/serverStore'
 import { pinnedSessionsStore } from '../store/pinnedSessionsStore'
 import { useDirectory } from './useDirectory'
@@ -218,7 +219,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [matchesCurrentDirectory])
 
   useEffect(() => {
-    return serverStore.onServerChange(() => {
+    return serverStore.onServerChange((serverId, reason) => {
+      // 会话列表跟随 active server：非 active 服务器端点变化（WSL 重启）不影响本列表，
+      // 避免无关事件触发「清空 → 重拉」的可见闪烁；只有 active 数据源真的变了才重置
+      if (!affectsBoundServer(undefined, serverId, reason, serverStore.getActiveServerId())) return
       currentLimitRef.current = 30
       setSessions([])
       void fetchSessionsRef.current()

@@ -165,7 +165,7 @@ export const RightPanel = memo(function RightPanel({
         </>
       )
     },
-    [normalizedDirectory, sessionId, isPanelResizing, t],
+    [normalizedDirectory, sessionId, isPanelResizing, t, serverId],
   )
 
   if (inline) {
